@@ -196,6 +196,26 @@ All errors follow a consistent structure.
   "path": "/api/v1/routines/123"
 }
 
+### Standard Error Mapping
+
+| Exception Type | HTTP Status | Description |
+|----------------|------------|-------------|
+| Validation failure | 400 Bad Request | Request validation failed. |
+| Malformed JSON request | 400 Bad Request | Request body could not be parsed. |
+| Resource not found | 404 Not Found | Requested resource does not exist. |
+| Business rule violation | 409 Conflict | Request violates a business rule. |
+| Unexpected server error | 500 Internal Server Error | Unhandled server-side exception. |
+
+The backend must never expose:
+
+- Java exception names
+- Stack traces
+- SQL error messages
+- Internal package names
+- Database implementation details
+
+Only the standard error response format defined above may be returned.
+
 ⸻
 
 10. HTTP Status Codes
@@ -223,7 +243,25 @@ Examples:
 * Positive repetitions
 * Valid enum values
 
-Validation failures return 400 Bad Request.
+Validation failures return:
+
+HTTP 400 Bad Request
+
+using the standard error response format defined in Section 9.
+
+The message field should contain a human-readable validation error.
+
+Example:
+
+```json
+{
+  "timestamp": "2026-07-20T09:30:00Z",
+  "status": 400,
+  "error": "Bad Request",
+  "message": "Routine name must not be blank.",
+  "path": "/api/v1/routines"
+}
+```
 
 ⸻
 
@@ -263,7 +301,11 @@ or
 
 /swagger-ui/index.html
 
-The generated OpenAPI specification becomes the authoritative reference for endpoint details during implementation.
+The generated OpenAPI specification becomes the authoritative representation of the implemented REST API.
+
+The project documentation (PRD.md, ARCHITECTURE.md, DATABASE.md, API_SPECIFICATION.md, etc.) remains the architectural source of truth.
+
+Implementation must always follow the approved project documentation. The generated OpenAPI specification reflects the implemented API and should remain synchronized with the documentation.
 
 ⸻
 
