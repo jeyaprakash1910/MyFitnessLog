@@ -1,0 +1,46 @@
+# macOS
+.DS_Store
+
+# IntelliJ IDEA
+.idea/
+*.iml
+
+# VS Code
+.vscode/
+
+# Environment
+.env
+.env.*
+
+# Logs
+*.log
+
+# Node
+node_modules/
+
+# React
+dist/
+build/
+
+# Gradle
+.gradle/
+build/
+
+# Android
+local.properties
+captures/
+*.apk
+*.aab
+
+# Kotlin
+*.class
+
+# Java
+target/
+out/
+
+# Maven
+.mvn/wrapper/maven-wrapper.jar
+
+# OS
+Thumbs.db
