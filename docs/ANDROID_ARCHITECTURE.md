@@ -105,12 +105,20 @@ Read-only (reference-data) repositories expose exactly:
 - observeById(id): Flow<Entity?>
 - refresh()   // download from backend, upsert into Room
 
-Mutable (user-data) repositories, when introduced, extend this with the write
-and sync operations they need (e.g. insert/update/delete plus a sync trigger).
-Exact naming is settled when the first mutable repository is built; the point is
-that every repository of the same kind presents the same surface.
+Mutable (user-data) repositories follow this shape (established by
+RoutineRepository, the first mutable repository, in Milestone 5):
 
-Reads are always Room-backed Flows; refresh/sync are suspend functions. Errors
+- observe*  : Room-backed Flow reads the UI collects (the source of truth).
+- write ops : suspend functions (create/rename/delete/duplicate/add/remove/
+              update/reorder, as the feature needs) that persist locally and
+              mark affected rows PENDING for later sync. They never call the
+              network.
+- new records use on-device UUIDv4; createdAt/updatedAt come from an injected
+  Clock (so time is deterministic in tests); soft-delete via an isDeleted flag.
+- write operations that change data set syncStatus = PENDING so the future sync
+  layer (Milestone 9) can find and upload them.
+
+Reads are always Room-backed Flows; write/sync are suspend functions. Errors
 propagate by throwing until a presentation-layer consumer needs a structured
 result (see section 8).
 

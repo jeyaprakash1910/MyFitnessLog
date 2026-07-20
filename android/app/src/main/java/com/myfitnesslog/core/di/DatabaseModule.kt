@@ -5,6 +5,8 @@ import androidx.room.Room
 import com.myfitnesslog.core.data.local.MyFitnessLogDatabase
 import com.myfitnesslog.feature.exercise.data.local.ExerciseCategoryDao
 import com.myfitnesslog.feature.exercise.data.local.ExerciseDao
+import com.myfitnesslog.feature.routine.data.local.RoutineDao
+import com.myfitnesslog.feature.routine.data.local.RoutineExerciseDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -32,7 +34,12 @@ object DatabaseModule {
             context,
             MyFitnessLogDatabase::class.java,
             MyFitnessLogDatabase.DATABASE_NAME,
-        ).build()
+        )
+            // Pre-release only: reference data is re-downloaded and no user data
+            // has shipped yet, so a destructive upgrade is acceptable. Replace
+            // with real Migration objects once the app is released.
+            .fallbackToDestructiveMigration()
+            .build()
 
     @Provides
     fun provideExerciseCategoryDao(database: MyFitnessLogDatabase): ExerciseCategoryDao =
@@ -41,4 +48,12 @@ object DatabaseModule {
     @Provides
     fun provideExerciseDao(database: MyFitnessLogDatabase): ExerciseDao =
         database.exerciseDao()
+
+    @Provides
+    fun provideRoutineDao(database: MyFitnessLogDatabase): RoutineDao =
+        database.routineDao()
+
+    @Provides
+    fun provideRoutineExerciseDao(database: MyFitnessLogDatabase): RoutineExerciseDao =
+        database.routineExerciseDao()
 }
