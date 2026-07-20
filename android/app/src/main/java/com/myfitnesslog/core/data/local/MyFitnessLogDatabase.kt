@@ -12,6 +12,7 @@ import com.myfitnesslog.feature.exercise.data.local.ExerciseCategoryDao
 import com.myfitnesslog.feature.exercise.data.local.ExerciseCategoryEntity
 import com.myfitnesslog.feature.exercise.data.local.ExerciseDao
 import com.myfitnesslog.feature.exercise.data.local.ExerciseEntity
+import com.myfitnesslog.feature.history.data.local.WorkoutHistoryDao
 import com.myfitnesslog.feature.routine.data.local.RoutineDao
 import com.myfitnesslog.feature.routine.data.local.RoutineEntity
 import com.myfitnesslog.feature.routine.data.local.RoutineExerciseDao
@@ -78,6 +79,8 @@ abstract class MyFitnessLogDatabase : RoomDatabase() {
     abstract fun workoutExerciseDao(): WorkoutExerciseDao
 
     abstract fun workoutSetDao(): WorkoutSetDao
+
+    abstract fun workoutHistoryDao(): WorkoutHistoryDao
 
     companion object {
         const val DATABASE_NAME: String = "myfitnesslog.db"

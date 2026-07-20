@@ -2,8 +2,8 @@ Android Architecture
 
 Project: MyFitnessLog
 Version: 1.0
-Status: Approved — reflects Milestone 6 Phase 4
-Last Updated: July 21, 2026
+Status: Approved — reflects Milestone 7 (complete)
+Last Updated: July 22, 2026
 
 ⸻
 
@@ -11,9 +11,11 @@ Last Updated: July 21, 2026
 
 This document records the approved architecture for the MyFitnessLog Android
 application and is the single source of truth for how the Android app is built.
-It reflects everything implemented through Milestone 6 Phase 4 (exercise library,
-routine management, and workout logging with timers). Sections 13–17 describe the
-workout domain added in Milestones 5–6.
+It reflects everything implemented through Milestone 7 (exercise library, routine
+management, workout logging — routine-based and manual — with timers, and
+read-only workout history). Sections 13–17 describe the workout domain added in
+Milestones 5–6; section 18 describes the workout history feature added in
+Milestone 7.
 
 It complements, and does not override, the system-wide documents: PRD.md,
 ARCHITECTURE.md, DATABASE.md, API_SPECIFICATION.md, ANDROID_FLOW.md, SYNC.md,
@@ -110,6 +112,11 @@ Read-only (reference-data) repositories expose exactly:
 - observeAll(): Flow<List<Entity>>
 - observeById(id): Flow<Entity?>
 - refresh()   // download from backend, upsert into Room
+
+A second, distinct read-only shape exists for immutable history (WorkoutHistory
+Repository, Milestone 7): it exposes only `observe*` Flows over already-persisted
+snapshot rows and has NO `refresh()` and NO writes — the data is produced by the
+workout feature and never fetched or mutated here. See section 18.
 
 Mutable (user-data) repositories follow this shape (established by
 RoutineRepository, the first mutable repository, in Milestone 5):
@@ -213,7 +220,7 @@ model is genuinely needed.
 - ViewModel integration tests use the real repository over in-memory Room and
   await real Flow emissions (a shared `awaitFirst` helper) rather than virtual
   time, because Room emits on background threads.
-- Current count: 130 passing tests. On-device verification is the one deferred
+- Current count: 172 passing tests. On-device verification is the one deferred
   gap (no AVD); every layer is otherwise covered by executed tests.
 - JUnit4 gotcha: a Kotlin `@Test`/`@Before` whose last expression returns a value
   (e.g. ends in `addExercise(...)` or `assertThrows`) is not `void` and JUnit
@@ -235,9 +242,12 @@ model is genuinely needed.
 13. Workout Snapshot Architecture (Milestone 6)
 
 Workout history is immutable and snapshot-based — the defining rule of the app.
-When a workout starts, each RoutineExercise is COPIED into a WorkoutExercise row
-carrying the exercise name and all planned targets. Completed workouts therefore
-never change when the routine is later edited, renamed, reordered, or deleted.
+When a routine workout starts, each RoutineExercise is COPIED into a
+WorkoutExercise row carrying the exercise name and all planned targets. Completed
+workouts therefore never change when the routine is later edited, renamed,
+reordered, or deleted. Manual workouts use the same semantics: when the user adds
+an exercise, the master exercise NAME is snapshotted onto the WorkoutExercise (so
+a later exercise rename does not alter the workout).
 
 Why snapshots (not references): a routine is a mutable template; workout history
 is a permanent record of what actually happened. Referencing live routine rows
@@ -257,17 +267,23 @@ workout is kept with status = DISCARDED (hidden from the user), not deleted.
   a single point — StartWorkoutUseCase — because it is the only creator of
   sessions; the repository never creates one.
 - StartWorkoutUseCase is a focused use case (the first non-trivial business rule,
-  exactly the case section 3 reserves a UseCase for — not a blanket layer). It:
-  resolves/resumes the active session, else creates a session and snapshots the
-  routine's exercises, all inside a single Room `withTransaction` so a failure
-  (e.g. an invalid routine FK) rolls back and leaves no partial workout.
+  exactly the case section 3 reserves a UseCase for — not a blanket layer). Its
+  signature is `invoke(routineId: UUID?)`: it resolves/resumes the active session,
+  else creates a session and, if a routineId is given, snapshots the routine's
+  exercises — all inside a single Room `withTransaction` so a failure (e.g. an
+  invalid routine FK) rolls back and leaves no partial workout.
+- Manual (ad-hoc) workouts are the SAME workflow with `routineId = null`: the
+  session is created with no exercises, and the user adds them during the workout
+  via WorkoutRepository.addExercise(sessionId, exerciseId, exerciseName). There is
+  ONE workout domain — routine and manual workouts share the use case, repository,
+  ViewModel, screen, and picker; no parallel implementations exist.
 - Completed-workout immutability: WorkoutRepository checks the owning session is
-  IN_PROGRESS before any set add/update/delete and before complete/discard;
-  otherwise it throws IllegalStateException. The UI derives read-only from status
-  (`isReadOnly = status != IN_PROGRESS`) and hides mutating controls.
-- setNumber is auto-assigned; timestamps come from the injected Clock; value
-  guards (weight ≥ 0, reps ≥ 0, RPE 1..10) live in the repository (Room has no
-  CHECK constraints; the backend remains authoritative).
+  IN_PROGRESS before any exercise/set add/update/delete and before complete/
+  discard; otherwise it throws IllegalStateException. The UI derives read-only
+  from status (`isReadOnly = status != IN_PROGRESS`) and hides mutating controls.
+- setNumber / exerciseOrder are auto-assigned; timestamps come from the injected
+  Clock; value guards (weight ≥ 0, reps ≥ 0, RPE 1..10) live in the repository
+  (Room has no CHECK constraints; the backend remains authoritative).
 
 ⸻
 
@@ -311,3 +327,68 @@ before synchronization is introduced.
   register as top-level.
 - One-shot navigation (open editor after create; finish → History; discard →
   Home) is delivered via a ViewModel SharedFlow of events the screen collects.
+- Shared exercise picker: a single ExercisePicker screen/ViewModel serves both
+  "add exercise to a routine" and "add exercise to an active manual workout",
+  selected by which nav argument is present (routineId vs workoutSessionId). It
+  adds to the correct target and pops back; Room reactivity updates the origin
+  screen. The picker currently lives in the routine feature and has a small,
+  accepted cross-feature dependency on the workout repository/routes.
+- Manual workout entry: the Workout tab's "No active workout" state offers a
+  manual start (WorkoutViewModel.startManualWorkout → StartWorkoutUseCase(null));
+  the active workout screen offers "Add exercise" → the shared picker route
+  `workout/add-exercise/{workoutSessionId}`.
+- Workout History (Milestone 7): History is the top-level `history` destination
+  (keeps the bottom bar); Workout Detail is a full-screen drill-down
+  `history/{sessionId}` (bottom bar hidden, back arrow). Routes live in
+  WorkoutHistoryRoutes; the app NavHost references them. Detail uses standard
+  back navigation only — no deep links.
+
+⸻
+
+18. Workout History Architecture (Milestone 7)
+
+Workout history is a READ-ONLY view over the immutable snapshot tables the
+workout feature already writes (WorkoutSession/WorkoutExercise/WorkoutSet). It
+adds no tables, columns, or schema version — the database stays at v3.
+
+Why a separate `feature/history` package and repository (not reuse the workout
+repository or DAOs):
+
+- Read concerns differ from write concerns. The workout feature owns the active
+  workout lifecycle, mutations, and business rules (single-active invariant,
+  completed-workout immutability). History only reads finished workouts for
+  display. Keeping them apart stops the workout DAOs from drifting into "god
+  DAOs" and keeps each feature's surface focused.
+- WorkoutHistoryRepository is read-only by construction: it exposes only
+  `observe*` Flows and has no write methods, so there is no accidental mutation
+  path into history — enforcing the product guarantee that completed workouts are
+  historical records, not editable documents. (The one place history can change
+  is the future "workout edit" correction flow, which is out of Version 1 scope.)
+
+Components:
+
+- WorkoutHistoryDao — a dedicated read-only DAO querying the existing snapshot
+  tables. It surfaces COMPLETED sessions only (DISCARDED and IN_PROGRESS are
+  hidden), newest first by `startedAt`. A grouped summary query
+  (`observeCompletedSummaries`, LEFT JOIN + COUNT) supplies the list's exercise
+  count in one query instead of an N+1 of per-session reads.
+- WorkoutHistoryRepository / Impl — a thin read-only pass-through over the DAO
+  (no timestamps, no syncStatus, no writes), returning the existing Room entities
+  behind the feature boundary.
+- Presentation follows the standard Screen → Content → UiState → ViewModel shape:
+  * WorkoutHistoryViewModel maps completed workouts into fully-formatted list
+    items; WorkoutDetailViewModel combines a completed session, its exercises,
+    and all its sets (grouping sets under each exercise in captured order) into an
+    immutable detail state, resolving anything non-COMPLETED to NotFound.
+  * HistoryFormatting holds the pure presentation helpers (date, derived
+    duration, routine/manual label, weight×reps, set-category label, RPE, notes
+    sanitisation). All derived values (notably workout duration) are computed
+    here from persisted timestamps and never stored — consistent with the Entity
+    Purity rule (§9) and the derived-timer approach (§15). Duration reuses
+    WorkoutClock, so the single elapsed-time definition serves both the live
+    timer and history.
+
+Snapshot integrity: because history reads the WorkoutExercise/WorkoutSet
+snapshots (not live routine/exercise rows), later edits to routines or master
+exercises never alter a past workout — the defining rule of the app (§13) holds
+end-to-end through the history UI.

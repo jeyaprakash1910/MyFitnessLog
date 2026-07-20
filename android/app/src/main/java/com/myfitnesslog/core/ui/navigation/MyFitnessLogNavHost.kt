@@ -27,6 +27,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.myfitnesslog.feature.history.ui.WorkoutHistoryRoutes
+import com.myfitnesslog.feature.history.ui.WorkoutHistoryScreen
+import com.myfitnesslog.feature.history.ui.detail.WorkoutDetailScreen
 import com.myfitnesslog.feature.routine.ui.RoutineRoutes
 import com.myfitnesslog.feature.routine.ui.detail.RoutineDetailScreen
 import com.myfitnesslog.feature.routine.ui.edit.RoutineEditScreen
@@ -146,7 +149,15 @@ fun MyFitnessLogNavHost() {
                 ExercisePickerScreen(onDone = { navController.popBackStack() })
             }
             composable(TopLevelDestination.HISTORY.route) {
-                PlaceholderScreen(title = TopLevelDestination.HISTORY.label)
+                WorkoutHistoryScreen(
+                    onOpenWorkout = { id -> navController.navigate(WorkoutHistoryRoutes.detail(id)) },
+                )
+            }
+            composable(
+                route = WorkoutHistoryRoutes.DETAIL,
+                arguments = listOf(navArgument(WorkoutHistoryRoutes.ARG_SESSION_ID) { type = NavType.StringType }),
+            ) {
+                WorkoutDetailScreen()
             }
             composable(TopLevelDestination.SETTINGS.route) {
                 PlaceholderScreen(title = TopLevelDestination.SETTINGS.label)
@@ -179,6 +190,7 @@ private fun titleForRoute(route: String?, topLevel: TopLevelDestination?): Strin
     RoutineRoutes.DETAIL -> "Routine"
     RoutineRoutes.EDIT -> "Edit Routine"
     RoutineRoutes.ADD_EXERCISE -> "Add Exercise"
+    WorkoutHistoryRoutes.DETAIL -> "Workout"
     else -> topLevel?.label ?: TopLevelDestination.HOME.label
 }
 

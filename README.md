@@ -4,15 +4,17 @@ An **offline-first** workout tracking application. The backend is the permanent
 source of truth; the Android app keeps a synchronized local copy so it works
 fully offline.
 
-> Status (July 21, 2026): Backend exercise library complete; Android exercise
-> library, routine management, and workout logging (with timers) complete.
+> Status (July 22, 2026): Backend exercise library complete; Android exercise
+> library, routine management, workout logging (routine-based and manual, with
+> timers), and workout history (read-only list + detail) complete. Next
+> milestone: Backend Sync APIs (M8).
 > See [docs/ROADMAP.md](docs/ROADMAP.md) for the authoritative, up-to-date status.
 
 ## Repository layout
 
 ```
 backend/   Spring Boot REST API (Java 21, Maven, PostgreSQL, Flyway)   — M1–M2 done
-android/   Android app (Kotlin, Jetpack Compose, Room, Hilt, Retrofit)  — M3–M6P4 done
+android/   Android app (Kotlin, Jetpack Compose, Room, Hilt, Retrofit)  — M3–M7 done
 web/       React read-only history client                              — not started
 docs/      Product, architecture, database, API, sync, coding standards, ADRs
 ```
@@ -27,12 +29,16 @@ docs/      Product, architecture, database, API, sync, coding standards, ADRs
   - Routine management: list, detail, create/edit (add/remove/reorder exercises,
     edit targets), duplicate, soft-delete.
   - Workout logging: start/resume a workout from a routine (immutable snapshot of
-    the routine), log sets, complete/discard, workout + rest timers. Completed
-    workouts are immutable.
-- **130 automated Android tests** pass on the JVM via Robolectric.
+    the routine) **or a manual/ad-hoc workout** (no routine); log sets,
+    complete/discard, workout + rest timers. Completed workouts are immutable.
+  - Workout history: read-only list of completed workouts (date, derived
+    duration, routine/manual indicator, exercise count, notes preview) and a
+    read-only detail screen (metadata + every snapshotted exercise and set),
+    served by a dedicated read-only repository over the snapshot tables.
+- **172 automated Android tests** pass on the JVM via Robolectric.
 
-Not yet built: synchronization / WorkManager, manual (routine-less) workouts,
-workout history screen, backend write APIs, the web client. See the roadmap.
+Not yet built: backend write APIs (M8), synchronization / WorkManager (M9), the
+web client (M10). See the roadmap.
 
 ## Documentation (read these first)
 

@@ -3,7 +3,7 @@ Android Application Flow
 Project: MyFitnessLog
 Version: 1.0
 Status: Approved
-Last Updated: July 21, 2026
+Last Updated: July 22, 2026
 
 ⸻
 
@@ -23,7 +23,7 @@ The design prioritizes:
 
 ⸻
 
-1a. Implementation Status (as of July 21, 2026)
+1a. Implementation Status (as of July 22, 2026)
 
 This document describes the full Version 1 flow. Status of each screen today:
 
@@ -34,22 +34,29 @@ This document describes the full Version 1 flow. Status of each screen today:
 | Edit Routine | ✅ Implemented (name, add/remove/reorder exercises, edit targets) |
 | Exercise Search / Picker | ✅ Implemented as the "add exercise to routine" picker |
 | Workout (active logging) | ✅ Implemented (sets add/edit/delete/toggle, complete, discard) |
+| Manual (ad-hoc) workout | ✅ Implemented (start with no routine; add exercises via the picker) |
 | Rest Timer + Workout timer | ✅ Implemented (elapsed derived; rest countdown transient) |
-| History | ⬜ Placeholder (Milestone 7) |
-| Workout Details | ⬜ Not built (Milestone 7) |
+| History | ✅ Implemented (read-only list of completed workouts) |
+| Workout Details | ✅ Implemented (read-only snapshot: metadata, exercises, sets) |
 | Settings | ⬜ Placeholder |
 
 Notable flow specifics as built:
 
 * Home shows routines; tapping one opens Routine Details; "Start Workout" starts
   (or resumes) a workout and opens the Workout screen.
+* The Workout tab resumes the active workout; when none is active it offers
+  "Start empty workout" (a manual, routine-less workout). During any active
+  workout, "Add exercise" opens the shared exercise picker.
 * Only ONE active workout may exist at a time; starting again resumes it.
 * Completing a workout navigates to History; discarding returns to Home.
 * A completed/discarded workout renders read-only.
-* Manual (ad-hoc) workouts with no routine are NOT yet built (Milestone 6 Phase 5);
-  today a workout is always started from a routine.
+* History (a top-level tab) lists completed workouts only (DISCARDED and
+  IN_PROGRESS are hidden), newest first; selecting one opens the read-only
+  Workout Details drill-down (metadata + snapshotted exercises and sets). History
+  is strictly read-only — it exposes no edit/delete/add/reorder actions.
 * The standalone exercise-library browse screen from earlier milestones is no
-  longer a top-level destination; exercise selection happens inside routine edit.
+  longer a top-level destination; exercise selection happens through the shared
+  picker (routine editing and manual workouts).
 
 ⸻
 

@@ -5,6 +5,7 @@ import androidx.room.Room
 import com.myfitnesslog.core.data.local.MyFitnessLogDatabase
 import com.myfitnesslog.feature.exercise.data.local.ExerciseCategoryDao
 import com.myfitnesslog.feature.exercise.data.local.ExerciseDao
+import com.myfitnesslog.feature.history.data.local.WorkoutHistoryDao
 import com.myfitnesslog.feature.routine.data.local.RoutineDao
 import com.myfitnesslog.feature.routine.data.local.RoutineExerciseDao
 import com.myfitnesslog.feature.workout.data.local.WorkoutExerciseDao
@@ -71,4 +72,8 @@ object DatabaseModule {
     @Provides
     fun provideWorkoutSetDao(database: MyFitnessLogDatabase): WorkoutSetDao =
         database.workoutSetDao()
+
+    @Provides
+    fun provideWorkoutHistoryDao(database: MyFitnessLogDatabase): WorkoutHistoryDao =
+        database.workoutHistoryDao()
 }

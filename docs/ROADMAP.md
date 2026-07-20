@@ -3,7 +3,7 @@ Project Roadmap
 Project: MyFitnessLog
 Version: 1.0
 Status: Approved
-Last Updated: July 20, 2026
+Last Updated: July 22, 2026
 
 ⸻
 
@@ -36,7 +36,7 @@ The implementation follows these principles:
 
 ⸻
 
-3. Current State Snapshot (as of July 21, 2026)
+3. Current State Snapshot (as of July 22, 2026)
 
 This section reflects what actually exists in the repository today. It is the
 authoritative status summary; a new contributor (human or AI) should be able to
@@ -64,7 +64,7 @@ Backend status (M1–M2 complete; unchanged since):
   WorkoutSession/WorkoutExercise/WorkoutSet; any write (POST/PUT/DELETE)
   endpoints; automated backend tests (backend/src/test is empty).
 
-Android status (M3–M5 complete; M6 Phases 1–4 complete, Phase 5 pending):
+Android status (M3–M7 complete; next milestone is M8 Backend Sync APIs):
 
 * Foundation: single Gradle module; Hilt DI, Jetpack Compose, Navigation Compose,
   Room, Retrofit + OkHttp + kotlinx.serialization, Material 3, version catalog,
@@ -77,27 +77,39 @@ Android status (M3–M5 complete; M6 Phases 1–4 complete, Phase 5 pending):
   - Converters: UUID(String), Instant(epoch millis), SyncStatus, WorkoutStatus
     + SetCategory (by name), BigDecimal(plain string, for weight/RPE/RIR).
 * Repositories: ExerciseCategoryRepository, ExerciseRepository (read-only);
-  RoutineRepository, WorkoutRepository (mutable). Use case: StartWorkoutUseCase.
+  RoutineRepository, WorkoutRepository (mutable); WorkoutHistoryRepository
+  (read-only, over the immutable snapshot tables). Use case: StartWorkoutUseCase.
 * Implemented features (all offline-first, Room-only, no network calls yet):
   - Exercise Library: initial download + local cache, list, local search,
     category filtering.
   - Routine Management: routine list (Home), routine detail, create/edit
     (rename, add/remove exercises via picker, reorder, edit targets), duplicate,
     soft-delete.
-  - Workout Logging: start-from-routine (snapshot) or resume active session
-    (single-active invariant, atomic Room transaction); active workout screen;
-    add/edit/delete/toggle sets; complete/discard; completed workouts are
-    immutable; workout elapsed timer (derived from startedAt) + transient rest
-    countdown timer.
+  - Workout Logging: start-from-routine (snapshot) OR manual/ad-hoc workout
+    (routineId = null), or resume the active session (single-active invariant,
+    atomic Room transaction); active workout screen; add exercises (manual, via
+    the shared picker); add/edit/delete/toggle sets; complete/discard; completed
+    workouts are immutable; workout elapsed timer (derived from startedAt) +
+    transient rest countdown timer.
 * Navigation: Home = routine list; nested routine detail / edit / add-exercise;
-  Workout tab = active workout screen (optional routineId starts a workout, else
-  resumes the active one); History and Settings are placeholders.
-* 130 automated tests pass, executed on the JVM via Robolectric (converters,
+  Workout tab = active workout screen (optional routineId starts a routine
+  workout; the "No active workout" state offers a manual start; else resumes the
+  active one); the exercise picker is shared between routine editing and manual
+  workouts; Settings is a placeholder.
+  - Workout History: read-only history list (completed workouts only; DISCARDED
+    and IN_PROGRESS excluded; newest first) showing date, derived duration,
+    routine/manual indicator, exercise count, and a notes preview; read-only
+    workout detail screen showing workout metadata + every snapshotted exercise
+    and set (weight, reps, category, RPE), grouped and ordered from the snapshot.
+    Built on WorkoutHistoryRepository over the existing snapshot tables — no
+    schema change, no writes, snapshot integrity preserved. History is now a
+    real top-level destination; Workout Detail is a full-screen drill-down.
+* 172 automated tests pass, executed on the JVM via Robolectric (converters,
   DAOs, repositories, StartWorkoutUseCase, WorkoutClock, RestTimer, ViewModels,
-  Compose UI).
-* Not yet built: WorkManager / synchronization; manual (ad-hoc, routine-less)
-  workouts (M6 Phase 5); Workout History screen (M7); any on-device/emulator run
-  (no AVD — verification is test-based only).
+  Compose UI, history DAO/repository/ViewModels/Content, formatting helpers).
+* Not yet built: backend write APIs (M8); WorkManager / synchronization (M9);
+  web client (M10); any on-device/emulator run (no AVD — verification is
+  test-based only).
 
 Approved sequencing decision (July 20, 2026):
 
@@ -120,15 +132,16 @@ M2 Backend Exercise Library	✅ Completed
 M3 Android Foundation	✅ Completed
 M4 Android Exercise Library	✅ Completed (built within M3 phases)
 M5 Routine Management (Android)	✅ Completed
-M6 Workout Logging (Android)	🔄 In Progress (Phases 1–4 done; Phase 5 pending)
-M7 Workout History (Android)	⬜ Pending
-M8 Backend Sync APIs	⬜ Pending (resequenced)
+M6 Workout Logging (Android)	✅ Completed (all 5 phases)
+M7 Workout History (Android)	✅ Completed (all 4 phases)
+M8 Backend Sync APIs	⬜ Next (resequenced)
 M9 Synchronization	⬜ Pending
 M10 Web Application	⬜ Pending
 M11 Testing & Polish	⬜ Pending
 M12 Version 1 Release	⬜ Pending
 
-Test count: 130 automated Android tests passing (JVM/Robolectric).
+Current milestone: M8 (Backend Sync APIs).
+Test count: 172 automated Android tests passing (JVM/Robolectric).
 Database version: 3.  Backend: read-only exercise APIs only.  Sync: not started.
 
 Deferred close-out (not a milestone): a single on-device / emulator run to
@@ -226,7 +239,7 @@ tests (DAO, repository, ViewModel, Compose UI).
 
 ⸻
 
-10. M6 — Workout Logging (Android, offline-first) 🔄 In Progress
+10. M6 — Workout Logging (Android, offline-first) ✅ Completed
 
 Goal: implement active workout tracking on Android, fully offline against Room.
 
@@ -246,30 +259,52 @@ Phase status:
 * Phase 4 — Timers ✅ WorkoutClock (pure, elapsed = now − startedAt, frozen at
   endedAt) and RestTimer (transient countdown: start/restart/cancel/skip), both
   independently unit-tested. No service/notification/WorkManager.
-* Phase 5 — Manual (ad-hoc) workouts ⬜ Pending — start a workout without a
-  routine (routineId = null) and add exercises during the workout.
+* Phase 5 — Manual (ad-hoc) workouts ✅ Generalized StartWorkoutUseCase to
+  accept a nullable routineId; added WorkoutRepository.addExercise; generalized
+  the exercise picker to add to a routine OR an active workout. One workout
+  domain — no parallel implementations.
 
 Constraints honoured: offline only; no synchronization; no background execution.
 
-Exit criteria: complete workouts recorded and stored locally; snapshots created
-correctly and immutable; verified by tests. Remaining: Phase 5 + device pass.
+Exit criteria: met — routine and manual workouts recorded and stored locally;
+snapshots created correctly and immutable; verified by tests. Remaining: a device
+pass once an AVD is available.
 
 ⸻
 
-11. M7 — Workout History (Android, offline-first) ⬜ Pending
+11. M7 — Workout History (Android, offline-first) ✅ Completed
 
 Goal: implement historical workout viewing on Android from local snapshots.
 
-Deliverables: history screen, workout detail screen, read-only completed workouts.
+Delivered across four reviewed phases:
 
-Constraints: offline only; reads from Room snapshots.
+* Phase 1 — Data layer: a dedicated read-only WorkoutHistoryDao and
+  WorkoutHistoryRepository over the existing snapshot tables (WorkoutSession/
+  Exercise/Set). Queries return COMPLETED sessions only (DISCARDED/IN_PROGRESS
+  excluded), newest first, plus a grouped summary query for exercise counts. No
+  new entities, no schema change (database stays v3).
+* Phase 2 — History list: WorkoutHistoryScreen/Content/UiState/ViewModel showing
+  one card per completed workout (date, derived duration, routine/manual
+  indicator, exercise count, notes preview), with an empty state. Replaced the
+  History placeholder; wired History → Workout Detail navigation.
+* Phase 3 — Workout Detail: read-only WorkoutDetailScreen showing workout
+  metadata and every snapshotted exercise + set (weight, reps, category, RPE),
+  grouped under each exercise in captured order. No mutation controls. Reused
+  the Phase 1 repository (no new queries).
+* Phase 4 — Polish: shared formatting helpers (HistoryFormatting), centralized
+  duration/notes helpers, a bodyweight (zero-weight) formatting fix, and
+  accessibility click labels. Code de-duplicated with no behavioural change.
 
-Exit criteria: users can browse history; details display accurately; snapshot
-integrity preserved; verified by tests.
+Constraints honoured: offline only; reads from Room snapshots; strictly
+read-only; immutable history preserved.
+
+Exit criteria: met — users browse history and inspect accurate immutable
+details; snapshot integrity preserved; verified by 34 history-specific automated
+tests (172 total). Remaining: the shared on-device pass once an AVD exists.
 
 ⸻
 
-12. M8 — Backend Sync APIs ⬜ Pending (resequenced)
+12. M8 — Backend Sync APIs ⬜ Next (resequenced)
 
 Goal: implement the backend endpoints required by synchronization and the web
 app, against the finalized contracts in API_SPECIFICATION.md.
