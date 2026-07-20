@@ -36,8 +36,8 @@ Milestone	Status
 Foundation Documents	✅ Completed
 Backend Foundation	✅ Completed
 Backend Exercise Library	✅ Completed
-Android Foundation	Pending
-Android Exercise Library	Pending
+Android Foundation	🔄 In Progress
+Android Exercise Library	🔄 In Progress (built within M3 phases)
 Routine Management	Pending
 Workout Logging	Pending
 Workout History	Pending
@@ -128,6 +128,39 @@ Exit Criteria
 * Room database initializes.
 * Dependency injection functions correctly.
 
+Implementation Progress (as of July 20, 2026)
+
+Delivered incrementally across five reviewed phases. The Android module lives in
+`android/` (single Gradle module). Architecture is recorded in
+docs/ANDROID_ARCHITECTURE.md.
+
+* Phase 1 — Project skeleton: Application (Hilt), single Activity, Material 3
+  theme, Navigation Compose graph (Home/Workout/History/Settings placeholders),
+  DI modules (Database/Network/Dispatcher), Room infrastructure + converters,
+  Retrofit/OkHttp/kotlinx.serialization, version catalog, Gradle wrapper. ✅
+* Phase 2 — Room reference-data layer: ExerciseCategory/Exercise entities, DAOs,
+  database, exported schema (committed). ✅
+* Phase 3 — Network + repository boundary: Retrofit APIs, DTOs, hand-written
+  mappers, repository interfaces + implementations, Hilt bindings. ✅
+* Phase 4 — Exercise Library presentation: ExerciseListViewModel, immutable
+  UI state, Compose screen, Home wired to the real screen, offline-first. ✅
+* Phase 5 — Local search + category filtering: Room-only filtering, no backend
+  search endpoint used. ✅
+
+Verification: 37 automated tests pass (converters, DAO, repositories, ViewModel,
+Compose UI), executed on the JVM via Robolectric.
+
+Remaining for Milestone 3:
+
+* WorkManager — not built. Deferred to Milestone 8 (Synchronization), where it
+  belongs; it is not required to display data.
+* On-device / emulator runtime verification of the exit criteria (launch,
+  navigation, Room init, DI at runtime). Deferred: no emulator is installed;
+  every layer is currently verified by executed tests rather than a device run.
+
+Note: the Exercise Library screens (Milestone 4 scope — list, search, category
+browsing) were implemented within these phases, ahead of the original plan.
+
 ⸻
 
 7. Milestone 4 — Android Exercise Library
@@ -150,6 +183,18 @@ Exit Criteria
 * Exercise library loads correctly on Android.
 * Search functions correctly.
 * Categories display correctly.
+
+Implementation Progress (as of July 20, 2026)
+
+Delivered ahead of schedule within the Milestone 3 phases:
+
+* Exercise repository (download + local cache). ✅
+* Exercise list screen (Compose, offline-first). ✅
+* Exercise search (local, Room-only). ✅
+* Category browsing / filtering (local, Room-only). ✅
+
+Remaining: on-device / emulator confirmation of the exit criteria (no emulator
+installed yet). Behaviour is currently verified by automated tests.
 
 ⸻
 

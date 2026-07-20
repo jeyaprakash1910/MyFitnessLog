@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      A Material 3 base theme used only as the launch/splash theme before Compose
+      draws. The live application UI theme is defined in Compose
+      (core/ui/theme/Theme.kt); this XML theme intentionally stays minimal.
+    -->
+    <style name="Theme.MyFitnessLog" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>
