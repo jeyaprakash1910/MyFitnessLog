@@ -194,6 +194,8 @@ Responsibilities include:
 
 Services should not contain HTTP-related code.
 
+Services must not rely on lazy-loading outside an active transaction. All data required by an API response must be explicitly obtained within the service transaction and mapped to DTOs before returning (see ADR-0005).
+
 ⸻
 
 11. Repository Standards
@@ -235,6 +237,10 @@ Rules:
 * No business rules
 
 Keep entities focused on persistence.
+
+For entity timestamp auditing (createdAt / updatedAt), follow ADR-0006.
+
+Entity and column names must match the Flyway schema verbatim, including quoted PascalCase table names and quoted camelCase column names. Hibernate is configured with PhysicalNamingStrategyStandardImpl so these identifiers are used exactly as written and are never transformed (for example to snake_case). The Flyway schema remains the source of truth; entities map to it.
 
 ⸻
 

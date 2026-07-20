@@ -34,9 +34,10 @@ The implementation follows these principles:
 
 Milestone	Status
 Foundation Documents	✅ Completed
-Backend Foundation	Pending
+Backend Foundation	✅ Completed
+Backend Exercise Library	✅ Completed
 Android Foundation	Pending
-Exercise Library	Pending
+Android Exercise Library	Pending
 Routine Management	Pending
 Workout Logging	Pending
 Workout History	Pending
@@ -76,7 +77,32 @@ Exit Criteria
 
 ⸻
 
-5. Milestone 2 — Android Foundation
+5. Milestone 2 — Backend Exercise Library
+
+Goal
+
+Implement the master exercise library.
+
+Deliverables
+
+Backend:
+
+* Exercise entities
+* Category entities
+* Repositories
+* Services
+* Controllers
+* Seed data
+
+Exit Criteria
+
+* Exercise library loads correctly.
+* Search functions correctly.
+* Categories display correctly.
+
+⸻
+
+6. Milestone 3 — Android Foundation
 
 Goal
 
@@ -104,22 +130,13 @@ Exit Criteria
 
 ⸻
 
-6. Milestone 3 — Exercise Library
+7. Milestone 4 — Android Exercise Library
 
 Goal
 
-Implement the master exercise library.
+Implement the Android exercise library screens using the Backend Exercise Library APIs.
 
 Deliverables
-
-Backend:
-
-* Exercise entities
-* Category entities
-* Repositories
-* Services
-* Controllers
-* Seed data
 
 Android:
 
@@ -130,13 +147,13 @@ Android:
 
 Exit Criteria
 
-* Exercise library loads correctly.
+* Exercise library loads correctly on Android.
 * Search functions correctly.
 * Categories display correctly.
 
 ⸻
 
-7. Milestone 4 — Routine Management
+8. Milestone 5 — Routine Management
 
 Goal
 
@@ -166,7 +183,7 @@ Exit Criteria
 
 ⸻
 
-8. Milestone 5 — Workout Logging
+9. Milestone 6 — Workout Logging
 
 Goal
 
@@ -197,7 +214,7 @@ Exit Criteria
 
 ⸻
 
-9. Milestone 6 — Workout History
+10. Milestone 7 — Workout History
 
 Goal
 
@@ -224,7 +241,7 @@ Exit Criteria
 
 ⸻
 
-10. Milestone 7 — Synchronization
+11. Milestone 8 — Synchronization
 
 Goal
 
@@ -247,7 +264,7 @@ Exit Criteria
 
 ⸻
 
-11. Milestone 8 — Web Application
+12. Milestone 9 — Web Application
 
 Goal
 
@@ -269,7 +286,7 @@ Exit Criteria
 
 ⸻
 
-12. Milestone 9 — Testing & Polish
+13. Milestone 10 — Testing & Polish
 
 Goal
 
@@ -302,7 +319,7 @@ Exit Criteria
 
 ⸻
 
-13. Version 1 Release Checklist
+14. Version 1 Release Checklist
 
 Before releasing Version 1:
 
@@ -318,7 +335,7 @@ Before releasing Version 1:
 
 ⸻
 
-14. Future Versions
+15. Future Versions
 
 Version 2
 
@@ -356,7 +373,7 @@ Version 5
 
 ⸻
 
-15. Success Criteria
+16. Success Criteria
 
 Version 1 is considered complete when:
 

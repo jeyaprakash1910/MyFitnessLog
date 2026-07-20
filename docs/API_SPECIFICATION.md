@@ -101,7 +101,7 @@ Exercises
 Method	Endpoint	Description
 GET	/exercises	List exercises
 GET	/exercises/{id}	Exercise details
-GET	/exercises/search	Search exercises
+GET	/exercises/search	Search exercises (query parameter: q — case-insensitive name match)
 
 ⸻
 
