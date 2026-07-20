@@ -4,12 +4,16 @@ import androidx.lifecycle.SavedStateHandle
 import com.myfitnesslog.core.data.local.MyFitnessLogDatabase
 import com.myfitnesslog.feature.exercise.data.ExerciseRepository
 import com.myfitnesslog.feature.exercise.data.local.ExerciseEntity
+import com.myfitnesslog.feature.routine.RoutineTestData
 import com.myfitnesslog.feature.routine.awaitFirst
 import com.myfitnesslog.feature.routine.data.RoutineRepositoryImpl
 import com.myfitnesslog.feature.routine.newInMemoryDatabase
 import com.myfitnesslog.feature.routine.newRepository
 import com.myfitnesslog.feature.routine.seedExercises
 import com.myfitnesslog.feature.routine.ui.picker.ExercisePickerViewModel
+import com.myfitnesslog.feature.workout.data.WorkoutRepositoryImpl
+import com.myfitnesslog.feature.workout.domain.StartWorkoutUseCase
+import com.myfitnesslog.feature.workout.ui.WorkoutRoutes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -32,7 +36,9 @@ class ExercisePickerViewModelTest {
 
     private lateinit var database: MyFitnessLogDatabase
     private lateinit var routineRepository: RoutineRepositoryImpl
+    private lateinit var workoutRepository: WorkoutRepositoryImpl
     private lateinit var exerciseRepository: ExerciseRepository
+    private lateinit var startWorkout: StartWorkoutUseCase
     private var routineId: UUID = UUID.randomUUID()
 
     @Before
@@ -41,7 +47,22 @@ class ExercisePickerViewModelTest {
         database = newInMemoryDatabase()
         runBlocking { database.seedExercises() }
         routineRepository = database.newRepository()
+        workoutRepository = WorkoutRepositoryImpl(
+            sessionDao = database.workoutSessionDao(),
+            exerciseDao = database.workoutExerciseDao(),
+            setDao = database.workoutSetDao(),
+            ioDispatcher = UnconfinedTestDispatcher(),
+            clock = RoutineTestData.clock,
+        )
         exerciseRepository = DaoExerciseRepository(database)
+        startWorkout = StartWorkoutUseCase(
+            database = database,
+            workoutSessionDao = database.workoutSessionDao(),
+            workoutExerciseDao = database.workoutExerciseDao(),
+            routineRepository = routineRepository,
+            clock = RoutineTestData.clock,
+            ioDispatcher = UnconfinedTestDispatcher(),
+        )
         runBlocking { routineId = routineRepository.createRoutine("Legs") }
     }
 
@@ -51,33 +72,34 @@ class ExercisePickerViewModelTest {
         database.close()
     }
 
-    private fun viewModel() = ExercisePickerViewModel(
-        savedStateHandle = SavedStateHandle(mapOf(RoutineRoutes.ARG_ROUTINE_ID to routineId.toString())),
+    private fun viewModel(args: Map<String, String>) = ExercisePickerViewModel(
+        savedStateHandle = SavedStateHandle(args),
         exerciseRepository = exerciseRepository,
         routineRepository = routineRepository,
+        workoutRepository = workoutRepository,
     )
+
+    private fun routineViewModel() = viewModel(mapOf(RoutineRoutes.ARG_ROUTINE_ID to routineId.toString()))
 
     @Test
     fun listsAllExercisesOrdered() = runBlocking {
-        val vm = viewModel()
+        val vm = routineViewModel()
         val state = vm.uiState.awaitFirst { it.exercises.isNotEmpty() }
         assertEquals(listOf("Bench Press", "Squat"), state.exercises.map { it.name })
     }
 
     @Test
     fun searchFiltersLocally() = runBlocking {
-        val vm = viewModel()
+        val vm = routineViewModel()
         vm.uiState.awaitFirst { it.exercises.size == 2 }
-
         vm.onQueryChange("squat")
-
         val state = vm.uiState.awaitFirst { it.query == "squat" && it.exercises.size == 1 }
         assertEquals(listOf("Squat"), state.exercises.map { it.name })
     }
 
     @Test
-    fun selectingExerciseAddsItToRoutineAndEmitsAdded() = runBlocking {
-        val vm = viewModel()
+    fun selectingExerciseAddsToRoutine() = runBlocking {
+        val vm = routineViewModel()
         val events = mutableListOf<ExercisePickerViewModel.Added>()
         val job = launch(Dispatchers.Main) { vm.events.collect(events::add) }
         val squat = vm.uiState.awaitFirst { it.exercises.isNotEmpty() }.exercises.first { it.name == "Squat" }
@@ -88,6 +110,18 @@ class ExercisePickerViewModelTest {
         assertEquals(listOf("Squat"), added.map { it.exerciseName })
         assertTrue(events.isNotEmpty())
         job.cancel()
+    }
+
+    @Test
+    fun selectingExerciseAddsToManualWorkout() = runBlocking {
+        val sessionId = startWorkout(null) // manual workout
+        val vm = viewModel(mapOf(WorkoutRoutes.ARG_SESSION_ID to sessionId.toString()))
+        val squat = vm.uiState.awaitFirst { it.exercises.isNotEmpty() }.exercises.first { it.name == "Squat" }
+
+        vm.onExerciseSelected(squat.id)
+
+        val added = workoutRepository.observeWorkoutExercises(sessionId).awaitFirst { it.isNotEmpty() }
+        assertEquals(listOf("Squat"), added.map { it.exerciseName })
     }
 }
 

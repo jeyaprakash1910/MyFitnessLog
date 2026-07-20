@@ -25,6 +25,12 @@ interface RoutineRepository {
 
     fun observeRoutineExercises(routineId: UUID): Flow<List<RoutineExerciseDetail>>
 
+    /**
+     * One-shot read of a routine's exercises (with names), used by the workout
+     * layer to snapshot a routine when a workout starts.
+     */
+    suspend fun getRoutineExerciseDetails(routineId: UUID): List<RoutineExerciseDetail>
+
     /** Creates a routine and returns its new id. */
     suspend fun createRoutine(name: String): UUID
 

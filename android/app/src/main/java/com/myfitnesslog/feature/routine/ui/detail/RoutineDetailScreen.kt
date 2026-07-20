@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material3.Button
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -28,22 +29,30 @@ object RoutineDetailTestTags {
     const val EMPTY = "routine_detail_empty"
     const val NOT_FOUND = "routine_detail_not_found"
     const val EDIT_FAB = "routine_detail_edit_fab"
+    const val START_WORKOUT = "routine_detail_start_workout"
 }
 
 @Composable
 fun RoutineDetailScreen(
     onEditRoutine: () -> Unit,
+    onStartWorkout: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: RoutineDetailViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    RoutineDetailContent(uiState = uiState, onEditRoutine = onEditRoutine, modifier = modifier)
+    RoutineDetailContent(
+        uiState = uiState,
+        onEditRoutine = onEditRoutine,
+        onStartWorkout = onStartWorkout,
+        modifier = modifier,
+    )
 }
 
 @Composable
 fun RoutineDetailContent(
     uiState: RoutineDetailUiState,
     onEditRoutine: () -> Unit,
+    onStartWorkout: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier.fillMaxSize()) {
@@ -90,6 +99,16 @@ fun RoutineDetailContent(
                             HorizontalDivider()
                         }
                     }
+                }
+
+                Button(
+                    onClick = onStartWorkout,
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(16.dp)
+                        .testTag(RoutineDetailTestTags.START_WORKOUT),
+                ) {
+                    Text("Start Workout")
                 }
 
                 FloatingActionButton(

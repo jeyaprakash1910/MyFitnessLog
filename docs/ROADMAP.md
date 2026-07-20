@@ -36,9 +36,11 @@ The implementation follows these principles:
 
 ⸻
 
-3. Current State Snapshot (as of July 20, 2026)
+3. Current State Snapshot (as of July 21, 2026)
 
-This section reflects what actually exists in the repository today.
+This section reflects what actually exists in the repository today. It is the
+authoritative status summary; a new contributor (human or AI) should be able to
+orient from this plus ANDROID_ARCHITECTURE.md and ANDROID_FLOW.md alone.
 
 Repository layout:
 
@@ -47,7 +49,7 @@ Repository layout:
 * docs/    — architecture, database, API, sync, coding standards, ADRs
 * web/     — not started
 
-Backend (implemented):
+Backend status (M1–M2 complete; unchanged since):
 
 * Spring Boot app, PostgreSQL, Flyway, JPA auditing, OSIV disabled, global
   exception handler, SLF4J logging, SpringDoc OpenAPI, health endpoint.
@@ -56,27 +58,46 @@ Backend (implemented):
   categories and 40 exercises.
 * Entities / repositories / services / controllers / mappers / DTOs exist for
   ExerciseCategory and Exercise only.
-* Endpoints: GET /health, GET /exercise-categories, GET /exercises,
-  GET /exercises/{id}, GET /exercises/search.
-* Not yet built: entities/services/controllers for Routine, RoutineExercise,
-  WorkoutSession, WorkoutExercise, WorkoutSet; any write (POST/PUT/DELETE)
-  endpoints; automated backend tests (backend/src/test is currently empty).
+* Endpoints (all read-only): GET /health, GET /exercise-categories,
+  GET /exercises, GET /exercises/{id}, GET /exercises/search.
+* Not yet built: entities/services/controllers for Routine/RoutineExercise/
+  WorkoutSession/WorkoutExercise/WorkoutSet; any write (POST/PUT/DELETE)
+  endpoints; automated backend tests (backend/src/test is empty).
 
-Android (implemented):
+Android status (M3–M5 complete; M6 Phases 1–4 complete, Phase 5 pending):
 
-* Single Gradle module; Hilt DI, Jetpack Compose, Navigation Compose, Room,
-  Retrofit + OkHttp + kotlinx.serialization, Material 3 theme, version catalog,
-  Gradle wrapper.
-* Room infrastructure: database, UUID/Instant converters, exported schema
-  (committed). Reference entities + DAOs for ExerciseCategory and Exercise.
-* Network + repository boundary for the exercise library (APIs, DTOs, mappers,
-  repository interfaces + implementations, Hilt bindings).
-* Exercise Library feature end-to-end: ViewModel, immutable UI state, Compose
-  screen (Home), local search and category filtering (Room-only, offline-first).
-* 37 automated tests pass (converters, DAO, repositories, ViewModel, Compose UI)
-  executed on the JVM via Robolectric.
-* Not yet built: WorkManager; any feature beyond the exercise library; on-device
-  / emulator run (no AVD installed — verification so far is test-based).
+* Foundation: single Gradle module; Hilt DI, Jetpack Compose, Navigation Compose,
+  Room, Retrofit + OkHttp + kotlinx.serialization, Material 3, version catalog,
+  Gradle wrapper. Android SDK installed locally; NO AVD/emulator.
+* Room database version 3, exportSchema on (schemas v1/v2/v3 committed):
+  - Reference (download-only): ExerciseCategory, Exercise.
+  - Routine templates (mutable): Routine, RoutineExercise.
+  - Workout history (mutable, immutable once completed): WorkoutSession,
+    WorkoutExercise, WorkoutSet.
+  - Converters: UUID(String), Instant(epoch millis), SyncStatus, WorkoutStatus
+    + SetCategory (by name), BigDecimal(plain string, for weight/RPE/RIR).
+* Repositories: ExerciseCategoryRepository, ExerciseRepository (read-only);
+  RoutineRepository, WorkoutRepository (mutable). Use case: StartWorkoutUseCase.
+* Implemented features (all offline-first, Room-only, no network calls yet):
+  - Exercise Library: initial download + local cache, list, local search,
+    category filtering.
+  - Routine Management: routine list (Home), routine detail, create/edit
+    (rename, add/remove exercises via picker, reorder, edit targets), duplicate,
+    soft-delete.
+  - Workout Logging: start-from-routine (snapshot) or resume active session
+    (single-active invariant, atomic Room transaction); active workout screen;
+    add/edit/delete/toggle sets; complete/discard; completed workouts are
+    immutable; workout elapsed timer (derived from startedAt) + transient rest
+    countdown timer.
+* Navigation: Home = routine list; nested routine detail / edit / add-exercise;
+  Workout tab = active workout screen (optional routineId starts a workout, else
+  resumes the active one); History and Settings are placeholders.
+* 130 automated tests pass, executed on the JVM via Robolectric (converters,
+  DAOs, repositories, StartWorkoutUseCase, WorkoutClock, RestTimer, ViewModels,
+  Compose UI).
+* Not yet built: WorkManager / synchronization; manual (ad-hoc, routine-less)
+  workouts (M6 Phase 5); Workout History screen (M7); any on-device/emulator run
+  (no AVD — verification is test-based only).
 
 Approved sequencing decision (July 20, 2026):
 
@@ -98,8 +119,8 @@ M1 Backend Foundation	✅ Completed
 M2 Backend Exercise Library	✅ Completed
 M3 Android Foundation	✅ Completed
 M4 Android Exercise Library	✅ Completed (built within M3 phases)
-M5 Routine Management (Android)	⬜ Next
-M6 Workout Logging (Android)	⬜ Pending
+M5 Routine Management (Android)	✅ Completed
+M6 Workout Logging (Android)	🔄 In Progress (Phases 1–4 done; Phase 5 pending)
 M7 Workout History (Android)	⬜ Pending
 M8 Backend Sync APIs	⬜ Pending (resequenced)
 M9 Synchronization	⬜ Pending
@@ -107,9 +128,12 @@ M10 Web Application	⬜ Pending
 M11 Testing & Polish	⬜ Pending
 M12 Version 1 Release	⬜ Pending
 
-Immediate small close-out (not a milestone): a single on-device / emulator run
-to confirm the M3/M4 exit criteria (launch, navigation, exercise list/search/
-category) that could not be executed without an emulator.
+Test count: 130 automated Android tests passing (JVM/Robolectric).
+Database version: 3.  Backend: read-only exercise APIs only.  Sync: not started.
+
+Deferred close-out (not a milestone): a single on-device / emulator run to
+confirm the Android exit criteria (launch, navigation, routine + workout flows)
+that cannot be executed without an AVD.
 
 ⸻
 
@@ -178,46 +202,57 @@ tests. Remaining: on-device confirmation.
 
 ⸻
 
-9. M5 — Routine Management (Android, offline-first) ⬜ Next
+9. M5 — Routine Management (Android, offline-first) ✅ Completed
 
 Goal: implement workout templates on Android, fully offline against Room.
 
-Deliverables:
+Delivered:
 
-* Room: Routine and RoutineExercise entities + DAOs, INCLUDING a syncStatus
-  column from creation (these are the first mutable entities; adding syncStatus
-  now avoids a destructive Room migration later).
-* The first mutable repository — establishes and documents the mutable-repository
-  API-shape convention (observe + write + sync-trigger).
-* ViewModels + Compose screens: Home (routine list), Routine details, Create /
-  Edit routine, reorder exercises, duplicate routine, delete (local soft-delete).
+* Room: Routine + RoutineExercise entities/DAOs with syncStatus from creation
+  (the first mutable entities). RoutineExercise carries planned targets
+  (targetSets/min/maxReps/rest/notes) to match ANDROID_FLOW and the backend's
+  NOT NULL columns.
+* RoutineRepository — the first mutable repository; establishes the
+  mutable-repository convention (observe + write ops; injected Clock; PENDING
+  sync status). Database v2.
+* Screens: routine list (Home), detail, create/edit (rename, add exercise via a
+  reusable exercise picker, remove, reorder, edit targets), duplicate,
+  soft-delete. Navigation drills down from Home; Home now shows routines.
 
-Constraints: no backend calls; no synchronization. All data lives in Room.
+Constraints honoured: no backend calls; no synchronization; all data in Room.
 
-Exit criteria: users can fully manage routines offline; data persists locally;
-verified by automated tests (DAO, repository, ViewModel, Compose UI) and a device
-pass if an emulator is available.
+Exit criteria: met — full offline routine management, verified by automated
+tests (DAO, repository, ViewModel, Compose UI).
 
 ⸻
 
-10. M6 — Workout Logging (Android, offline-first) ⬜ Pending
+10. M6 — Workout Logging (Android, offline-first) 🔄 In Progress
 
 Goal: implement active workout tracking on Android, fully offline against Room.
 
-Deliverables:
+Phase status:
 
-* Room: WorkoutSession, WorkoutExercise, WorkoutSet entities + DAOs (with
-  syncStatus).
-* Snapshot-at-workout-start logic (Routine/RoutineExercise → WorkoutExercise).
-  This is the first non-trivial business rule and is a good candidate for a
-  single focused UseCase (not a blanket UseCase layer).
-* Compose: workout screen, workout timer, rest timer, add/edit/delete sets,
-  complete workout, discard workout.
+* Phase 1 — Workout data layer ✅ WorkoutSession/WorkoutExercise/WorkoutSet
+  entities + DAOs; WorkoutStatus + SetCategory enums; BigDecimal + enum
+  converters; database v3. History tables are never soft-deleted.
+* Phase 2 — Repository + StartWorkoutUseCase ✅ StartWorkoutUseCase snapshots a
+  routine into immutable WorkoutExercise rows inside an atomic Room transaction,
+  enforcing the single-active-session invariant. WorkoutRepository owns set CRUD
+  and complete/discard, enforcing completed-workout immutability.
+* Phase 3 — Active workout UI ✅ WorkoutViewModel + screen: start/resume, log
+  sets (add/edit/delete/toggle), complete → History, discard → Home; read-only
+  once completed. Routine Detail gained a "Start Workout" action; Workout tab is
+  the active-workout screen.
+* Phase 4 — Timers ✅ WorkoutClock (pure, elapsed = now − startedAt, frozen at
+  endedAt) and RestTimer (transient countdown: start/restart/cancel/skip), both
+  independently unit-tested. No service/notification/WorkManager.
+* Phase 5 — Manual (ad-hoc) workouts ⬜ Pending — start a workout without a
+  routine (routineId = null) and add exercises during the workout.
 
-Constraints: offline only; no synchronization.
+Constraints honoured: offline only; no synchronization; no background execution.
 
-Exit criteria: complete workouts can be recorded and stored locally; historical
-snapshots are created correctly; verified by tests.
+Exit criteria: complete workouts recorded and stored locally; snapshots created
+correctly and immutable; verified by tests. Remaining: Phase 5 + device pass.
 
 ⸻
 

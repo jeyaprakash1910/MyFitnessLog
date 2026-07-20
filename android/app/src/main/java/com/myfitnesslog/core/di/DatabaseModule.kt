@@ -7,6 +7,9 @@ import com.myfitnesslog.feature.exercise.data.local.ExerciseCategoryDao
 import com.myfitnesslog.feature.exercise.data.local.ExerciseDao
 import com.myfitnesslog.feature.routine.data.local.RoutineDao
 import com.myfitnesslog.feature.routine.data.local.RoutineExerciseDao
+import com.myfitnesslog.feature.workout.data.local.WorkoutExerciseDao
+import com.myfitnesslog.feature.workout.data.local.WorkoutSessionDao
+import com.myfitnesslog.feature.workout.data.local.WorkoutSetDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -56,4 +59,16 @@ object DatabaseModule {
     @Provides
     fun provideRoutineExerciseDao(database: MyFitnessLogDatabase): RoutineExerciseDao =
         database.routineExerciseDao()
+
+    @Provides
+    fun provideWorkoutSessionDao(database: MyFitnessLogDatabase): WorkoutSessionDao =
+        database.workoutSessionDao()
+
+    @Provides
+    fun provideWorkoutExerciseDao(database: MyFitnessLogDatabase): WorkoutExerciseDao =
+        database.workoutExerciseDao()
+
+    @Provides
+    fun provideWorkoutSetDao(database: MyFitnessLogDatabase): WorkoutSetDao =
+        database.workoutSetDao()
 }

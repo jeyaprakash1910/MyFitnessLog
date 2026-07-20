@@ -24,14 +24,14 @@ class RoutineDetailContentTest {
 
     @Test
     fun showsNotFound() {
-        composeRule.setContent { RoutineDetailContent(RoutineDetailUiState.NotFound, {}) }
+        composeRule.setContent { RoutineDetailContent(RoutineDetailUiState.NotFound, {}, {}) }
         composeRule.onNodeWithTag(RoutineDetailTestTags.NOT_FOUND).assertIsDisplayed()
     }
 
     @Test
     fun showsEmptyWhenNoExercises() {
         composeRule.setContent {
-            RoutineDetailContent(RoutineDetailUiState.Success("Legs", emptyList()), {})
+            RoutineDetailContent(RoutineDetailUiState.Success("Legs", emptyList()), {}, {})
         }
         composeRule.onNodeWithTag(RoutineDetailTestTags.EMPTY).assertIsDisplayed()
     }
@@ -41,7 +41,7 @@ class RoutineDetailContentTest {
         var edited = false
         val row = RoutineExerciseRow(UUID.randomUUID(), "Squat", "3 sets · 8–12 reps", null)
         composeRule.setContent {
-            RoutineDetailContent(RoutineDetailUiState.Success("Legs", listOf(row)), { edited = true })
+            RoutineDetailContent(RoutineDetailUiState.Success("Legs", listOf(row)), { edited = true }, {})
         }
 
         composeRule.onNodeWithTag(RoutineDetailTestTags.LIST).assertIsDisplayed()

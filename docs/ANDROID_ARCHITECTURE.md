@@ -2,16 +2,18 @@ Android Architecture
 
 Project: MyFitnessLog
 Version: 1.0
-Status: Approved (Milestone 3 baseline)
-Last Updated: July 20, 2026
+Status: Approved — reflects Milestone 6 Phase 4
+Last Updated: July 21, 2026
 
 ⸻
 
 1. Purpose
 
 This document records the approved architecture for the MyFitnessLog Android
-application. It is the baseline for all Android implementation work and reflects
-the Milestone 3 architecture review and its accepted refinements.
+application and is the single source of truth for how the Android app is built.
+It reflects everything implemented through Milestone 6 Phase 4 (exercise library,
+routine management, and workout logging with timers). Sections 13–17 describe the
+workout domain added in Milestones 5–6.
 
 It complements, and does not override, the system-wide documents: PRD.md,
 ARCHITECTURE.md, DATABASE.md, API_SPECIFICATION.md, ANDROID_FLOW.md, SYNC.md,
@@ -59,7 +61,7 @@ com.myfitnesslog
         util
     feature/
         exercise, routine, workout, history, settings
-    sync/                 (Milestone 8)
+    sync/                 (Milestone 9 — Synchronization)
 
 Feature packages lift cleanly into Gradle modules later if needed.
 
@@ -68,7 +70,7 @@ Feature packages lift cleanly into Gradle modules later if needed.
 5. Dependency Injection
 
 - Hilt. Chosen for compile-time graph validation and first-class WorkManager
-  integration (needed in Milestone 8).
+  integration (needed in Milestone 9, Synchronization).
 - App-wide modules live in `core/di`: DatabaseModule, NetworkModule,
   DispatcherModule.
 - Dispatchers are injected behind qualifiers so they can be overridden in tests.
@@ -84,13 +86,17 @@ Feature packages lift cleanly into Gradle modules later if needed.
 - `exportSchema = true`; exported schemas are committed to Git so the local
   database has the same migration discipline Flyway provides on the backend.
 - Mutable entities carry a `syncStatus` column (PENDING/SYNCING/SYNCED/FAILED),
-  added when each entity is first created — not retrofitted at Milestone 8.
+  added when each entity is first created — not retrofitted at sync time.
   Reference data (Exercise, ExerciseCategory) is download-only and needs no
   sync status.
+- Enums (WorkoutStatus, SetCategory) are stored by name. Money/precision values
+  (weight, RPE, RIR) use BigDecimal stored as a plain string — see section 16.
 
-Note: Room requires at least one entity to compile a `@Database`. Until the
-first entity exists (Milestone 4 / Phase 2), the database class is a documented
-placeholder while the surrounding Room infrastructure is fully configured.
+Current schema: database version 3, exportSchema on (schemas v1/v2/v3 committed).
+Entities: ExerciseCategory, Exercise (reference); Routine, RoutineExercise
+(templates); WorkoutSession, WorkoutExercise, WorkoutSet (history). Pre-release
+uses `fallbackToDestructiveMigration()`; real Migrations begin once shipped
+(reference data re-downloads, and no user data has shipped yet).
 
 ⸻
 
@@ -157,11 +163,18 @@ content never touches the ViewModel, DI, or lifecycle.
 8. Coroutines, Flow, Error Handling
 
 - Flow for all UI read paths (DAO → Repository → StateFlow<UiState>).
-- suspend functions for one-shot writes/fetches.
-- Background sync is owned by WorkManager, never viewModelScope.
-- Repository boundary returns a sealed result type; network/server errors during
-  sync are handled by ret/retry and never surface as UI failures. Empty local
-  database is a normal Loading/Empty state, not an error.
+- suspend functions for one-shot writes/fetches; write work runs on an injected
+  @IoDispatcher.
+- Background sync will be owned by WorkManager (Milestone 9), never viewModelScope.
+- Current error strategy: repositories throw (e.g. IllegalStateException when a
+  completed workout is mutated; SQLiteConstraintException on a bad FK). A
+  structured Result/sealed error type is intentionally NOT built yet — it is
+  added only when a presentation consumer needs to render distinct error states.
+  Today ViewModels wrap risky writes in runCatching so a rejected write never
+  crashes the UI. Empty local data is a normal Loading/Empty state, not an error.
+- Offline-first state precedence: when cached data exists it is shown (Success)
+  even if a refresh failed; Error/Empty surface only when there is nothing to
+  show. Filtering/searching never triggers the network.
 
 ⸻
 
@@ -192,19 +205,109 @@ model is genuinely needed.
 
 11. Testing Strategy
 
-- Unit (JVM): ViewModel tests (fake Repository, TestDispatcher), mapper tests,
-  converter tests.
-- Repository tests, including repository contract tests that assert every
-  implementation satisfies its interface regardless of backing changes.
-- Room DAO tests against an in-memory database (instrumented).
-- Compose UI tests per screen as screens land.
+- All tests run on the JVM via Robolectric (no emulator is installed). Room DAO,
+  repository, ViewModel, and Compose UI tests all execute this way — including
+  real in-memory Room databases, which give higher confidence than mocking.
+- Timer/business logic (WorkoutClock, RestTimer) is extracted into pure/
+  scope-driven classes and unit-tested with plain JUnit and virtual time.
+- ViewModel integration tests use the real repository over in-memory Room and
+  await real Flow emissions (a shared `awaitFirst` helper) rather than virtual
+  time, because Room emits on background threads.
+- Current count: 130 passing tests. On-device verification is the one deferred
+  gap (no AVD); every layer is otherwise covered by executed tests.
+- JUnit4 gotcha: a Kotlin `@Test`/`@Before` whose last expression returns a value
+  (e.g. ends in `addExercise(...)` or `assertThrows`) is not `void` and JUnit
+  rejects the class — add a trailing `Unit`.
 
 ⸻
 
-12. Intentionally Not Built in Version 1
+12. Intentionally Not Built (Version 1)
 
 - Multi-module Gradle setup.
 - Separate domain module / DTO→Entity→Domain triple mapping.
-- A global UseCase / Interactor layer.
+- A global UseCase / Interactor layer (only focused use cases — see section 14).
 - A LocalDataSource wrapper around DAOs.
 - Any sync engine, WorkManager jobs, or network calls before their milestone.
+- Foreground services, notifications, or alarms for timers (timers are in-VM only).
+
+⸻
+
+13. Workout Snapshot Architecture (Milestone 6)
+
+Workout history is immutable and snapshot-based — the defining rule of the app.
+When a workout starts, each RoutineExercise is COPIED into a WorkoutExercise row
+carrying the exercise name and all planned targets. Completed workouts therefore
+never change when the routine is later edited, renamed, reordered, or deleted.
+
+Why snapshots (not references): a routine is a mutable template; workout history
+is a permanent record of what actually happened. Referencing live routine rows
+would corrupt history on any future edit. This is verified by a test that edits/
+removes the routine after starting and asserts the snapshot is unchanged.
+
+History tables (WorkoutSession/Exercise/Set) are NEVER soft-deleted; a discarded
+workout is kept with status = DISCARDED (hidden from the user), not deleted.
+
+⸻
+
+14. Workout Lifecycle, Invariants, and StartWorkoutUseCase
+
+- WorkoutStatus: IN_PROGRESS → COMPLETED or DISCARDED (once, terminal).
+- Single active session invariant: at most one IN_PROGRESS workout exists.
+  Starting resumes the active session instead of creating a second. Enforced at
+  a single point — StartWorkoutUseCase — because it is the only creator of
+  sessions; the repository never creates one.
+- StartWorkoutUseCase is a focused use case (the first non-trivial business rule,
+  exactly the case section 3 reserves a UseCase for — not a blanket layer). It:
+  resolves/resumes the active session, else creates a session and snapshots the
+  routine's exercises, all inside a single Room `withTransaction` so a failure
+  (e.g. an invalid routine FK) rolls back and leaves no partial workout.
+- Completed-workout immutability: WorkoutRepository checks the owning session is
+  IN_PROGRESS before any set add/update/delete and before complete/discard;
+  otherwise it throws IllegalStateException. The UI derives read-only from status
+  (`isReadOnly = status != IN_PROGRESS`) and hides mutating controls.
+- setNumber is auto-assigned; timestamps come from the injected Clock; value
+  guards (weight ≥ 0, reps ≥ 0, RPE 1..10) live in the repository (Room has no
+  CHECK constraints; the backend remains authoritative).
+
+⸻
+
+15. Timer Architecture (Milestone 6 Phase 4)
+
+- Workout elapsed time is DERIVED, never stored: WorkoutClock.elapsed(startedAt,
+  endedAt, now) is a pure function. The ViewModel recomputes it each second from
+  the session + injected Clock. It freezes when endedAt is set (workout ended)
+  and reconstructs after process death because it depends only on persisted data.
+- Rest countdown is transient UI state: RestTimer is a Compose-independent class
+  driven by an injected CoroutineScope and injectable tick interval, exposing a
+  StateFlow of Idle/Running/Finished with start/restart/cancel/skip. It is not
+  persisted, synchronized, or backed by a service — losing it on process death
+  is acceptable for V1.
+- Both are unit-tested independently (pure function; virtual-time countdown).
+
+⸻
+
+16. BigDecimal & Value Handling
+
+Weight, RPE, and RIR use java.math.BigDecimal (not Double) to match the backend
+DECIMAL columns exactly and avoid binary floating-point drift. Stored via a
+converter as `toPlainString()`, preserving value and scale, verified by
+scale-sensitive round-trip tests. This keeps Android and PostgreSQL aligned
+before synchronization is introduced.
+
+⸻
+
+17. Navigation Conventions
+
+- Single Activity + Navigation Compose. Home hosts the routine list (ANDROID_FLOW
+  defines Home as routines). Top-level destinations (Home/Workout/History/
+  Settings) keep the bottom navigation bar.
+- Drill-down destinations (routine detail/edit/add-exercise) render full-screen:
+  the bottom bar is hidden and the top bar shows a back arrow.
+- Feature routes live in the feature (e.g. RoutineRoutes, WorkoutRoutes); the app
+  NavHost references them. The Workout route is parameterised
+  (`workout?routineId={routineId}`): with a routineId it starts a workout from a
+  routine, without one the tab resumes the active session. Top-level detection
+  compares the base route (before "?") so parameterised top-level routes still
+  register as top-level.
+- One-shot navigation (open editor after create; finish → History; discard →
+  Home) is delivered via a ViewModel SharedFlow of events the screen collects.

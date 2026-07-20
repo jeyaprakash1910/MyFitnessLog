@@ -3,7 +3,7 @@ Android Application Flow
 Project: MyFitnessLog
 Version: 1.0
 Status: Approved
-Last Updated: July 20, 2026
+Last Updated: July 21, 2026
 
 ⸻
 
@@ -20,6 +20,36 @@ The design prioritizes:
 * Offline-first behavior
 * Consistent navigation
 * Simple, predictable user experience
+
+⸻
+
+1a. Implementation Status (as of July 21, 2026)
+
+This document describes the full Version 1 flow. Status of each screen today:
+
+| Screen | Status |
+| --- | --- |
+| Home (routine list) | ✅ Implemented |
+| Routine Details | ✅ Implemented (Edit + Start Workout; no per-set history yet) |
+| Edit Routine | ✅ Implemented (name, add/remove/reorder exercises, edit targets) |
+| Exercise Search / Picker | ✅ Implemented as the "add exercise to routine" picker |
+| Workout (active logging) | ✅ Implemented (sets add/edit/delete/toggle, complete, discard) |
+| Rest Timer + Workout timer | ✅ Implemented (elapsed derived; rest countdown transient) |
+| History | ⬜ Placeholder (Milestone 7) |
+| Workout Details | ⬜ Not built (Milestone 7) |
+| Settings | ⬜ Placeholder |
+
+Notable flow specifics as built:
+
+* Home shows routines; tapping one opens Routine Details; "Start Workout" starts
+  (or resumes) a workout and opens the Workout screen.
+* Only ONE active workout may exist at a time; starting again resumes it.
+* Completing a workout navigates to History; discarding returns to Home.
+* A completed/discarded workout renders read-only.
+* Manual (ad-hoc) workouts with no routine are NOT yet built (Milestone 6 Phase 5);
+  today a workout is always started from a routine.
+* The standalone exercise-library browse screen from earlier milestones is no
+  longer a top-level destination; exercise selection happens inside routine edit.
 
 ⸻
 

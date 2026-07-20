@@ -32,6 +32,9 @@ import com.myfitnesslog.feature.routine.ui.detail.RoutineDetailScreen
 import com.myfitnesslog.feature.routine.ui.edit.RoutineEditScreen
 import com.myfitnesslog.feature.routine.ui.list.RoutineListScreen
 import com.myfitnesslog.feature.routine.ui.picker.ExercisePickerScreen
+import com.myfitnesslog.feature.workout.ui.WorkoutRoutes
+import com.myfitnesslog.feature.workout.ui.WorkoutScreen
+import com.myfitnesslog.feature.workout.ui.WorkoutViewModel
 
 /**
  * Root navigation graph.
@@ -49,10 +52,13 @@ fun MyFitnessLogNavHost() {
     val currentDestination = currentBackStackEntry?.destination
     val currentRoute = currentDestination?.route
 
+    // Compare on the base route (before any "?query") so parameterised top-level
+    // routes such as the workout screen still register as top-level.
+    fun String?.base() = this?.substringBefore("?")
     val topLevel = TopLevelDestination.entries.firstOrNull { dest ->
-        currentDestination?.hierarchy?.any { it.route == dest.route } == true
+        currentDestination?.hierarchy?.any { it.route.base() == dest.route } == true
     }
-    val isTopLevel = topLevel != null && currentRoute in TopLevelDestination.entries.map { it.route }
+    val isTopLevel = topLevel != null && currentRoute.base() in TopLevelDestination.entries.map { it.route }
 
     Scaffold(
         topBar = {
@@ -72,7 +78,7 @@ fun MyFitnessLogNavHost() {
                 NavigationBar {
                     TopLevelDestination.entries.forEach { destination ->
                         val selected = currentDestination
-                            ?.hierarchy?.any { it.route == destination.route } == true
+                            ?.hierarchy?.any { it.route.base() == destination.route } == true
                         NavigationBarItem(
                             selected = selected,
                             onClick = {
@@ -103,8 +109,41 @@ fun MyFitnessLogNavHost() {
                     onEditRoutine = { id -> navController.navigate(RoutineRoutes.edit(id)) },
                 )
             }
-            composable(TopLevelDestination.WORKOUT.route) {
-                PlaceholderScreen(title = TopLevelDestination.WORKOUT.label)
+            composable(
+                route = WorkoutRoutes.PATTERN,
+                arguments = listOf(
+                    navArgument(WorkoutRoutes.ARG_ROUTINE_ID) {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    },
+                ),
+            ) {
+                WorkoutScreen(
+                    onFinished = { event ->
+                        when (event) {
+                            WorkoutViewModel.Event.COMPLETED ->
+                                navController.navigate(TopLevelDestination.HISTORY.route) {
+                                    popUpTo(TopLevelDestination.HOME.route)
+                                    launchSingleTop = true
+                                }
+                            WorkoutViewModel.Event.DISCARDED ->
+                                navController.navigate(TopLevelDestination.HOME.route) {
+                                    popUpTo(TopLevelDestination.HOME.route) { inclusive = true }
+                                    launchSingleTop = true
+                                }
+                        }
+                    },
+                    onAddExercise = { sessionId ->
+                        navController.navigate(WorkoutRoutes.addExercise(sessionId))
+                    },
+                )
+            }
+            composable(
+                route = WorkoutRoutes.ADD_EXERCISE,
+                arguments = listOf(navArgument(WorkoutRoutes.ARG_SESSION_ID) { type = NavType.StringType }),
+            ) {
+                ExercisePickerScreen(onDone = { navController.popBackStack() })
             }
             composable(TopLevelDestination.HISTORY.route) {
                 PlaceholderScreen(title = TopLevelDestination.HISTORY.label)
@@ -120,6 +159,7 @@ fun MyFitnessLogNavHost() {
                 val id = entry.arguments?.getString(RoutineRoutes.ARG_ROUTINE_ID)
                 RoutineDetailScreen(
                     onEditRoutine = { id?.let { navController.navigate(RoutineRoutes.edit(it)) } },
+                    onStartWorkout = { id?.let { navController.navigate(WorkoutRoutes.withRoutine(it)) } },
                 )
             }
             composable(RoutineRoutes.EDIT, arguments = routineIdArg) { entry ->

@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.myfitnesslog.feature.exercise.data.ExerciseRepository
 import com.myfitnesslog.feature.routine.data.RoutineRepository
 import com.myfitnesslog.feature.routine.ui.RoutineRoutes
+import com.myfitnesslog.feature.workout.data.WorkoutRepository
+import com.myfitnesslog.feature.workout.ui.WorkoutRoutes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -21,12 +23,14 @@ import java.util.UUID
 import javax.inject.Inject
 
 /**
- * ViewModel for the "add exercise to routine" picker.
+ * Shared exercise picker used by two workflows, selected by which nav argument is
+ * present:
+ *  - `routineId`         → add the exercise to a routine (routine editing), or
+ *  - `workoutSessionId`  → add the exercise to an active manual workout.
  *
- * Lists the exercise library (searchable, from Room). Selecting an exercise adds
- * it to the routine directly through the [RoutineRepository] with default
- * targets, then emits [Added]; because Room is the source of truth, the edit
- * screen's list updates reactively with no navigation-result plumbing.
+ * One implementation, one list; selecting an exercise adds it to the correct
+ * target and pops back. Because Room is the source of truth, the originating
+ * screen updates reactively with no navigation-result plumbing.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -34,12 +38,15 @@ class ExercisePickerViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     exerciseRepository: ExerciseRepository,
     private val routineRepository: RoutineRepository,
+    private val workoutRepository: WorkoutRepository,
 ) : ViewModel() {
 
     object Added
 
-    private val routineId: UUID =
-        UUID.fromString(checkNotNull(savedStateHandle[RoutineRoutes.ARG_ROUTINE_ID]))
+    private val routineId: UUID? =
+        savedStateHandle.get<String>(RoutineRoutes.ARG_ROUTINE_ID)?.let(UUID::fromString)
+    private val workoutSessionId: UUID? =
+        savedStateHandle.get<String>(WorkoutRoutes.ARG_SESSION_ID)?.let(UUID::fromString)
 
     private val query = MutableStateFlow("")
 
@@ -68,16 +75,24 @@ class ExercisePickerViewModel @Inject constructor(
     }
 
     fun onExerciseSelected(exerciseId: UUID) {
+        val name = uiState.value.exercises.firstOrNull { it.id == exerciseId }?.name.orEmpty()
         viewModelScope.launch {
-            routineRepository.addExercise(
-                routineId = routineId,
-                exerciseId = exerciseId,
-                targetSets = DEFAULT_TARGET_SETS,
-                minTargetReps = DEFAULT_MIN_REPS,
-                maxTargetReps = DEFAULT_MAX_REPS,
-                targetRestSeconds = DEFAULT_REST_SECONDS,
-                notes = null,
-            )
+            when {
+                routineId != null -> routineRepository.addExercise(
+                    routineId = routineId,
+                    exerciseId = exerciseId,
+                    targetSets = DEFAULT_TARGET_SETS,
+                    minTargetReps = DEFAULT_MIN_REPS,
+                    maxTargetReps = DEFAULT_MAX_REPS,
+                    targetRestSeconds = DEFAULT_REST_SECONDS,
+                    notes = null,
+                )
+                workoutSessionId != null -> workoutRepository.addExercise(
+                    sessionId = workoutSessionId,
+                    exerciseId = exerciseId,
+                    exerciseName = name,
+                )
+            }
             _events.emit(Added)
         }
     }
