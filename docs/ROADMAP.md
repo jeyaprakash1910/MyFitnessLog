@@ -9,11 +9,17 @@ Last Updated: July 20, 2026
 
 1. Purpose
 
-This roadmap defines the implementation plan for MyFitnessLog Version 1.
+This roadmap defines the implementation plan for MyFitnessLog Version 1 and
+tracks what has been built so far.
 
-The objective is to build the application incrementally while maintaining a working codebase at every milestone.
+The objective is to build the application incrementally while maintaining a
+working codebase at every milestone.
 
-Each phase builds upon the previous phase and should be completed before starting the next.
+Each phase builds upon the previous phase and should be completed before starting
+the next.
+
+This document is intended to be the single, quick-to-read picture of "what is
+done and what is next" for the whole codebase.
 
 ⸻
 
@@ -30,341 +36,274 @@ The implementation follows these principles:
 
 ⸻
 
-3. Milestone Overview
+3. Current State Snapshot (as of July 20, 2026)
+
+This section reflects what actually exists in the repository today.
+
+Repository layout:
+
+* backend/ — Spring Boot API (Java 21, Maven)
+* android/ — Android app (Kotlin, single Gradle module)
+* docs/    — architecture, database, API, sync, coding standards, ADRs
+* web/     — not started
+
+Backend (implemented):
+
+* Spring Boot app, PostgreSQL, Flyway, JPA auditing, OSIV disabled, global
+  exception handler, SLF4J logging, SpringDoc OpenAPI, health endpoint.
+* Flyway V1 creates ALL eight tables (User, ExerciseCategory, Exercise, Routine,
+  RoutineExercise, WorkoutSession, WorkoutExercise, WorkoutSet). V2/V3 seed 8
+  categories and 40 exercises.
+* Entities / repositories / services / controllers / mappers / DTOs exist for
+  ExerciseCategory and Exercise only.
+* Endpoints: GET /health, GET /exercise-categories, GET /exercises,
+  GET /exercises/{id}, GET /exercises/search.
+* Not yet built: entities/services/controllers for Routine, RoutineExercise,
+  WorkoutSession, WorkoutExercise, WorkoutSet; any write (POST/PUT/DELETE)
+  endpoints; automated backend tests (backend/src/test is currently empty).
+
+Android (implemented):
+
+* Single Gradle module; Hilt DI, Jetpack Compose, Navigation Compose, Room,
+  Retrofit + OkHttp + kotlinx.serialization, Material 3 theme, version catalog,
+  Gradle wrapper.
+* Room infrastructure: database, UUID/Instant converters, exported schema
+  (committed). Reference entities + DAOs for ExerciseCategory and Exercise.
+* Network + repository boundary for the exercise library (APIs, DTOs, mappers,
+  repository interfaces + implementations, Hilt bindings).
+* Exercise Library feature end-to-end: ViewModel, immutable UI state, Compose
+  screen (Home), local search and category filtering (Room-only, offline-first).
+* 37 automated tests pass (converters, DAO, repositories, ViewModel, Compose UI)
+  executed on the JVM via Robolectric.
+* Not yet built: WorkManager; any feature beyond the exercise library; on-device
+  / emulator run (no AVD installed — verification so far is test-based).
+
+Approved sequencing decision (July 20, 2026):
+
+* The backend write APIs for Routine / Workout / History are resequenced OUT of
+  the per-feature Android milestones and INTO a dedicated backend milestone just
+  before Synchronization. Rationale: sync is one-way (Android → backend) and
+  deferred, so write endpoints have no caller until sync exists; building them
+  earlier is speculative (YAGNI). Android features are built offline-first
+  against Room first. The frozen contracts in API_SPECIFICATION.md keep the two
+  sides from drifting.
+
+⸻
+
+4. Milestone Overview
 
 Milestone	Status
 Foundation Documents	✅ Completed
-Backend Foundation	✅ Completed
-Backend Exercise Library	✅ Completed
-Android Foundation	🔄 In Progress
-Android Exercise Library	🔄 In Progress (built within M3 phases)
-Routine Management	Pending
-Workout Logging	Pending
-Workout History	Pending
-Synchronization	Pending
-Web Application	Pending
-Testing & Polish	Pending
-Version 1 Release	Pending
+M1 Backend Foundation	✅ Completed
+M2 Backend Exercise Library	✅ Completed
+M3 Android Foundation	✅ Completed
+M4 Android Exercise Library	✅ Completed (built within M3 phases)
+M5 Routine Management (Android)	⬜ Next
+M6 Workout Logging (Android)	⬜ Pending
+M7 Workout History (Android)	⬜ Pending
+M8 Backend Sync APIs	⬜ Pending (resequenced)
+M9 Synchronization	⬜ Pending
+M10 Web Application	⬜ Pending
+M11 Testing & Polish	⬜ Pending
+M12 Version 1 Release	⬜ Pending
+
+Immediate small close-out (not a milestone): a single on-device / emulator run
+to confirm the M3/M4 exit criteria (launch, navigation, exercise list/search/
+category) that could not be executed without an emulator.
 
 ⸻
 
-4. Milestone 1 — Backend Foundation
+5. M1 — Backend Foundation ✅ Completed
 
-Goal
+Goal: establish the backend project structure and infrastructure.
 
-Establish the backend project structure and infrastructure.
+Delivered: Spring Boot project, Maven, PostgreSQL, Flyway, JPA config, global
+exception handling, logging, health endpoint, OpenAPI/Swagger, initial structure.
 
-Deliverables
-
-* Spring Boot project
-* Maven configuration
-* PostgreSQL connection
-* Flyway integration
-* JPA configuration
-* Global exception handling
-* Logging configuration
-* Health endpoint
-* OpenAPI / Swagger
-* Initial project structure
-
-Exit Criteria
-
-* Application starts successfully.
-* Database connection established.
-* Flyway executes successfully.
-* Swagger UI is available.
-* Health endpoint responds successfully.
+Exit criteria (met): app starts, DB connects, Flyway runs, Swagger available,
+health endpoint responds.
 
 ⸻
 
-5. Milestone 2 — Backend Exercise Library
+6. M2 — Backend Exercise Library ✅ Completed
 
-Goal
+Goal: implement the master exercise library.
 
-Implement the master exercise library.
+Delivered: Exercise and ExerciseCategory entities, repositories, services,
+controllers, mappers, DTOs, seed data (8 categories, 40 exercises).
 
-Deliverables
+Exit criteria (met): library loads, search works, categories display. Verified
+end-to-end against a fresh PostgreSQL database.
 
-Backend:
-
-* Exercise entities
-* Category entities
-* Repositories
-* Services
-* Controllers
-* Seed data
-
-Exit Criteria
-
-* Exercise library loads correctly.
-* Search functions correctly.
-* Categories display correctly.
+Known gap: no automated backend tests yet (addressed in M11).
 
 ⸻
 
-6. Milestone 3 — Android Foundation
+7. M3 — Android Foundation ✅ Completed
 
-Goal
+Goal: create the Android application skeleton and first vertical slice.
 
-Create the Android application skeleton.
+Delivered across five reviewed phases:
 
-Deliverables
-
-* Jetpack Compose project
-* Navigation Compose
-* Hilt dependency injection
-* Room database
-* Retrofit client
-* WorkManager
-* Repository layer
-* Base ViewModels
-* Theme
-* Navigation graph
-
-Exit Criteria
-
-* Application launches successfully.
-* Navigation works.
-* Room database initializes.
-* Dependency injection functions correctly.
-
-Implementation Progress (as of July 20, 2026)
-
-Delivered incrementally across five reviewed phases. The Android module lives in
-`android/` (single Gradle module). Architecture is recorded in
-docs/ANDROID_ARCHITECTURE.md.
-
-* Phase 1 — Project skeleton: Application (Hilt), single Activity, Material 3
-  theme, Navigation Compose graph (Home/Workout/History/Settings placeholders),
-  DI modules (Database/Network/Dispatcher), Room infrastructure + converters,
-  Retrofit/OkHttp/kotlinx.serialization, version catalog, Gradle wrapper. ✅
+* Phase 1 — Skeleton: Application (Hilt), single Activity, Material 3 theme,
+  Navigation Compose graph (Home/Workout/History/Settings placeholders), DI
+  modules (Database/Network/Dispatcher), Room infrastructure + converters,
+  Retrofit/OkHttp/kotlinx.serialization, version catalog, Gradle wrapper.
 * Phase 2 — Room reference-data layer: ExerciseCategory/Exercise entities, DAOs,
-  database, exported schema (committed). ✅
+  database, exported schema (committed).
 * Phase 3 — Network + repository boundary: Retrofit APIs, DTOs, hand-written
-  mappers, repository interfaces + implementations, Hilt bindings. ✅
-* Phase 4 — Exercise Library presentation: ExerciseListViewModel, immutable
-  UI state, Compose screen, Home wired to the real screen, offline-first. ✅
-* Phase 5 — Local search + category filtering: Room-only filtering, no backend
-  search endpoint used. ✅
+  mappers, repository interfaces + implementations, Hilt bindings.
+* Phase 4 — Exercise Library presentation: ViewModel, immutable UI state, Compose
+  screen wired to Home, offline-first state precedence.
+* Phase 5 — Local search + category filtering: Room-only, no backend search.
 
-Verification: 37 automated tests pass (converters, DAO, repositories, ViewModel,
-Compose UI), executed on the JVM via Robolectric.
+Exit criteria: launch, navigation, Room init, DI — verified by 37 automated
+tests. Remaining: one on-device confirmation (no emulator installed).
 
-Remaining for Milestone 3:
-
-* WorkManager — not built. Deferred to Milestone 8 (Synchronization), where it
-  belongs; it is not required to display data.
-* On-device / emulator runtime verification of the exit criteria (launch,
-  navigation, Room init, DI at runtime). Deferred: no emulator is installed;
-  every layer is currently verified by executed tests rather than a device run.
-
-Note: the Exercise Library screens (Milestone 4 scope — list, search, category
-browsing) were implemented within these phases, ahead of the original plan.
+Deferred deliverable: WorkManager — intentionally moved to M9 (Synchronization),
+where it is actually used.
 
 ⸻
 
-7. Milestone 4 — Android Exercise Library
+8. M4 — Android Exercise Library ✅ Completed (within M3)
 
-Goal
+Goal: implement the Android exercise library screens using the backend APIs.
 
-Implement the Android exercise library screens using the Backend Exercise Library APIs.
+Delivered: exercise repository (download + local cache), exercise list screen
+(Compose, offline-first), exercise search (local, Room-only), category browsing /
+filtering (local, Room-only).
 
-Deliverables
-
-Android:
-
-* Exercise repository
-* Exercise list screen
-* Exercise search
-* Category browsing
-
-Exit Criteria
-
-* Exercise library loads correctly on Android.
-* Search functions correctly.
-* Categories display correctly.
-
-Implementation Progress (as of July 20, 2026)
-
-Delivered ahead of schedule within the Milestone 3 phases:
-
-* Exercise repository (download + local cache). ✅
-* Exercise list screen (Compose, offline-first). ✅
-* Exercise search (local, Room-only). ✅
-* Category browsing / filtering (local, Room-only). ✅
-
-Remaining: on-device / emulator confirmation of the exit criteria (no emulator
-installed yet). Behaviour is currently verified by automated tests.
+Exit criteria: library loads, search works, categories display — verified by
+tests. Remaining: on-device confirmation.
 
 ⸻
 
-8. Milestone 5 — Routine Management
+9. M5 — Routine Management (Android, offline-first) ⬜ Next
 
-Goal
+Goal: implement workout templates on Android, fully offline against Room.
 
-Implement workout templates.
+Deliverables:
 
-Deliverables
+* Room: Routine and RoutineExercise entities + DAOs, INCLUDING a syncStatus
+  column from creation (these are the first mutable entities; adding syncStatus
+  now avoids a destructive Room migration later).
+* The first mutable repository — establishes and documents the mutable-repository
+  API-shape convention (observe + write + sync-trigger).
+* ViewModels + Compose screens: Home (routine list), Routine details, Create /
+  Edit routine, reorder exercises, duplicate routine, delete (local soft-delete).
 
-Backend:
+Constraints: no backend calls; no synchronization. All data lives in Room.
 
-* Routine APIs
-* RoutineExercise APIs
-
-Android:
-
-* Home screen
-* Routine details
-* Create routine
-* Edit routine
-* Duplicate routine
-* Delete routine
-
-Exit Criteria
-
-* Users can fully manage workout routines.
-* Routine data persists correctly.
-* Offline functionality is verified.
+Exit criteria: users can fully manage routines offline; data persists locally;
+verified by automated tests (DAO, repository, ViewModel, Compose UI) and a device
+pass if an emulator is available.
 
 ⸻
 
-9. Milestone 6 — Workout Logging
+10. M6 — Workout Logging (Android, offline-first) ⬜ Pending
 
-Goal
+Goal: implement active workout tracking on Android, fully offline against Room.
 
-Implement active workout tracking.
+Deliverables:
 
-Deliverables
+* Room: WorkoutSession, WorkoutExercise, WorkoutSet entities + DAOs (with
+  syncStatus).
+* Snapshot-at-workout-start logic (Routine/RoutineExercise → WorkoutExercise).
+  This is the first non-trivial business rule and is a good candidate for a
+  single focused UseCase (not a blanket UseCase layer).
+* Compose: workout screen, workout timer, rest timer, add/edit/delete sets,
+  complete workout, discard workout.
 
-Backend:
+Constraints: offline only; no synchronization.
 
-* WorkoutSession APIs
-* WorkoutExercise APIs
-* WorkoutSet APIs
-
-Android:
-
-* Workout screen
-* Workout timer
-* Rest timer
-* Add/edit/delete sets
-* Complete workout
-* Discard workout
-
-Exit Criteria
-
-* Complete workouts can be recorded.
-* Workout data is stored locally.
-* Historical snapshots are created correctly.
+Exit criteria: complete workouts can be recorded and stored locally; historical
+snapshots are created correctly; verified by tests.
 
 ⸻
 
-10. Milestone 7 — Workout History
+11. M7 — Workout History (Android, offline-first) ⬜ Pending
 
-Goal
+Goal: implement historical workout viewing on Android from local snapshots.
 
-Implement historical workout viewing.
+Deliverables: history screen, workout detail screen, read-only completed workouts.
 
-Deliverables
+Constraints: offline only; reads from Room snapshots.
 
-Backend:
-
-* Workout history endpoints
-* Workout detail endpoints
-
-Android:
-
-* History screen
-* Workout detail screen
-* Read-only completed workouts
-
-Exit Criteria
-
-* Users can browse historical workouts.
-* Workout details display accurately.
-* Snapshot integrity is preserved.
+Exit criteria: users can browse history; details display accurately; snapshot
+integrity preserved; verified by tests.
 
 ⸻
 
-11. Milestone 8 — Synchronization
+12. M8 — Backend Sync APIs ⬜ Pending (resequenced)
 
-Goal
+Goal: implement the backend endpoints required by synchronization and the web
+app, against the finalized contracts in API_SPECIFICATION.md.
 
-Synchronize Android and backend data.
+Deliverables:
 
-Deliverables
+* Entities / repositories / services / controllers / mappers / DTOs for Routine,
+  RoutineExercise, WorkoutSession, WorkoutExercise, WorkoutSet.
+* Write endpoints (POST/PUT/DELETE) for routines and routine exercises; workout
+  session lifecycle (start/complete/discard); workout exercises and sets.
+* Read endpoints for workout history and details (consumed by the web app).
+* Idempotent, UUID-keyed upserts so repeated sync submissions are safe.
 
-* WorkManager integration
-* Sync queue
-* Pending sync processing
-* Retry mechanism
-* Sync status tracking
-* Idempotent backend endpoints
+Notes:
 
-Exit Criteria
+* No new Flyway migrations are required for the tables themselves — V1 already
+  created all eight. Migrations are only needed if columns/constraints change.
+* Backend automated tests should be written alongside these endpoints.
 
-* Offline-created data synchronizes successfully.
-* Retry mechanism functions correctly.
-* No data loss occurs during synchronization.
-
-⸻
-
-12. Milestone 9 — Web Application
-
-Goal
-
-Build the web client for viewing workout history.
-
-Deliverables
-
-* React application
-* Workout history page
-* Workout detail page
-* Responsive layout
-* API integration
-
-Exit Criteria
-
-* Workout history matches backend data.
-* Workout details render correctly.
-* Responsive design works on desktop and tablet.
+Exit criteria: all endpoints behave per the API specification, return correct
+status codes, use DTOs, and are covered by tests.
 
 ⸻
 
-13. Milestone 10 — Testing & Polish
+13. M9 — Synchronization ⬜ Pending
 
-Goal
+Goal: synchronize Android-created data to the backend.
 
-Improve quality and prepare for release.
+Deliverables: WorkManager integration (introduced here), sync queue, pending-sync
+processing in dependency order, exponential-backoff retry, sync status tracking,
+and reliance on the idempotent backend endpoints from M8.
 
-Deliverables
-
-Backend:
-
-* Unit tests
-* Integration tests
-
-Android:
-
-* UI testing
-* Repository testing
-* ViewModel testing
-
-General:
-
-* Performance improvements
-* Bug fixes
-* Documentation updates
-
-Exit Criteria
-
-* Critical bugs resolved.
-* Core workflows verified.
-* Documentation reflects implementation.
+Exit criteria: offline-created data synchronizes successfully; retry works; no
+data loss; verified by tests.
 
 ⸻
 
-14. Version 1 Release Checklist
+14. M10 — Web Application ⬜ Pending
+
+Goal: build the read-only web client for viewing workout history.
+
+Deliverables: React app, workout history page, workout detail page, responsive
+layout, API integration.
+
+Depends on: M8 (endpoints) and M9 (data actually synced to the backend).
+
+Exit criteria: history matches backend data; details render correctly; responsive
+on desktop and tablet.
+
+⸻
+
+15. M11 — Testing & Polish ⬜ Pending
+
+Goal: improve quality and prepare for release.
+
+Deliverables:
+
+* Backend: unit and integration tests (the current backend test gap is closed
+  here at the latest, ideally earlier alongside M8).
+* Android: consolidated UI, repository, and ViewModel testing; at least one full
+  on-device / emulator pass of the core flows.
+* General: performance improvements, bug fixes, documentation updates.
+
+Exit criteria: critical bugs resolved; core workflows verified; documentation
+matches implementation.
+
+⸻
+
+16. M12 — Version 1 Release ⬜ Pending
 
 Before releasing Version 1:
 
@@ -380,45 +319,33 @@ Before releasing Version 1:
 
 ⸻
 
-15. Future Versions
+17. Cross-Cutting Recommendations (approved)
 
-Version 2
-
-* Authentication
-* Multi-user support
-* User profiles
-* Dashboard
-
-⸻
-
-Version 3
-
-* Weight tracking
-* Sleep tracking
-* Water intake
-* Progress photos
+* Add syncStatus to every mutable entity at creation (M5/M6), never retrofit it.
+* Keep API contracts (API_SPECIFICATION.md) frozen as the shared spec so the
+  Android-first sequencing does not cause drift.
+* Introduce UseCases incrementally, only where logic is non-trivial or shared
+  (first expected in M6, the workout snapshot).
+* Decide on an emulator/AVD early in M5, since UI becomes interactive; otherwise
+  plan a single consolidated device pass before Release.
+* Close the backend automated-test gap alongside M8 rather than deferring all of
+  it to M11.
 
 ⸻
 
-Version 4
+18. Future Versions
 
-* Health Connect
-* Apple Health
-* Wearable integration
-* Cloud backup enhancements
+Version 2: Authentication, multi-user support, user profiles, dashboard.
 
-⸻
+Version 3: Weight tracking, sleep tracking, water intake, progress photos.
 
-Version 5
+Version 4: Health Connect, Apple Health, wearable integration, cloud backup.
 
-* Nutrition tracking
-* Analytics dashboard
-* AI insights
-* Smart workout recommendations
+Version 5: Nutrition tracking, analytics dashboard, AI insights, recommendations.
 
 ⸻
 
-16. Success Criteria
+19. Success Criteria
 
 Version 1 is considered complete when:
 
