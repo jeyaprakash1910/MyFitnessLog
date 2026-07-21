@@ -3,6 +3,7 @@ package com.myfitnesslog.feature.routine.data.local
 import androidx.room.Dao
 import androidx.room.Query
 import androidx.room.Upsert
+import com.myfitnesslog.core.data.local.SyncStatus
 import kotlinx.coroutines.flow.Flow
 import java.util.UUID
 
@@ -57,4 +58,24 @@ interface RoutineExerciseDao {
 
     @Upsert
     suspend fun upsertAll(routineExercises: List<RoutineExerciseEntity>)
+    /**
+     * Routine exercises awaiting upload, oldest first. Same PENDING/FAILED rule
+     * and soft-delete exclusion as [RoutineDao.getPendingSync].
+     *
+     * The parent routine is not joined here: the engine uploads routines in an
+     * earlier phase and already knows which of them failed, so it can skip the
+     * children of a failed parent without a second query.
+     */
+    @Query(
+        "SELECT * FROM routine_exercise WHERE isDeleted = 0 " +
+            "AND syncStatus IN ('PENDING', 'FAILED') ORDER BY createdAt ASC, id ASC",
+    )
+    suspend fun getPendingSync(): List<RoutineExerciseEntity>
+
+    /** Writes only syncStatus — never updatedAt. See [RoutineDao.updateSyncStatus]. */
+    @Query("UPDATE routine_exercise SET syncStatus = :status WHERE id = :id")
+    suspend fun updateSyncStatus(id: UUID, status: SyncStatus)
+    /** Releases stranded SYNCING rows back to PENDING. See [RoutineDao.recoverStaleSyncing]. */
+    @Query("UPDATE routine_exercise SET syncStatus = 'PENDING' WHERE syncStatus = 'SYNCING'")
+    suspend fun recoverStaleSyncing(): Int
 }

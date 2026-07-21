@@ -109,14 +109,28 @@ The user should never wait for a network request before seeing their changes.
 
 5. Synchronization Triggers
 
-Synchronization should begin when one of the following conditions is met:
+Synchronization begins when one of the following conditions is met:
 
-* Internet connectivity becomes available.
-* A new record is created.
-* A local record is modified.
-* A retry interval expires.
-* The application starts.
-* The user manually requests synchronization (future enhancement).
+* The application starts (SyncManager.onAppStart: registers the recurring
+  schedule and requests an immediate pass).
+* A new record is created, or a local record is modified — every repository
+  write calls SyncTrigger.requestSync().
+* A retry interval expires (WorkManager's exponential backoff).
+* The recurring periodic sync fires (15 minutes, WorkManager's minimum).
+* Internet connectivity becomes available — handled by WorkManager's
+  NetworkType.CONNECTED constraint, not by a custom network callback.
+* The user manually requests synchronization — SyncManager.syncNow() exists for
+  this; no UI is wired to it yet.
+
+All of these collapse into a single unique work item (ExistingWorkPolicy.KEEP),
+so triggering redundantly is cheap and safe. Callers should err towards
+triggering after every write rather than trying to predict when a sync is
+worthwhile.
+
+Requesting a sync is fire-and-forget: it returns immediately, never blocks the
+caller, and never reports success. No repository method waits for
+synchronization — that would reintroduce the network dependency this
+architecture exists to remove.
 
 ⸻
 
@@ -168,6 +182,56 @@ This ensures that foreign key relationships remain valid.
 
 ⸻
 
+Canonical Upload Sequence
+
+The dependency order above is refined by one further rule: a workout session is
+uploaded in two stages, and its terminal transition is sent last.
+
+```
+        Routine  (POST /routines)
+           │
+           ▼
+   RoutineExercise  (POST /routines/{id}/exercises)
+
+
+   WorkoutSession — start  (POST /workout-sessions)
+           │
+           ▼
+   WorkoutExercise  (POST /workout-sessions/{id}/exercises)
+           │
+           ▼
+      WorkoutSet  (POST /workout-exercises/{id}/sets)
+           │
+           ▼
+   WorkoutSession — complete / discard
+        (PUT /workout-sessions/{id}/complete | /discard)
+```
+
+The terminal transition must come last because the backend permits adding or
+modifying a session's exercises and sets only while that session is IN_PROGRESS.
+Uploading the transition early would make the remaining children unwritable.
+
+Sending the session start immediately (rather than deferring the whole workout
+until it ends) preserves the session UUID on the backend from the first moment,
+allows recovery if the app is killed mid-workout, and avoids one large upload
+after a long session.
+
+⸻
+
+Reference Data Assumption
+
+Version 1 assumes `Exercise` and `ExerciseCategory` already exist on the backend
+before any user data is uploaded. They are seeded server-side and downloaded to
+Android; the device never creates them.
+
+This matters because `RoutineExercise` and `WorkoutExercise` reference an
+exercise by foreign key — uploading one that the backend does not know would fail
+permanently rather than transiently, and no amount of retrying would fix it. The
+assumption holds while seeding is server-side and one-way, and must be revisited
+if bidirectional synchronization or user-defined exercises are introduced.
+
+⸻
+
 9. WorkManager
 
 Background synchronization is implemented using WorkManager.
@@ -179,7 +243,22 @@ Responsibilities include:
 * Respecting network availability.
 * Continuing synchronization after application restarts.
 
-Synchronization work should require network connectivity.
+Synchronization work requires network connectivity (NetworkType.CONNECTED). It
+deliberately does NOT require charging, an unmetered network, or a healthy
+battery: workout history is small, and delaying a user's data for days to save
+marginal battery is the wrong trade for this application.
+
+SyncWorker is intentionally minimal — recover stranded claims, run one engine
+pass, map the result to success/retry. All synchronization logic lives in
+SyncEngine, which has no WorkManager dependency and is unit-tested without it.
+
+Stranded-claim recovery
+
+The engine marks a row SYNCING before uploading it, and the pending queries
+exclude SYNCING so two passes cannot upload the same row twice. If the process
+dies mid-pass, nothing clears that claim and the row becomes permanently
+invisible to synchronization. Every pass therefore begins by returning all
+SYNCING rows to PENDING. The recovery writes only syncStatus and is idempotent.
 
 ⸻
 

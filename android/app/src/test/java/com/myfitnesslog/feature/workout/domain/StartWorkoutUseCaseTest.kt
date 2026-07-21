@@ -3,11 +3,13 @@ package com.myfitnesslog.feature.workout.domain
 import android.database.sqlite.SQLiteConstraintException
 import com.myfitnesslog.core.data.local.MyFitnessLogDatabase
 import com.myfitnesslog.core.data.local.WorkoutStatus
+import com.myfitnesslog.core.sync.testing.RecordingSyncTrigger
 import com.myfitnesslog.feature.routine.RoutineTestData
 import com.myfitnesslog.feature.routine.data.RoutineRepositoryImpl
 import com.myfitnesslog.feature.routine.newInMemoryDatabase
 import com.myfitnesslog.feature.routine.newRepository
 import com.myfitnesslog.feature.routine.seedExercises
+import java.util.UUID
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import org.junit.After
@@ -20,7 +22,6 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import java.util.UUID
 
 @RunWith(RobolectricTestRunner::class)
 class StartWorkoutUseCaseTest {
@@ -35,6 +36,7 @@ class StartWorkoutUseCaseTest {
         database.seedExercises()
         routineRepository = database.newRepository()
         startWorkout = StartWorkoutUseCase(
+            syncTrigger = RecordingSyncTrigger(),
             database = database,
             workoutSessionDao = database.workoutSessionDao(),
             workoutExerciseDao = database.workoutExerciseDao(),

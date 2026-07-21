@@ -1,6 +1,9 @@
 package com.myfitnesslog.feature.routine.data
 
 import com.myfitnesslog.core.data.local.SyncStatus
+import com.myfitnesslog.core.sync.SyncTrigger
+import com.myfitnesslog.core.sync.source.RoutineExerciseSyncSource
+import com.myfitnesslog.core.sync.source.RoutineSyncSource
 import com.myfitnesslog.core.util.IoDispatcher
 import com.myfitnesslog.feature.routine.data.local.RoutineDao
 import com.myfitnesslog.feature.routine.data.local.RoutineEntity
@@ -14,6 +17,7 @@ import java.time.Clock
 import java.time.Instant
 import java.util.UUID
 import javax.inject.Inject
+import javax.inject.Singleton
 
 /**
  * Default [RoutineRepository]. All writes run on the injected IO dispatcher,
@@ -21,12 +25,14 @@ import javax.inject.Inject
  * the future sync layer can upload them. New identifiers are UUIDv4 generated
  * on-device (DATABASE.md).
  */
+@Singleton
 class RoutineRepositoryImpl @Inject constructor(
     private val routineDao: RoutineDao,
     private val routineExerciseDao: RoutineExerciseDao,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     private val clock: Clock,
-) : RoutineRepository {
+    private val syncTrigger: SyncTrigger,
+) : RoutineRepository, RoutineSyncSource, RoutineExerciseSyncSource {
 
     override fun observeRoutines(): Flow<List<RoutineEntity>> = routineDao.observeAll()
 
@@ -51,6 +57,7 @@ class RoutineRepositoryImpl @Inject constructor(
                 syncStatus = SyncStatus.PENDING,
             ),
         )
+        syncTrigger.requestSync()
         id
     }
 
@@ -63,6 +70,7 @@ class RoutineRepositoryImpl @Inject constructor(
                 syncStatus = SyncStatus.PENDING,
             ),
         )
+        syncTrigger.requestSync()
     }
 
     override suspend fun deleteRoutine(id: UUID) = withContext(ioDispatcher) {
@@ -74,6 +82,7 @@ class RoutineRepositoryImpl @Inject constructor(
                 syncStatus = SyncStatus.PENDING,
             ),
         )
+        syncTrigger.requestSync()
     }
 
     override suspend fun duplicateRoutine(id: UUID): UUID = withContext(ioDispatcher) {
@@ -100,6 +109,7 @@ class RoutineRepositoryImpl @Inject constructor(
             )
         }
         if (copies.isNotEmpty()) routineExerciseDao.upsertAll(copies)
+        syncTrigger.requestSync()
         newRoutineId
     }
 
@@ -132,6 +142,7 @@ class RoutineRepositoryImpl @Inject constructor(
                 syncStatus = SyncStatus.PENDING,
             ),
         )
+        syncTrigger.requestSync()
         id
     }
 
@@ -155,6 +166,7 @@ class RoutineRepositoryImpl @Inject constructor(
                 syncStatus = SyncStatus.PENDING,
             ),
         )
+        syncTrigger.requestSync()
     }
 
     override suspend fun removeExercise(routineExerciseId: UUID) = withContext(ioDispatcher) {
@@ -166,6 +178,7 @@ class RoutineRepositoryImpl @Inject constructor(
                 syncStatus = SyncStatus.PENDING,
             ),
         )
+        syncTrigger.requestSync()
     }
 
     override suspend fun reorderExercises(routineId: UUID, orderedIds: List<UUID>) =
@@ -180,5 +193,35 @@ class RoutineRepositoryImpl @Inject constructor(
                 )
             }
             if (reordered.isNotEmpty()) routineExerciseDao.upsertAll(reordered)
+            syncTrigger.requestSync()
         }
+
+    // ---- Synchronization surface (core/sync) -------------------------------
+    //
+    // The engine reaches persistence only through these methods, so the sync
+    // path reuses this repository rather than opening a second, parallel route
+    // to the DAOs. They are intentionally absent from the RoutineRepository
+    // interface: no screen has any use for them.
+
+    override suspend fun getPendingRoutines(): List<RoutineEntity> =
+        withContext(ioDispatcher) { routineDao.getPendingSync() }
+
+    override suspend fun setRoutineSyncStatus(id: UUID, status: SyncStatus) =
+        withContext(ioDispatcher) { routineDao.updateSyncStatus(id, status) }
+
+    override suspend fun getPendingRoutineExercises(): List<RoutineExerciseEntity> =
+        withContext(ioDispatcher) { routineExerciseDao.getPendingSync() }
+
+    override suspend fun setRoutineExerciseSyncStatus(id: UUID, status: SyncStatus) =
+        withContext(ioDispatcher) { routineExerciseDao.updateSyncStatus(id, status) }
+
+    /**
+     * Recovers both routine tables. The single override satisfies both
+     * RoutineSyncSource and RoutineExerciseSyncSource — this class implements
+     * both, and a stranded claim in either table needs releasing regardless of
+     * which interface the caller holds.
+     */
+    override suspend fun recoverStaleSyncing(): Int = withContext(ioDispatcher) {
+        routineDao.recoverStaleSyncing() + routineExerciseDao.recoverStaleSyncing()
+    }
 }

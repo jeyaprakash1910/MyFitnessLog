@@ -3,6 +3,7 @@ package com.myfitnesslog.feature.workout.ui
 import androidx.lifecycle.SavedStateHandle
 import com.myfitnesslog.core.data.local.MyFitnessLogDatabase
 import com.myfitnesslog.core.data.local.SetCategory
+import com.myfitnesslog.core.sync.testing.RecordingSyncTrigger
 import com.myfitnesslog.feature.routine.RoutineTestData
 import com.myfitnesslog.feature.routine.awaitFirst
 import com.myfitnesslog.feature.routine.data.RoutineRepositoryImpl
@@ -11,6 +12,13 @@ import com.myfitnesslog.feature.routine.newRepository
 import com.myfitnesslog.feature.routine.seedExercises
 import com.myfitnesslog.feature.workout.data.WorkoutRepositoryImpl
 import com.myfitnesslog.feature.workout.domain.StartWorkoutUseCase
+import java.math.BigDecimal
+import java.time.Clock
+import java.time.Duration
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -25,13 +33,6 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import java.math.BigDecimal
-import java.time.Clock
-import java.time.Duration
-import java.time.Instant
-import java.time.ZoneId
-import java.time.ZoneOffset
-import java.util.UUID
 
 @RunWith(RobolectricTestRunner::class)
 class WorkoutViewModelTest {
@@ -49,6 +50,7 @@ class WorkoutViewModelTest {
         database.seedExercises()
         val routineRepository: RoutineRepositoryImpl = database.newRepository()
         workoutRepository = WorkoutRepositoryImpl(
+            syncTrigger = RecordingSyncTrigger(),
             sessionDao = database.workoutSessionDao(),
             exerciseDao = database.workoutExerciseDao(),
             setDao = database.workoutSetDao(),
@@ -56,6 +58,7 @@ class WorkoutViewModelTest {
             clock = RoutineTestData.clock,
         )
         startWorkout = StartWorkoutUseCase(
+            syncTrigger = RecordingSyncTrigger(),
             database = database,
             workoutSessionDao = database.workoutSessionDao(),
             workoutExerciseDao = database.workoutExerciseDao(),

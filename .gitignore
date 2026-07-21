@@ -44,3 +44,6 @@ out/
 
 # OS
 Thumbs.db
+
+# Developer-only implementation journals (not part of project documentation)
+docs/internal/

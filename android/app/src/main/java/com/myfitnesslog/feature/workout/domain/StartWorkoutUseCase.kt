@@ -4,6 +4,7 @@ import androidx.room.withTransaction
 import com.myfitnesslog.core.data.local.MyFitnessLogDatabase
 import com.myfitnesslog.core.data.local.SyncStatus
 import com.myfitnesslog.core.data.local.WorkoutStatus
+import com.myfitnesslog.core.sync.SyncTrigger
 import com.myfitnesslog.core.util.IoDispatcher
 import com.myfitnesslog.feature.routine.data.RoutineRepository
 import com.myfitnesslog.feature.workout.data.local.WorkoutExerciseDao
@@ -39,6 +40,7 @@ class StartWorkoutUseCase @Inject constructor(
     private val routineRepository: RoutineRepository,
     private val clock: Clock,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
+    private val syncTrigger: SyncTrigger,
 ) {
 
     /**
@@ -86,6 +88,12 @@ class StartWorkoutUseCase @Inject constructor(
             workoutSessionDao.upsert(session)
             if (snapshots.isNotEmpty()) workoutExerciseDao.upsertAll(snapshots)
         }
+
+        // Upload the session start promptly: it preserves the workout's UUID on
+        // the backend from the first moment, so a session interrupted by process
+        // death can still be reconciled. Resuming an existing session takes the
+        // early return above and requests nothing — nothing changed.
+        syncTrigger.requestSync()
 
         sessionId
     }

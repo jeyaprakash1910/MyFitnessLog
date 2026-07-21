@@ -3,6 +3,7 @@ package com.myfitnesslog.feature.history.ui.detail
 import androidx.lifecycle.SavedStateHandle
 import com.myfitnesslog.core.data.local.MyFitnessLogDatabase
 import com.myfitnesslog.core.data.local.SetCategory
+import com.myfitnesslog.core.sync.testing.RecordingSyncTrigger
 import com.myfitnesslog.feature.history.data.WorkoutHistoryRepositoryImpl
 import com.myfitnesslog.feature.history.ui.WorkoutHistoryRoutes
 import com.myfitnesslog.feature.routine.RoutineTestData
@@ -13,6 +14,8 @@ import com.myfitnesslog.feature.routine.newRepository
 import com.myfitnesslog.feature.routine.seedExercises
 import com.myfitnesslog.feature.workout.data.WorkoutRepositoryImpl
 import com.myfitnesslog.feature.workout.domain.StartWorkoutUseCase
+import java.math.BigDecimal
+import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -24,8 +27,6 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import java.math.BigDecimal
-import java.util.UUID
 
 @RunWith(RobolectricTestRunner::class)
 class WorkoutDetailViewModelTest {
@@ -43,6 +44,7 @@ class WorkoutDetailViewModelTest {
         runBlocking { database.seedExercises() }
         routineRepository = database.newRepository()
         startWorkout = StartWorkoutUseCase(
+            syncTrigger = RecordingSyncTrigger(),
             database = database,
             workoutSessionDao = database.workoutSessionDao(),
             workoutExerciseDao = database.workoutExerciseDao(),
@@ -51,6 +53,7 @@ class WorkoutDetailViewModelTest {
             ioDispatcher = UnconfinedTestDispatcher(),
         )
         workoutRepository = WorkoutRepositoryImpl(
+            syncTrigger = RecordingSyncTrigger(),
             sessionDao = database.workoutSessionDao(),
             exerciseDao = database.workoutExerciseDao(),
             setDao = database.workoutSetDao(),

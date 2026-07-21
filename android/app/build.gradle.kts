@@ -98,6 +98,11 @@ dependencies {
     ksp(libs.hilt.compiler)
     implementation(libs.hilt.navigation.compose)
 
+    // WorkManager (background sync scheduling) + its Hilt worker injection
+    implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.androidx.hilt.work)
+    ksp(libs.androidx.hilt.compiler)
+
     // Room (infrastructure only in Phase 1; entities/DAOs arrive in Phase 2)
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
@@ -119,6 +124,12 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.room.testing)
+    // MockWebServer verifies the sync transport layer's method/path/body contract.
+    testImplementation(libs.okhttp.mockwebserver)
+    // WorkManagerTestInitHelper drives the scheduler on the JVM under Robolectric.
+    testImplementation(libs.androidx.work.testing)
+    testImplementation(libs.retrofit)
+    testImplementation(libs.retrofit.kotlinx.serialization)
     testImplementation(platform(libs.androidx.compose.bom))
     testImplementation(libs.androidx.compose.ui.test.junit4)
     testImplementation(libs.androidx.compose.ui.test.manifest)

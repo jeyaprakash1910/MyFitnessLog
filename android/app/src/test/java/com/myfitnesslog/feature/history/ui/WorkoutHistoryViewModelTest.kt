@@ -1,6 +1,7 @@
 package com.myfitnesslog.feature.history.ui
 
 import com.myfitnesslog.core.data.local.MyFitnessLogDatabase
+import com.myfitnesslog.core.sync.testing.RecordingSyncTrigger
 import com.myfitnesslog.feature.history.data.WorkoutHistoryRepositoryImpl
 import com.myfitnesslog.feature.routine.RoutineTestData
 import com.myfitnesslog.feature.routine.awaitFirst
@@ -10,6 +11,7 @@ import com.myfitnesslog.feature.routine.newRepository
 import com.myfitnesslog.feature.routine.seedExercises
 import com.myfitnesslog.feature.workout.data.WorkoutRepositoryImpl
 import com.myfitnesslog.feature.workout.domain.StartWorkoutUseCase
+import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -22,7 +24,6 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import java.util.UUID
 
 @RunWith(RobolectricTestRunner::class)
 class WorkoutHistoryViewModelTest {
@@ -40,6 +41,7 @@ class WorkoutHistoryViewModelTest {
         runBlocking { database.seedExercises() }
         routineRepository = database.newRepository()
         startWorkout = StartWorkoutUseCase(
+            syncTrigger = RecordingSyncTrigger(),
             database = database,
             workoutSessionDao = database.workoutSessionDao(),
             workoutExerciseDao = database.workoutExerciseDao(),
@@ -48,6 +50,7 @@ class WorkoutHistoryViewModelTest {
             ioDispatcher = UnconfinedTestDispatcher(),
         )
         workoutRepository = WorkoutRepositoryImpl(
+            syncTrigger = RecordingSyncTrigger(),
             sessionDao = database.workoutSessionDao(),
             exerciseDao = database.workoutExerciseDao(),
             setDao = database.workoutSetDao(),

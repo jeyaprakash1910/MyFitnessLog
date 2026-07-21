@@ -3,7 +3,12 @@ package com.myfitnesslog.feature.workout.data
 import com.myfitnesslog.core.data.local.SetCategory
 import com.myfitnesslog.core.data.local.SyncStatus
 import com.myfitnesslog.core.data.local.WorkoutStatus
+import com.myfitnesslog.core.sync.SyncTrigger
+import com.myfitnesslog.core.sync.source.WorkoutExerciseSyncSource
+import com.myfitnesslog.core.sync.source.WorkoutSessionSyncSource
+import com.myfitnesslog.core.sync.source.WorkoutSetSyncSource
 import com.myfitnesslog.core.util.IoDispatcher
+import com.myfitnesslog.feature.workout.data.local.PendingWorkoutSet
 import com.myfitnesslog.feature.workout.data.local.WorkoutExerciseDao
 import com.myfitnesslog.feature.workout.data.local.WorkoutExerciseEntity
 import com.myfitnesslog.feature.workout.data.local.WorkoutSessionDao
@@ -17,19 +22,25 @@ import java.math.BigDecimal
 import java.time.Clock
 import java.util.UUID
 import javax.inject.Inject
+import javax.inject.Singleton
 
 /**
  * Default [WorkoutRepository]. Owns timestamp management, syncStatus updates,
  * value validation, and — critically — the completed-workout immutability rule:
  * every mutation first checks that the owning session is still IN_PROGRESS.
  */
+@Singleton
 class WorkoutRepositoryImpl @Inject constructor(
     private val sessionDao: WorkoutSessionDao,
     private val exerciseDao: WorkoutExerciseDao,
     private val setDao: WorkoutSetDao,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     private val clock: Clock,
-) : WorkoutRepository {
+    private val syncTrigger: SyncTrigger,
+) : WorkoutRepository,
+    WorkoutSessionSyncSource,
+    WorkoutExerciseSyncSource,
+    WorkoutSetSyncSource {
 
     override fun observeActiveSession(): Flow<WorkoutSessionEntity?> = sessionDao.observeActive()
 
@@ -71,6 +82,7 @@ class WorkoutRepositoryImpl @Inject constructor(
                 syncStatus = SyncStatus.PENDING,
             ),
         )
+        syncTrigger.requestSync()
         id
     }
 
@@ -105,6 +117,7 @@ class WorkoutRepositoryImpl @Inject constructor(
                 syncStatus = SyncStatus.PENDING,
             ),
         )
+        syncTrigger.requestSync()
         id
     }
 
@@ -132,12 +145,16 @@ class WorkoutRepositoryImpl @Inject constructor(
                 syncStatus = SyncStatus.PENDING,
             ),
         )
+        syncTrigger.requestSync()
     }
 
     override suspend fun deleteSet(setId: UUID) = withContext(ioDispatcher) {
         val existing = setDao.getById(setId) ?: return@withContext
         requireInProgressForSet(existing.workoutExerciseId)
         setDao.deleteById(setId)
+        // Deliberately no sync trigger: deletion propagation is not implemented
+        // (Milestone 9 deferred item), so there is nothing for a pass to upload.
+        // The row is simply gone locally.
     }
 
     override suspend fun completeWorkout(sessionId: UUID) =
@@ -158,6 +175,9 @@ class WorkoutRepositoryImpl @Inject constructor(
                     syncStatus = SyncStatus.PENDING,
                 ),
             )
+            // The terminal transition is the highest-value thing to upload: it
+            // is what seals the workout on the backend.
+            syncTrigger.requestSync()
         }
 
     private suspend fun requireInProgressForSet(workoutExerciseId: UUID) {
@@ -186,5 +206,36 @@ class WorkoutRepositoryImpl @Inject constructor(
         const val DEFAULT_TARGET_SETS = 3
         const val DEFAULT_MIN_REPS = 8
         const val DEFAULT_MAX_REPS = 12
+    }
+    // ---- Synchronization surface (core/sync) -------------------------------
+    //
+    // See the equivalent block in RoutineRepositoryImpl. These methods write
+    // only syncStatus and never touch updatedAt: recording a sync is not a user
+    // edit, and stamping the clock here would re-dirty the row forever.
+
+    override suspend fun getPendingWorkoutSessions(): List<WorkoutSessionEntity> =
+        withContext(ioDispatcher) { sessionDao.getPendingSync() }
+
+    override suspend fun setWorkoutSessionSyncStatus(id: UUID, status: SyncStatus) =
+        withContext(ioDispatcher) { sessionDao.updateSyncStatus(id, status) }
+
+    override suspend fun getPendingWorkoutExercises(): List<WorkoutExerciseEntity> =
+        withContext(ioDispatcher) { exerciseDao.getPendingSync() }
+
+    override suspend fun setWorkoutExerciseSyncStatus(id: UUID, status: SyncStatus) =
+        withContext(ioDispatcher) { exerciseDao.updateSyncStatus(id, status) }
+
+    override suspend fun getPendingWorkoutSets(): List<PendingWorkoutSet> =
+        withContext(ioDispatcher) { setDao.getPendingSync() }
+
+    override suspend fun setWorkoutSetSyncStatus(id: UUID, status: SyncStatus) =
+        withContext(ioDispatcher) { setDao.updateSyncStatus(id, status) }
+
+    /** Recovers all three workout tables. See RoutineRepositoryImpl for why one
+     * override covers every workout SyncSource this class implements. */
+    override suspend fun recoverStaleSyncing(): Int = withContext(ioDispatcher) {
+        sessionDao.recoverStaleSyncing() +
+            exerciseDao.recoverStaleSyncing() +
+            setDao.recoverStaleSyncing()
     }
 }

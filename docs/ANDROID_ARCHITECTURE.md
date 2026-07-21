@@ -63,7 +63,12 @@ com.myfitnesslog
         util
     feature/
         exercise, routine, workout, history, settings
-    sync/                 (Milestone 9 — Synchronization)
+    sync/                 (Milestone 9 — Synchronization) — lives under core/:
+        model             (SyncResult, SyncSummary, SyncFailure)
+        source            (SyncSource interfaces, implemented by repositories)
+        engine            (SyncEngine, SyncRecovery — no Android dependencies)
+        work              (SyncWorker, SyncScheduler — the only WorkManager code)
+        di
 
 Feature packages lift cleanly into Gradle modules later if needed.
 
@@ -123,13 +128,19 @@ RoutineRepository, the first mutable repository, in Milestone 5):
 
 - observe*  : Room-backed Flow reads the UI collects (the source of truth).
 - write ops : suspend functions (create/rename/delete/duplicate/add/remove/
-              update/reorder, as the feature needs) that persist locally and
-              mark affected rows PENDING for later sync. They never call the
-              network.
+              update/reorder, as the feature needs) that persist locally, mark
+              affected rows PENDING, and then call SyncTrigger.requestSync().
+              They never call the network themselves and never wait for a sync —
+              requestSync only enqueues background work.
 - new records use on-device UUIDv4; createdAt/updatedAt come from an injected
   Clock (so time is deterministic in tests); soft-delete via an isDeleted flag.
-- write operations that change data set syncStatus = PENDING so the future sync
-  layer (Milestone 9) can find and upload them.
+- write operations that change data set syncStatus = PENDING so the sync layer
+  can find and upload them (Milestone 9). Mutable repositories additionally
+  implement the SyncSource interfaces from core/sync/source, so the sync engine
+  reuses the repository rather than opening a second path to the DAOs. Those
+  sync methods are deliberately absent from the UI-facing repository interface.
+- recording a sync writes ONLY the syncStatus column, never updatedAt: a sync is
+  not a user edit, and stamping the clock would re-dirty the row and loop.
 
 Reads are always Room-backed Flows; write/sync are suspend functions. Errors
 propagate by throwing until a presentation-layer consumer needs a structured
@@ -172,7 +183,9 @@ content never touches the ViewModel, DI, or lifecycle.
 - Flow for all UI read paths (DAO → Repository → StateFlow<UiState>).
 - suspend functions for one-shot writes/fetches; write work runs on an injected
   @IoDispatcher.
-- Background sync will be owned by WorkManager (Milestone 9), never viewModelScope.
+- Background sync is owned by WorkManager (Milestone 9), never viewModelScope.
+  SyncEngine itself is platform-independent — it knows nothing about WorkManager
+  and is tested with fake sources and MockWebServer alone.
 - Current error strategy: repositories throw (e.g. IllegalStateException when a
   completed workout is mutated; SQLiteConstraintException on a bad FK). A
   structured Result/sealed error type is intentionally NOT built yet — it is
@@ -234,7 +247,10 @@ model is genuinely needed.
 - Separate domain module / DTO→Entity→Domain triple mapping.
 - A global UseCase / Interactor layer (only focused use cases — see section 14).
 - A LocalDataSource wrapper around DAOs.
-- Any sync engine, WorkManager jobs, or network calls before their milestone.
+- Any sync engine, WorkManager jobs, or network calls before their milestone
+  (delivered in Milestone 9).
+- Bidirectional sync, multi-device conflict resolution, deletion propagation for
+  hard-deleted rows, and user-visible sync indicators (SYNC.md §19).
 - Foreground services, notifications, or alarms for timers (timers are in-VM only).
 
 ⸻

@@ -3,6 +3,7 @@ package com.myfitnesslog.feature.workout.data.local
 import androidx.room.Dao
 import androidx.room.Query
 import androidx.room.Upsert
+import com.myfitnesslog.core.data.local.SyncStatus
 import kotlinx.coroutines.flow.Flow
 import java.util.UUID
 
@@ -34,4 +35,23 @@ interface WorkoutSessionDao {
 
     @Query("DELETE FROM workout_session WHERE id = :id")
     suspend fun deleteById(id: UUID)
+    /**
+     * Workout sessions awaiting upload, oldest first.
+     *
+     * There is no soft-delete filter because history rows are never soft-deleted.
+     * Ordered by startedAt — the chronological order in which the workouts
+     * actually happened, and the column the table is indexed on.
+     */
+    @Query(
+        "SELECT * FROM workout_session WHERE syncStatus IN ('PENDING', 'FAILED') " +
+            "ORDER BY startedAt ASC, id ASC",
+    )
+    suspend fun getPendingSync(): List<WorkoutSessionEntity>
+
+    /** Writes only syncStatus — never updatedAt. See [RoutineDao.updateSyncStatus]. */
+    @Query("UPDATE workout_session SET syncStatus = :status WHERE id = :id")
+    suspend fun updateSyncStatus(id: UUID, status: SyncStatus)
+    /** Releases stranded SYNCING rows back to PENDING. See [RoutineDao.recoverStaleSyncing]. */
+    @Query("UPDATE workout_session SET syncStatus = 'PENDING' WHERE syncStatus = 'SYNCING'")
+    suspend fun recoverStaleSyncing(): Int
 }

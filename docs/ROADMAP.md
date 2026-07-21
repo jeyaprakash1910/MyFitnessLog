@@ -74,7 +74,7 @@ Backend status (M1–M2 and M8 Backend Sync APIs complete):
   machine — see M11 / cross-cutting notes.)
 * The default user is attached server-side; the Android client sends no userId.
 
-Android status (M3–M7 complete; next milestone is M9 Synchronization):
+Android status (M3–M7 and M9 complete; next milestone is M10 Web Application):
 
 * Foundation: single Gradle module; Hilt DI, Jetpack Compose, Navigation Compose,
   Room, Retrofit + OkHttp + kotlinx.serialization, Material 3, version catalog,
@@ -145,20 +145,30 @@ M5 Routine Management (Android)	✅ Completed
 M6 Workout Logging (Android)	✅ Completed (all 5 phases)
 M7 Workout History (Android)	✅ Completed (all 4 phases)
 M8 Backend Sync APIs	✅ Completed (all 6 phases)
-M9 Synchronization	⬜ Next
-M10 Web Application	⬜ Pending
+M9 Synchronization	✅ Completed (all 4 phases)
+M10 Web Application	⬜ Next
 M11 Testing & Polish	⬜ Pending
 M12 Version 1 Release	⬜ Pending
 
-Current milestone: M9 (Synchronization).
-Test count: 172 automated Android tests (JVM/Robolectric) + 86 backend tests
-(JUnit 5/MockMvc over real PostgreSQL) = 258 passing.
-Database version: Android Room v3; backend Flyway v4 (adds the default-user seed).
-Backend: full write/read APIs per API_SPECIFICATION.md.  Sync: not started (M9).
+Current milestone: M10 (Web Application).
+Test count: 301 automated Android tests (JVM/Robolectric) + 86 backend tests
+(JUnit 5/MockMvc over real PostgreSQL) = 387 passing. Two Android tests
+(LiveBackendSyncTest) run the real sync stack against a running backend and skip
+automatically when none is reachable.
+Database version: Android Room v3 (unchanged by M9 — sync needed no schema
+change); backend Flyway v4 (adds the default-user seed).
+Backend: full write/read APIs per API_SPECIFICATION.md.
+Sync: one-way Android → backend, complete (transport, engine, scheduling,
+triggers). Deferred within M9: deletion propagation for hard-deleted workout
+sets (design compared, decision pending), and bidirectional sync.
 
 Deferred close-out (not a milestone): a single on-device / emulator run to
 confirm the Android exit criteria (launch, navigation, routine + workout flows)
-that cannot be executed without an AVD.
+and to observe a real background sync pass. No AVD is installed, so the
+WorkManager/device half of M9 is verified by JVM tests and build artifacts only.
+The HTTP half HAS been validated for real: on 2026-07-21 the full sync stack
+uploaded a routine, workout, exercise and set to a running Spring Boot backend
+and the rows were confirmed in PostgreSQL with exact decimal precision.
 
 ⸻
 
@@ -349,16 +359,38 @@ tests (JUnit 5/MockMvc over real PostgreSQL), including a full-graph replay proo
 
 ⸻
 
-13. M9 — Synchronization ⬜ Pending
+13. M9 — Synchronization ✅ Completed (all 4 phases)
 
 Goal: synchronize Android-created data to the backend.
 
-Deliverables: WorkManager integration (introduced here), sync queue, pending-sync
-processing in dependency order, exponential-backoff retry, sync status tracking,
-and reliance on the idempotent backend endpoints from M8.
+Delivered, by phase:
 
-Exit criteria: offline-created data synchronizes successfully; retry works; no
-data loss; verified by tests.
+* Phase 1 — Transport: Instant/BigDecimal serializers, upload DTOs, entity→DTO
+  mappers, RoutineApi / WorkoutSessionApi / WorkoutLogApi, Hilt wiring.
+* Phase 2 — Engine: SyncEngine + SyncSource interfaces implemented by the
+  existing repositories, pending-work queries, status-only transitions, the
+  six-phase dependency-ordered upload, aggregate-isolated failure handling.
+* Phase 3 — Scheduling: @HiltWorker SyncWorker, SyncScheduler, network
+  constraint, exponential backoff, and stranded-claim recovery
+  (SYNCING → PENDING) before every pass.
+* Phase 4 — Triggers: SyncManager/SyncTrigger, app-startup scheduling, a sync
+  request after every local write, and an end-to-end walkthrough.
+
+No Room schema change was required: the syncStatus column has existed on every
+mutable entity since M5/M6.
+
+Exit criteria (met, by test): offline-created data synchronizes in dependency
+order; replay is idempotent; retry works; failures are isolated to their
+aggregate; no data loss. Verified by 301 JVM/Robolectric tests including an
+application-level walkthrough over MockWebServer and a live-backend walkthrough
+against real Spring Boot + PostgreSQL (see section 4's deferred close-out for
+what remains unverified).
+
+Deferred out of M9 (see SYNC.md §19): deletion propagation for hard-deleted
+workout sets, bidirectional sync, multi-device conflict resolution, and sync
+progress indicators in the UI.
+
+Not verified: no on-device run — see the deferred close-out in section 4.
 
 ⸻
 

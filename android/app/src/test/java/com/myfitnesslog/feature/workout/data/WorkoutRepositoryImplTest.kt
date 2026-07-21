@@ -3,12 +3,15 @@ package com.myfitnesslog.feature.workout.data
 import com.myfitnesslog.core.data.local.MyFitnessLogDatabase
 import com.myfitnesslog.core.data.local.SetCategory
 import com.myfitnesslog.core.data.local.WorkoutStatus
+import com.myfitnesslog.core.sync.testing.RecordingSyncTrigger
 import com.myfitnesslog.feature.routine.RoutineTestData
 import com.myfitnesslog.feature.routine.data.RoutineRepositoryImpl
 import com.myfitnesslog.feature.routine.newInMemoryDatabase
 import com.myfitnesslog.feature.routine.newRepository
 import com.myfitnesslog.feature.routine.seedExercises
 import com.myfitnesslog.feature.workout.domain.StartWorkoutUseCase
+import java.math.BigDecimal
+import java.util.UUID
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -21,8 +24,6 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import java.math.BigDecimal
-import java.util.UUID
 
 @RunWith(RobolectricTestRunner::class)
 class WorkoutRepositoryImplTest {
@@ -38,6 +39,7 @@ class WorkoutRepositoryImplTest {
         database.seedExercises()
         val routineRepository: RoutineRepositoryImpl = database.newRepository()
         val startWorkout = StartWorkoutUseCase(
+            syncTrigger = RecordingSyncTrigger(),
             database = database,
             workoutSessionDao = database.workoutSessionDao(),
             workoutExerciseDao = database.workoutExerciseDao(),
@@ -51,6 +53,7 @@ class WorkoutRepositoryImplTest {
         workoutExerciseId = database.workoutExerciseDao().getBySession(sessionId).single().id
 
         repository = WorkoutRepositoryImpl(
+            syncTrigger = RecordingSyncTrigger(),
             sessionDao = database.workoutSessionDao(),
             exerciseDao = database.workoutExerciseDao(),
             setDao = database.workoutSetDao(),

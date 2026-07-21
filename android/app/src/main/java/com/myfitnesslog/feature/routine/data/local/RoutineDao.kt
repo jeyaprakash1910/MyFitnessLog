@@ -3,6 +3,7 @@ package com.myfitnesslog.feature.routine.data.local
 import androidx.room.Dao
 import androidx.room.Query
 import androidx.room.Upsert
+import com.myfitnesslog.core.data.local.SyncStatus
 import kotlinx.coroutines.flow.Flow
 import java.util.UUID
 
@@ -29,4 +30,52 @@ interface RoutineDao {
 
     @Upsert
     suspend fun upsert(routine: RoutineEntity)
+
+    /**
+     * Routines awaiting upload, oldest first.
+     *
+     * PENDING and FAILED are both returned: a FAILED row is simply one whose
+     * previous attempt did not succeed and which must be retried. SYNCED and
+     * SYNCING rows are excluded — SYNCING means another pass is mid-flight, and
+     * claiming it again would double-upload.
+     *
+     * Soft-deleted routines are excluded: propagating deletions is deferred to a
+     * later phase, and uploading a deleted routine as a create would resurrect it
+     * on the backend.
+     *
+     * Ordered by createdAt so parents are uploaded before anything created after
+     * them; `id` breaks ties so the order is total and tests are deterministic.
+     */
+    @Query(
+        "SELECT * FROM routine WHERE isDeleted = 0 " +
+            "AND syncStatus IN ('PENDING', 'FAILED') ORDER BY createdAt ASC, id ASC",
+    )
+    suspend fun getPendingSync(): List<RoutineEntity>
+
+    /**
+     * Writes **only** the syncStatus column.
+     *
+     * Deliberately not routed through [upsert]: the repository's write path
+     * stamps `updatedAt` from the clock, so recording a successful sync that way
+     * would re-dirty the row and make it eligible for upload again — an endless
+     * sync loop. `updatedAt` means "when the user last changed this", and a sync
+     * is not a user change.
+     */
+    @Query("UPDATE routine SET syncStatus = :status WHERE id = :id")
+    suspend fun updateSyncStatus(id: UUID, status: SyncStatus)
+    /**
+     * Releases rows stranded in SYNCING back to PENDING, returning how many were
+     * reclaimed.
+     *
+     * The engine marks a row SYNCING before uploading it, and the pending query
+     * deliberately excludes SYNCING so a concurrent pass cannot double-upload.
+     * If the process dies mid-pass, though, nothing ever clears that claim and
+     * the row becomes invisible to synchronization forever. Running this before
+     * every pass is what makes the claim safe.
+     *
+     * Writes only syncStatus, and is naturally idempotent: a second run matches
+     * no rows and changes nothing.
+     */
+    @Query("UPDATE routine SET syncStatus = 'PENDING' WHERE syncStatus = 'SYNCING'")
+    suspend fun recoverStaleSyncing(): Int
 }

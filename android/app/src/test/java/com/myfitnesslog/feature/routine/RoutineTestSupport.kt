@@ -3,18 +3,19 @@ package com.myfitnesslog.feature.routine
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.myfitnesslog.core.data.local.MyFitnessLogDatabase
+import com.myfitnesslog.core.sync.testing.RecordingSyncTrigger
 import com.myfitnesslog.feature.exercise.data.local.ExerciseCategoryEntity
 import com.myfitnesslog.feature.exercise.data.local.ExerciseEntity
 import com.myfitnesslog.feature.routine.data.RoutineRepositoryImpl
+import java.time.Clock
+import java.time.Instant
+import java.time.ZoneOffset
+import java.util.UUID
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.withTimeout
-import java.time.Clock
-import java.time.Instant
-import java.time.ZoneOffset
-import java.util.UUID
 
 /**
  * Shared helpers for routine tests: an in-memory database seeded with a couple
@@ -57,6 +58,7 @@ internal fun MyFitnessLogDatabase.newRepository(
     dispatcher: CoroutineDispatcher = UnconfinedTestDispatcher(),
 ): RoutineRepositoryImpl =
     RoutineRepositoryImpl(
+        syncTrigger = RecordingSyncTrigger(),
         routineDao = routineDao(),
         routineExerciseDao = routineExerciseDao(),
         ioDispatcher = dispatcher,

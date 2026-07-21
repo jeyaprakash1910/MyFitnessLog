@@ -2,6 +2,7 @@ package com.myfitnesslog.feature.routine.ui
 
 import androidx.lifecycle.SavedStateHandle
 import com.myfitnesslog.core.data.local.MyFitnessLogDatabase
+import com.myfitnesslog.core.sync.testing.RecordingSyncTrigger
 import com.myfitnesslog.feature.exercise.data.ExerciseRepository
 import com.myfitnesslog.feature.exercise.data.local.ExerciseEntity
 import com.myfitnesslog.feature.routine.RoutineTestData
@@ -14,6 +15,7 @@ import com.myfitnesslog.feature.routine.ui.picker.ExercisePickerViewModel
 import com.myfitnesslog.feature.workout.data.WorkoutRepositoryImpl
 import com.myfitnesslog.feature.workout.domain.StartWorkoutUseCase
 import com.myfitnesslog.feature.workout.ui.WorkoutRoutes
+import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -29,7 +31,6 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import java.util.UUID
 
 @RunWith(RobolectricTestRunner::class)
 class ExercisePickerViewModelTest {
@@ -48,6 +49,7 @@ class ExercisePickerViewModelTest {
         runBlocking { database.seedExercises() }
         routineRepository = database.newRepository()
         workoutRepository = WorkoutRepositoryImpl(
+            syncTrigger = RecordingSyncTrigger(),
             sessionDao = database.workoutSessionDao(),
             exerciseDao = database.workoutExerciseDao(),
             setDao = database.workoutSetDao(),
@@ -56,6 +58,7 @@ class ExercisePickerViewModelTest {
         )
         exerciseRepository = DaoExerciseRepository(database)
         startWorkout = StartWorkoutUseCase(
+            syncTrigger = RecordingSyncTrigger(),
             database = database,
             workoutSessionDao = database.workoutSessionDao(),
             workoutExerciseDao = database.workoutExerciseDao(),

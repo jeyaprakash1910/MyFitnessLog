@@ -4,8 +4,14 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.myfitnesslog.core.data.local.MyFitnessLogDatabase
 import com.myfitnesslog.core.data.local.SyncStatus
+import com.myfitnesslog.core.sync.testing.RecordingSyncTrigger
 import com.myfitnesslog.feature.exercise.data.local.ExerciseCategoryEntity
 import com.myfitnesslog.feature.exercise.data.local.ExerciseEntity
+import java.time.Clock
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.util.UUID
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -18,11 +24,6 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import java.time.Clock
-import java.time.Instant
-import java.time.ZoneId
-import java.time.ZoneOffset
-import java.util.UUID
 
 @RunWith(RobolectricTestRunner::class)
 class RoutineRepositoryImplTest {
@@ -49,6 +50,7 @@ class RoutineRepositoryImplTest {
             ),
         )
         repository = RoutineRepositoryImpl(
+            syncTrigger = RecordingSyncTrigger(),
             routineDao = database.routineDao(),
             routineExerciseDao = database.routineExerciseDao(),
             ioDispatcher = UnconfinedTestDispatcher(),

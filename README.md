@@ -4,19 +4,19 @@ An **offline-first** workout tracking application. The backend is the permanent
 source of truth; the Android app keeps a synchronized local copy so it works
 fully offline.
 
-> Status (July 22, 2026): Android client complete (exercise library, routine
+> Status (July 21, 2026): Android client complete (exercise library, routine
 > management, workout logging with timers, and read-only workout history); the
-> backend now implements the full write/read REST contract (routines, routine
-> exercises, workout sessions and their exercises/sets) with idempotent sync
-> semantics. Next milestone: Synchronization (M9) — wiring the Android client to
-> the backend. See [docs/ROADMAP.md](docs/ROADMAP.md) for the authoritative status.
+> backend implements the full write/read REST contract with idempotent sync
+> semantics; **one-way background synchronization (Android → backend) is
+> implemented and tested (M9)**. Next milestone: the read-only web client (M10).
+> See [docs/ROADMAP.md](docs/ROADMAP.md) for the authoritative status.
 
 ## Repository layout
 
 ```
 backend/   Spring Boot REST API (Java 21, Maven, PostgreSQL, Flyway)   — M1–M2, M8 done
-android/   Android app (Kotlin, Jetpack Compose, Room, Hilt, Retrofit)  — M3–M7 done
-web/       React read-only history client                              — not started
+android/   Android app (Kotlin, Compose, Room, Hilt, Retrofit, WorkManager) — M3–M7, M9 done
+web/       React read-only history client                              — not started (M10)
 docs/      Product, architecture, database, API, sync, coding standards, ADRs
 ```
 
@@ -41,12 +41,19 @@ docs/      Product, architecture, database, API, sync, coding standards, ADRs
     duration, routine/manual indicator, exercise count, notes preview) and a
     read-only detail screen (metadata + every snapshotted exercise and set),
     served by a dedicated read-only repository over the snapshot tables.
-- **172 automated Android tests** (JVM/Robolectric) + **86 backend tests**
+  - Background synchronization: every local write is uploaded to the backend in
+    dependency order by a WorkManager-scheduled pass — offline-first throughout
+    (the UI never waits on the network), with idempotent replay, exponential
+    backoff, failure isolation per aggregate, and recovery of work stranded by
+    process death.
+- **301 automated Android tests** (JVM/Robolectric) + **86 backend tests**
   (JUnit 5/MockMvc over real PostgreSQL, incl. an end-to-end sync-graph
-  idempotency proof) pass.
+  idempotency proof) pass — 387 total. Two of the Android tests drive the real
+  sync stack against a running backend and skip automatically when none is
+  reachable.
 
-Not yet built: synchronization / WorkManager (M9), the
-web client (M10). See the roadmap.
+Not yet built: the web client (M10), bidirectional/pull synchronization, and
+deletion propagation for hard-deleted workout sets. See the roadmap.
 
 ## Documentation (read these first)
 
@@ -58,7 +65,7 @@ web client (M10). See the roadmap.
 | [docs/ANDROID_FLOW.md](docs/ANDROID_FLOW.md) | Screen-by-screen app flow + implementation status |
 | [docs/DATABASE.md](docs/DATABASE.md) | Canonical relational data model |
 | [docs/API_SPECIFICATION.md](docs/API_SPECIFICATION.md) | REST API contract (frozen) |
-| [docs/SYNC.md](docs/SYNC.md) | Synchronization strategy (design; not yet implemented) |
+| [docs/SYNC.md](docs/SYNC.md) | Synchronization strategy and the implemented upload contract |
 | [docs/CODING_STANDARDS.md](docs/CODING_STANDARDS.md) | Coding conventions |
 | [docs/ADR/](docs/ADR/) | Architecture Decision Records |
 
