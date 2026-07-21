@@ -103,7 +103,7 @@ class ExerciseListViewModel @Inject constructor(
         viewModelScope.launch {
             refreshState.value = RefreshState.Loading
             refreshState.value = try {
-                exerciseRepository.refresh()
+                exerciseRepository.refreshLibrary()
                 RefreshState.Idle
             } catch (throwable: Throwable) {
                 RefreshState.Failed(throwable)

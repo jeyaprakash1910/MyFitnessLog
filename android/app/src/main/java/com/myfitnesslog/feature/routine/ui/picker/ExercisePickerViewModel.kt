@@ -36,7 +36,7 @@ import javax.inject.Inject
 @HiltViewModel
 class ExercisePickerViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
-    exerciseRepository: ExerciseRepository,
+    private val exerciseRepository: ExerciseRepository,
     private val routineRepository: RoutineRepository,
     private val workoutRepository: WorkoutRepository,
 ) : ViewModel() {
@@ -53,22 +53,61 @@ class ExercisePickerViewModel @Inject constructor(
     private val _events = MutableSharedFlow<Added>(extraBufferCapacity = 1)
     val events = _events.asSharedFlow()
 
+    private val refreshState = MutableStateFlow<RefreshState>(RefreshState.Idle)
+
+    init {
+        // The picker is where exercises are actually needed, so it is where the
+        // library is fetched. Nothing else in the app downloads it: the only
+        // other caller is the Exercise Library screen, which a user may never
+        // open. Without this, a fresh install shows an empty picker forever and
+        // no exercise can be added to any routine or workout.
+        refreshLibrary()
+    }
+
     val uiState: StateFlow<ExercisePickerUiState> =
         combine(
             query,
             query.flatMapLatest { q ->
                 exerciseRepository.observeFiltered(categoryId = null, query = q.trim().ifBlank { null })
             },
-        ) { currentQuery, exercises ->
+            refreshState,
+        ) { currentQuery, exercises, refresh ->
             ExercisePickerUiState(
                 query = currentQuery,
+                // Straight from Room: cached rows appear immediately and are
+                // never cleared by a failing refresh.
                 exercises = exercises.map { ExercisePickerItem(it.id, it.name) },
+                isRefreshing = refresh is RefreshState.Loading,
+                errorMessage = (refresh as? RefreshState.Failed)?.message,
             )
         }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = ExercisePickerUiState(),
         )
+
+    /** Re-attempts the library download after a failure. */
+    fun onRetry() = refreshLibrary()
+
+    private fun refreshLibrary() {
+        viewModelScope.launch {
+            refreshState.value = RefreshState.Loading
+            refreshState.value = try {
+                exerciseRepository.refreshLibrary()
+                RefreshState.Idle
+            } catch (throwable: Throwable) {
+                // Deliberately swallowed into state rather than rethrown: being
+                // offline is normal here, and the cached list stays usable.
+                RefreshState.Failed(throwable.message ?: "Could not load exercises.")
+            }
+        }
+    }
+
+    private sealed interface RefreshState {
+        data object Idle : RefreshState
+        data object Loading : RefreshState
+        data class Failed(val message: String) : RefreshState
+    }
 
     fun onQueryChange(newQuery: String) {
         query.value = newQuery

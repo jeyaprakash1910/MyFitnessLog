@@ -8,10 +8,11 @@ import java.util.UUID
  * Repository boundary for exercises. Same contract shape as
  * [ExerciseCategoryRepository].
  *
- * Because exercises reference categories by foreign key, callers must refresh
- * categories before exercises (categories are downloaded first). Orchestrating
- * that ordering belongs to the initial-download / sync layer added in a later
- * milestone, not to this repository.
+ * Exercises reference categories by a RESTRICT foreign key, so categories must
+ * be downloaded first or the upsert fails. That ordering is owned here, by
+ * [refreshLibrary] — deliberately not left to callers. An earlier design left it
+ * to "the initial-download layer", and the result was that the one caller which
+ * existed refreshed exercises alone and would have failed on a cold database.
  */
 interface ExerciseRepository {
 
@@ -28,8 +29,16 @@ interface ExerciseRepository {
     fun observeFiltered(categoryId: UUID?, query: String?): Flow<List<ExerciseEntity>>
 
     /**
-     * Downloads all exercises from the backend and upserts them into Room.
-     * Throws on network/parse failure; local data is left untouched.
+     * Downloads the exercise library — categories **then** exercises — and
+     * upserts it into Room.
+     *
+     * This is the only refresh entry point precisely so that the foreign-key
+     * ordering cannot be got wrong: there is no way to refresh exercises without
+     * their categories.
+     *
+     * Throws on network/parse failure. Local data is left untouched, so a failed
+     * refresh degrades to whatever was already cached rather than emptying the
+     * library.
      */
-    suspend fun refresh()
+    suspend fun refreshLibrary()
 }

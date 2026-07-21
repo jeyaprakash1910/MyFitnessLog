@@ -210,7 +210,7 @@ private class FakeExerciseRepository(
             }.sortedBy { it.name }
         }
 
-    override suspend fun refresh() {
+    override suspend fun refreshLibrary() {
         refreshGate?.await()
         refreshError?.let { throw it }
         dataOnRefresh?.let { exercises.value = it }

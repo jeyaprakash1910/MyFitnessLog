@@ -69,6 +69,34 @@ class ExercisePickerViewModelTest {
         runBlocking { routineId = routineRepository.createRoutine("Legs") }
     }
 
+    // ---- Library refresh (offline-first) ----------------------------------
+
+    @Test
+    fun `opening the picker downloads the exercise library`() = runBlocking {
+        // The regression guard: nothing else in the app fetches the library, so
+        // without this a fresh install shows an empty picker forever.
+        val repository = exerciseRepository as DaoExerciseRepository
+        val before = repository.refreshCount
+
+        routineViewModel().uiState.first()
+
+        assertEquals(before + 1, repository.refreshCount)
+    }
+
+    @Test
+    fun `a failed refresh keeps cached exercises visible`() = runBlocking {
+        val repository = exerciseRepository as DaoExerciseRepository
+        repository.refreshError = java.io.IOException("offline")
+
+        val state = routineViewModel().uiState.first { it.exercises.isNotEmpty() }
+
+        // Cached rows come straight from Room and are never cleared by a
+        // failing download; the error is not worth reporting while they exist.
+        assertTrue(state.exercises.isNotEmpty())
+        assertEquals(false, state.showError)
+        assertEquals(false, state.showEmpty)
+    }
+
     @After
     fun tearDown() {
         Dispatchers.resetMain()
@@ -132,9 +160,14 @@ class ExercisePickerViewModelTest {
 private class DaoExerciseRepository(
     private val database: MyFitnessLogDatabase,
 ) : ExerciseRepository {
+    var refreshCount = 0
+    var refreshError: Throwable? = null
     override fun observeAll(): Flow<List<ExerciseEntity>> = database.exerciseDao().observeAll()
     override fun observeById(id: UUID): Flow<ExerciseEntity?> = database.exerciseDao().observeById(id)
     override fun observeFiltered(categoryId: UUID?, query: String?): Flow<List<ExerciseEntity>> =
         database.exerciseDao().observeFiltered(categoryId, query)
-    override suspend fun refresh() = Unit
+    override suspend fun refreshLibrary() {
+        refreshCount++
+        refreshError?.let { throw it }
+    }
 }

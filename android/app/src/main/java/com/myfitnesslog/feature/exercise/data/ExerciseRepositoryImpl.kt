@@ -17,6 +17,7 @@ import javax.inject.Inject
 class ExerciseRepositoryImpl @Inject constructor(
     private val dao: ExerciseDao,
     private val api: ExerciseApi,
+    private val categoryRepository: ExerciseCategoryRepository,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : ExerciseRepository {
 
@@ -27,7 +28,11 @@ class ExerciseRepositoryImpl @Inject constructor(
     override fun observeFiltered(categoryId: UUID?, query: String?): Flow<List<ExerciseEntity>> =
         dao.observeFiltered(categoryId = categoryId, query = query)
 
-    override suspend fun refresh() = withContext(ioDispatcher) {
+    override suspend fun refreshLibrary() = withContext(ioDispatcher) {
+        // Categories first: ExerciseEntity has a RESTRICT foreign key to
+        // ExerciseCategoryEntity, so on a cold database upserting exercises
+        // whose categories are absent fails with a constraint violation.
+        categoryRepository.refresh()
         val exercises = api.getExercises().map { it.toEntity() }
         dao.upsertAll(exercises)
     }

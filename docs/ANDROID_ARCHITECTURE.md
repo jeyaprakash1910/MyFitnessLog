@@ -120,6 +120,13 @@ of this rule. There is no CI, so that instrumented test is the only guard.
 
 6a. Repository API-Shape Convention (accepted refinement)
 
+Reference-data download ordering is owned by the repository, not by callers.
+ExerciseRepository.refreshLibrary() downloads categories and then exercises in
+that order, because ExerciseEntity has a RESTRICT foreign key to
+ExerciseCategoryEntity and the reverse order fails on a cold database. There is
+deliberately no way to refresh exercises alone: an earlier design left the
+ordering to "the caller", and the one caller that existed got it wrong.
+
 All repositories follow a consistent public API shape so that consistency scales
 as repositories multiply.
 

@@ -3,6 +3,7 @@ package com.myfitnesslog.core.ui.navigation
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.PlayArrow
@@ -24,6 +25,7 @@ import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import com.myfitnesslog.feature.exercise.ui.ExerciseListScreen
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
@@ -148,6 +150,9 @@ fun MyFitnessLogNavHost() {
             ) {
                 ExercisePickerScreen(onDone = { navController.popBackStack() })
             }
+            composable(TopLevelDestination.EXERCISES.route) {
+                ExerciseListScreen()
+            }
             composable(TopLevelDestination.HISTORY.route) {
                 WorkoutHistoryScreen(
                     onOpenWorkout = { id -> navController.navigate(WorkoutHistoryRoutes.detail(id)) },
@@ -197,6 +202,7 @@ private fun titleForRoute(route: String?, topLevel: TopLevelDestination?): Strin
 private fun TopLevelDestination.icon(): ImageVector = when (this) {
     TopLevelDestination.HOME -> Icons.Filled.Home
     TopLevelDestination.WORKOUT -> Icons.Filled.PlayArrow
+    TopLevelDestination.EXERCISES -> Icons.AutoMirrored.Filled.List
     TopLevelDestination.HISTORY -> Icons.Filled.DateRange
     TopLevelDestination.SETTINGS -> Icons.Filled.Settings
 }
