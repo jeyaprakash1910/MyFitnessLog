@@ -118,6 +118,23 @@ of this rule. There is no CI, so that instrumented test is the only guard.
 
 ⸻
 
+5b. Networking configuration
+
+The Retrofit base URL is not hardcoded. NetworkModule reads
+BuildConfig.API_BASE_URL, which the Gradle build populates from `apiBaseUrl` in
+`local.properties`, defaulting to the emulator host loopback
+(http://10.0.2.2:8080/api/v1/). Pointing the app at a LAN-hosted backend — the
+only way to sync from a physical device — is therefore a configuration change,
+not a code change, and no developer-specific address can be committed.
+
+Debug builds additionally ship a network security config permitting cleartext
+HTTP (Android forbids it by default from API 28). It is scoped to debug by
+living in `src/debug/`; release builds keep the platform default. It permits any
+host rather than a fixed list because a LAN address varies per network and a
+resource file cannot read local.properties.
+
+⸻
+
 6a. Repository API-Shape Convention (accepted refinement)
 
 Reference-data download ordering is owned by the repository, not by callers.

@@ -16,18 +16,15 @@ import javax.inject.Singleton
 /**
  * Provides the Retrofit/OkHttp networking stack.
  *
- * Phase 1 wires the client and JSON converter but declares **no API interfaces
- * and makes no network calls** — the UI reads exclusively from Room (ADR-0002).
- * The stack exists so the graph is complete and Phase 2 can add API interfaces
- * without touching this module.
+ * The base URL comes from [BuildConfig.API_BASE_URL], populated at build time
+ * from `apiBaseUrl` in `local.properties` and defaulting to the emulator's host
+ * loopback. No development address is hardcoded here: pointing the app at a
+ * LAN-hosted backend (to sync from a physical device) is a configuration change,
+ * not a code change. See README "Configuring the backend URL".
  */
 @Module
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
-
-    // Development base URL from docs/API_SPECIFICATION.md. 10.0.2.2 is the
-    // host loopback as seen from the Android emulator.
-    private const val BASE_URL = "http://10.0.2.2:8080/api/v1/"
 
     @Provides
     @Singleton
@@ -55,7 +52,7 @@ object NetworkModule {
     fun provideRetrofit(client: OkHttpClient, json: Json): Retrofit {
         val contentType = "application/json".toMediaType()
         return Retrofit.Builder()
-            .baseUrl(BASE_URL)
+            .baseUrl(BuildConfig.API_BASE_URL)
             .client(client)
             .addConverterFactory(json.asConverterFactory(contentType))
             .build()

@@ -93,11 +93,39 @@ via the `TEST_DB_*` env overrides in `src/test/resources/application.yml`.
 Requires JDK 17 and the Android SDK (`ANDROID_HOME` / `local.properties`).
 ```bash
 cd android
-./gradlew assembleDebug          # build the debug APK
-./gradlew testDebugUnitTest      # run all unit tests (JVM/Robolectric)
+./gradlew assembleDebug              # build the debug APK
+./gradlew testDebugUnitTest          # unit tests (JVM/Robolectric)
+./gradlew connectedDebugAndroidTest  # instrumented tests — needs a running emulator/device
 ```
-No emulator/AVD is currently configured, so on-device verification is pending;
-all layers are otherwise covered by executed tests.
+
+#### Configuring the backend URL
+
+The app reads its base URL from `BuildConfig.API_BASE_URL`, populated at build
+time from `android/local.properties` (machine-specific and gitignored, so your
+address is never committed).
+
+**Emulator: no configuration needed.** The default is `http://10.0.2.2:8080/api/v1/`
+— `10.0.2.2` is the host machine's loopback as seen from the emulator.
+
+**Physical device:** point it at your machine's LAN address, with both on the
+same Wi-Fi:
+
+```properties
+# android/local.properties
+apiBaseUrl=http://192.168.1.7:8080/api/v1/
+```
+
+Then rebuild and reinstall (`./gradlew installDebug`) — the value is baked in at
+build time. A trailing slash is added automatically if you omit it, since
+Retrofit rejects a base URL without one.
+
+Notes:
+- Debug builds permit cleartext HTTP to any host (`src/debug/res/xml/network_security_config.xml`);
+  release builds keep the platform default of cleartext forbidden. Android has
+  blocked cleartext by default since API 28, so without this every request fails
+  with `UnknownServiceException`.
+- The app is fully usable with no backend at all — writes stay `PENDING` locally
+  and upload whenever one becomes reachable.
 
 ## Key architectural decisions
 

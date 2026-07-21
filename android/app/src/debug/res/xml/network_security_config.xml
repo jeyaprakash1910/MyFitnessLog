@@ -3,26 +3,32 @@
     Debug-only network security configuration.
 
     Android blocks cleartext (plain HTTP) traffic by default from API 28 onward.
-    The development backend is served over plain HTTP on the host machine, so
-    without this the very first sync request fails with
+    The development backend is served over plain HTTP, so without this the very
+    first sync request fails with
 
-        java.net.UnknownServiceException: CLEARTEXT communication to 10.0.2.2
+        java.net.UnknownServiceException: CLEARTEXT communication to <host>
         not permitted by network security policy
 
-    This file lives in src/debug/ so it is compiled into debug builds only —
-    release builds keep the platform default (cleartext forbidden everywhere).
-    Cleartext is additionally scoped to the two development hosts rather than
-    enabled globally:
-
-      - 10.0.2.2  the host machine's loopback as seen from the emulator
-      - localhost a backend reachable on the device itself
-
-    When the backend is deployed behind TLS, the production base URL needs no
-    entry here and none should be added.
+    This file lives in src/debug/ so it is compiled into debug builds only.
+    Release builds do not include it and keep the platform default: cleartext
+    forbidden everywhere. When the backend is deployed behind TLS, the
+    production base URL needs no entry here and none should be added.
 -->
 <network-security-config>
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="false">10.0.2.2</domain>
-        <domain includeSubdomains="false">localhost</domain>
-    </domain-config>
+    <!--
+        Cleartext is permitted to ANY host — in debug builds only.
+
+        This was previously scoped to 10.0.2.2 and localhost, which is tighter.
+        But that made syncing from a physical device impossible without editing
+        this file: a LAN backend is reached at whatever address the developer's
+        machine currently has (192.168.x.x today, something else on the next
+        network). A resource file cannot read local.properties, so the address
+        configured for API_BASE_URL cannot be templated in here.
+
+        The trade accepted: debug builds may talk cleartext to any host. That is
+        acceptable because debug builds are never distributed, and the
+        alternative was every developer hand-editing a tracked file with their
+        own IP address — which would eventually be committed.
+    -->
+    <base-config cleartextTrafficPermitted="true" />
 </network-security-config>
