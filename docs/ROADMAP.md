@@ -49,22 +49,32 @@ Repository layout:
 * docs/    — architecture, database, API, sync, coding standards, ADRs
 * web/     — not started
 
-Backend status (M1–M2 complete; unchanged since):
+Backend status (M1–M2 and M8 Backend Sync APIs complete):
 
 * Spring Boot app, PostgreSQL, Flyway, JPA auditing, OSIV disabled, global
-  exception handler, SLF4J logging, SpringDoc OpenAPI, health endpoint.
+  exception handler (400/404/409/500 envelope), SLF4J logging, SpringDoc OpenAPI,
+  health endpoint.
 * Flyway V1 creates ALL eight tables (User, ExerciseCategory, Exercise, Routine,
   RoutineExercise, WorkoutSession, WorkoutExercise, WorkoutSet). V2/V3 seed 8
-  categories and 40 exercises.
-* Entities / repositories / services / controllers / mappers / DTOs exist for
-  ExerciseCategory and Exercise only.
-* Endpoints (all read-only): GET /health, GET /exercise-categories,
-  GET /exercises, GET /exercises/{id}, GET /exercises/search.
-* Not yet built: entities/services/controllers for Routine/RoutineExercise/
-  WorkoutSession/WorkoutExercise/WorkoutSet; any write (POST/PUT/DELETE)
-  endpoints; automated backend tests (backend/src/test is empty).
+  categories and 40 exercises; V4 seeds the single default user (single-user V1).
+* Entities / repositories / services / controllers / mappers / DTOs now exist for
+  ALL resources (ExerciseCategory, Exercise, Routine, RoutineExercise,
+  WorkoutSession, WorkoutExercise, WorkoutSet).
+* Endpoints: the read-only exercise/category/health APIs PLUS the full write/read
+  contract in API_SPECIFICATION.md — routines (CRUD + duplicate), routine
+  exercises (add/update/remove/reorder), workout sessions (history/detail/start/
+  complete/discard) and their exercises and sets. Idempotent UUID-keyed upserts
+  (201 create / 200 replay); valid status transitions (409 on illegal);
+  completed/discarded workouts are immutable; the detail endpoint returns the
+  full nested snapshot assembled in-transaction (OSIV disabled).
+* 86 automated backend tests (JUnit 5 + MockMvc) run against a real PostgreSQL
+  database — including an end-to-end sync-graph idempotency proof. The backend
+  test gap identified in M2 is now closed. (Local PostgreSQL is used to execute
+  the tests; the same tests are portable to Testcontainers on a Docker-capable
+  machine — see M11 / cross-cutting notes.)
+* The default user is attached server-side; the Android client sends no userId.
 
-Android status (M3–M7 complete; next milestone is M8 Backend Sync APIs):
+Android status (M3–M7 complete; next milestone is M9 Synchronization):
 
 * Foundation: single Gradle module; Hilt DI, Jetpack Compose, Navigation Compose,
   Room, Retrofit + OkHttp + kotlinx.serialization, Material 3, version catalog,
@@ -134,15 +144,17 @@ M4 Android Exercise Library	✅ Completed (built within M3 phases)
 M5 Routine Management (Android)	✅ Completed
 M6 Workout Logging (Android)	✅ Completed (all 5 phases)
 M7 Workout History (Android)	✅ Completed (all 4 phases)
-M8 Backend Sync APIs	⬜ Next (resequenced)
-M9 Synchronization	⬜ Pending
+M8 Backend Sync APIs	✅ Completed (all 6 phases)
+M9 Synchronization	⬜ Next
 M10 Web Application	⬜ Pending
 M11 Testing & Polish	⬜ Pending
 M12 Version 1 Release	⬜ Pending
 
-Current milestone: M8 (Backend Sync APIs).
-Test count: 172 automated Android tests passing (JVM/Robolectric).
-Database version: 3.  Backend: read-only exercise APIs only.  Sync: not started.
+Current milestone: M9 (Synchronization).
+Test count: 172 automated Android tests (JVM/Robolectric) + 86 backend tests
+(JUnit 5/MockMvc over real PostgreSQL) = 258 passing.
+Database version: Android Room v3; backend Flyway v4 (adds the default-user seed).
+Backend: full write/read APIs per API_SPECIFICATION.md.  Sync: not started (M9).
 
 Deferred close-out (not a milestone): a single on-device / emulator run to
 confirm the Android exit criteria (launch, navigation, routine + workout flows)
@@ -304,28 +316,36 @@ tests (172 total). Remaining: the shared on-device pass once an AVD exists.
 
 ⸻
 
-12. M8 — Backend Sync APIs ⬜ Next (resequenced)
+12. M8 — Backend Sync APIs ✅ Completed (resequenced)
 
 Goal: implement the backend endpoints required by synchronization and the web
 app, against the finalized contracts in API_SPECIFICATION.md.
 
-Deliverables:
+Delivered across six reviewed phases:
 
-* Entities / repositories / services / controllers / mappers / DTOs for Routine,
-  RoutineExercise, WorkoutSession, WorkoutExercise, WorkoutSet.
-* Write endpoints (POST/PUT/DELETE) for routines and routine exercises; workout
-  session lifecycle (start/complete/discard); workout exercises and sets.
-* Read endpoints for workout history and details (consumed by the web app).
-* Idempotent, UUID-keyed upserts so repeated sync submissions are safe.
+* Phase 1 — Write foundation: JPA entities + repositories for all five remaining
+  tables; enum (EnumType.STRING) and BigDecimal mappings; ResourceNotFound (404)
+  and BusinessRule (409) exceptions + handlers; V4 default-user seed +
+  DefaultUserProvider; PostgreSQL-backed test infrastructure.
+* Phase 2 — Routine endpoints (list/detail/create/update/soft-delete/duplicate),
+  idempotent create (201/200).
+* Phase 3 — RoutineExercise endpoints (add/update/remove/atomic reorder).
+* Phase 4 — WorkoutSession lifecycle (history/detail/start/complete/discard) with
+  valid transitions, idempotent replay, and preserved client domain timestamps.
+* Phase 5 — WorkoutExercise + WorkoutSet endpoints; the detail endpoint enriched
+  to return the full nested snapshot (assembled in-transaction, OSIV-safe);
+  workout-history immutability enforced (409 on mutation of a terminal session).
+* Phase 6 — Integration hardening: end-to-end sync-graph idempotency proof,
+  error-envelope consistency tests, OpenAPI/Swagger verification, documentation.
 
-Notes:
+Idempotent, UUID-keyed upserts make repeated sync submissions safe. The owner is
+attached server-side (single-user V1; the client sends no userId). No new Flyway
+migration was needed for the tables (V1 created all eight); V4 only adds the
+default-user seed row.
 
-* No new Flyway migrations are required for the tables themselves — V1 already
-  created all eight. Migrations are only needed if columns/constraints change.
-* Backend automated tests should be written alongside these endpoints.
-
-Exit criteria: all endpoints behave per the API specification, return correct
-status codes, use DTOs, and are covered by tests.
+Exit criteria: met — all endpoints behave per the API specification, return the
+correct status codes and error envelope, use DTOs, and are covered by 86 backend
+tests (JUnit 5/MockMvc over real PostgreSQL), including a full-graph replay proof.
 
 ⸻
 

@@ -4,16 +4,17 @@ An **offline-first** workout tracking application. The backend is the permanent
 source of truth; the Android app keeps a synchronized local copy so it works
 fully offline.
 
-> Status (July 22, 2026): Backend exercise library complete; Android exercise
-> library, routine management, workout logging (routine-based and manual, with
-> timers), and workout history (read-only list + detail) complete. Next
-> milestone: Backend Sync APIs (M8).
-> See [docs/ROADMAP.md](docs/ROADMAP.md) for the authoritative, up-to-date status.
+> Status (July 22, 2026): Android client complete (exercise library, routine
+> management, workout logging with timers, and read-only workout history); the
+> backend now implements the full write/read REST contract (routines, routine
+> exercises, workout sessions and their exercises/sets) with idempotent sync
+> semantics. Next milestone: Synchronization (M9) — wiring the Android client to
+> the backend. See [docs/ROADMAP.md](docs/ROADMAP.md) for the authoritative status.
 
 ## Repository layout
 
 ```
-backend/   Spring Boot REST API (Java 21, Maven, PostgreSQL, Flyway)   — M1–M2 done
+backend/   Spring Boot REST API (Java 21, Maven, PostgreSQL, Flyway)   — M1–M2, M8 done
 android/   Android app (Kotlin, Jetpack Compose, Room, Hilt, Retrofit)  — M3–M7 done
 web/       React read-only history client                              — not started
 docs/      Product, architecture, database, API, sync, coding standards, ADRs
@@ -21,9 +22,14 @@ docs/      Product, architecture, database, API, sync, coding standards, ADRs
 
 ## What works today
 
-- **Backend:** exercise library read APIs (`/exercise-categories`, `/exercises`,
-  `/exercises/{id}`, `/exercises/search`) over a Flyway-managed PostgreSQL schema
-  (all 8 tables exist; only exercise/category logic is implemented). Read-only.
+- **Backend:** the full REST contract over a Flyway-managed PostgreSQL schema —
+  read-only exercise/category APIs plus write/read APIs for routines (CRUD +
+  duplicate), routine exercises (add/update/remove/reorder), and workout sessions
+  (history/detail/start/complete/discard) with their exercises and sets. Idempotent
+  UUID-keyed upserts (201 create / 200 replay), valid status transitions (409 on
+  illegal), immutable completed/discarded workouts, and a nested workout-detail
+  snapshot. The single V1 user is attached server-side. Interactive docs at
+  `/swagger-ui/index.html`.
 - **Android (offline-first, Room is the source of truth):**
   - Exercise library: download + local cache, list, local search, category filter.
   - Routine management: list, detail, create/edit (add/remove/reorder exercises,
@@ -35,9 +41,11 @@ docs/      Product, architecture, database, API, sync, coding standards, ADRs
     duration, routine/manual indicator, exercise count, notes preview) and a
     read-only detail screen (metadata + every snapshotted exercise and set),
     served by a dedicated read-only repository over the snapshot tables.
-- **172 automated Android tests** pass on the JVM via Robolectric.
+- **172 automated Android tests** (JVM/Robolectric) + **86 backend tests**
+  (JUnit 5/MockMvc over real PostgreSQL, incl. an end-to-end sync-graph
+  idempotency proof) pass.
 
-Not yet built: backend write APIs (M8), synchronization / WorkManager (M9), the
+Not yet built: synchronization / WorkManager (M9), the
 web client (M10). See the roadmap.
 
 ## Documentation (read these first)
@@ -63,11 +71,16 @@ considered done). Build vertically; keep the app runnable at every milestone.
 ## Building & testing
 
 ### Backend
+Requires JDK 21 and a local PostgreSQL (a `myfitnesslog` database for the app and
+a `myfitnesslog_test` database for tests).
 ```bash
 cd backend
-./mvnw spring-boot:run      # requires a local PostgreSQL; Flyway migrates on start
-./mvnw test                 # (no backend tests yet — see roadmap)
+mvn spring-boot:run   # Flyway migrates (V1–V4) on start; API at :8080/api/v1
+mvn test              # 86 tests (JUnit 5 + MockMvc) against the test database
 ```
+Tests run against a real PostgreSQL (faithful to the quoted-identifier schema and
+CHECK constraints). They are portable to Testcontainers on a Docker-capable machine
+via the `TEST_DB_*` env overrides in `src/test/resources/application.yml`.
 
 ### Android
 Requires JDK 17 and the Android SDK (`ANDROID_HOME` / `local.properties`).

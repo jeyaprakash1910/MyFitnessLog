@@ -1,0 +1,36 @@
+# Test configuration.
+#
+# Integration tests run against a real PostgreSQL instance (the same engine as
+# production) so Flyway migrations, quoted identifiers, CHECK constraints, enum
+# storage, and NUMERIC precision are all exercised faithfully — behaviour an
+# in-memory H2 database cannot reproduce.
+#
+# The datasource points at a dedicated "myfitnesslog_test" database. All values
+# are overridable by environment variables so the same tests run unchanged
+# against a Testcontainers-managed PostgreSQL on a Docker-capable machine
+# (set TEST_DB_URL/TEST_DB_USERNAME/TEST_DB_PASSWORD).
+spring:
+  datasource:
+    url: ${TEST_DB_URL:jdbc:postgresql://localhost:5432/myfitnesslog_test}
+    username: ${TEST_DB_USERNAME:myfitnesslog}
+    password: ${TEST_DB_PASSWORD:myfitnesslog}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: none
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+logging:
+  level:
+    root: INFO
