@@ -101,9 +101,20 @@ Feature packages lift cleanly into Gradle modules later if needed.
 
 Current schema: database version 3, exportSchema on (schemas v1/v2/v3 committed).
 Entities: ExerciseCategory, Exercise (reference); Routine, RoutineExercise
-(templates); WorkoutSession, WorkoutExercise, WorkoutSet (history). Pre-release
-uses `fallbackToDestructiveMigration()`; real Migrations begin once shipped
-(reference data re-downloads, and no user data has shipped yet).
+(templates); WorkoutSession, WorkoutExercise, WorkoutSet (history).
+
+Migration policy: `fallbackToDestructiveMigration()` has been **removed**. It was
+acceptable only while the database held nothing a user would miss; once real
+training history is being logged, a destructive upgrade would silently delete
+data that exists nowhere else (anything not yet synchronized). A version bump
+without a matching migration now fails loudly at startup instead.
+
+v3 is the baseline for real use. Versions 1–2 existed only during M3–M6 on
+developer machines that were being destructively upgraded anyway, so no migration
+path into them is provided. Every schema change from here ships with a `Migration`
+in `core/data/local/Migrations.kt` **and** a data-preservation case in
+`MigrationTest` — see CODING_STANDARDS §20b, which is the enforceable statement
+of this rule. There is no CI, so that instrumented test is the only guard.
 
 ⸻
 

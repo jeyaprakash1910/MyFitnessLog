@@ -358,6 +358,35 @@ Create a new migration for every schema change.
 
 ⸻
 
+20b. Room (Android database)
+
+The Android database follows the same discipline as Flyway, for the same reason:
+once the app holds real training history, a schema change that is not migrated
+destroys data that may exist nowhere else — anything not yet synchronized is
+gone permanently.
+
+The database does NOT use fallbackToDestructiveMigration. A version bump without
+a matching migration therefore fails loudly at startup instead of silently
+recreating the database.
+
+Every Room schema change must:
+
+1. Bump the version in MyFitnessLogDatabase and commit the exported schema JSON
+   that Room writes to app/schemas/. The export is not optional — without it,
+   migrations cannot be validated.
+2. Add a Migration to the MIGRATIONS array in core/data/local/Migrations.kt.
+3. Add a case to MigrationTest that seeds realistic rows at the old version,
+   migrates, and asserts THE DATA SURVIVED — not merely that the migration ran.
+
+Never modify a committed schema JSON, and never edit a released Migration.
+
+This repository has no CI, so MigrationTest is the only thing enforcing the
+policy. It is an instrumented test and requires a running emulator or device:
+
+    ./gradlew :app:connectedDebugAndroidTest
+
+⸻
+
 21. Git Commit Messages
 
 Use imperative, descriptive commit messages.

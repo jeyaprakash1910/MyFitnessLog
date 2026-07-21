@@ -2,6 +2,7 @@ package com.myfitnesslog.core.di
 
 import android.content.Context
 import androidx.room.Room
+import com.myfitnesslog.core.data.local.MIGRATIONS
 import com.myfitnesslog.core.data.local.MyFitnessLogDatabase
 import com.myfitnesslog.feature.exercise.data.local.ExerciseCategoryDao
 import com.myfitnesslog.feature.exercise.data.local.ExerciseDao
@@ -39,10 +40,11 @@ object DatabaseModule {
             MyFitnessLogDatabase::class.java,
             MyFitnessLogDatabase.DATABASE_NAME,
         )
-            // Pre-release only: reference data is re-downloaded and no user data
-            // has shipped yet, so a destructive upgrade is acceptable. Replace
-            // with real Migration objects once the app is released.
-            .fallbackToDestructiveMigration()
+            // No destructive fallback. The app now stores real training history,
+            // and anything not yet synchronized exists nowhere else — a
+            // destructive upgrade would delete it silently. A version bump
+            // without a matching migration fails loudly instead. See MIGRATIONS.
+            .addMigrations(*MIGRATIONS)
             .build()
 
     @Provides
