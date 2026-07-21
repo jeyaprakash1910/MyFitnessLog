@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Debug-only manifest overlay.
+
+    Points the application at the debug network security config so the app can
+    reach the development backend over plain HTTP. Merged into debug builds
+    only; the release manifest is untouched and keeps the platform default of
+    cleartext being forbidden.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:networkSecurityConfig="@xml/network_security_config" />
+
+</manifest>

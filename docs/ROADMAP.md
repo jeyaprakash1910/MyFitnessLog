@@ -162,13 +162,23 @@ Sync: one-way Android → backend, complete (transport, engine, scheduling,
 triggers). Deferred within M9: deletion propagation for hard-deleted workout
 sets (design compared, decision pending), and bidirectional sync.
 
-Deferred close-out (not a milestone): a single on-device / emulator run to
-confirm the Android exit criteria (launch, navigation, routine + workout flows)
-and to observe a real background sync pass. No AVD is installed, so the
-WorkManager/device half of M9 is verified by JVM tests and build artifacts only.
-The HTTP half HAS been validated for real: on 2026-07-21 the full sync stack
-uploaded a routine, workout, exercise and set to a running Spring Boot backend
-and the rows were confirmed in PostgreSQL with exact decimal precision.
+Runtime validation (completed 2026-07-21): an emulator (Pixel 6, API 35) was
+installed and the full loop executed against a running Spring Boot backend and
+PostgreSQL — app launch, create routine in the UI, start workout, complete
+workout, automatic background sync, rows confirmed in PostgreSQL, and history
+rendering correctly after a fresh launch. SyncWorker was observed running in a
+real process, confirming the Hilt worker-factory wiring end to end.
+
+That run found and fixed one release-blocking defect: Android blocks cleartext
+HTTP from API 28, so every sync request failed with UnknownServiceException and
+synchronization could not have worked on any device (all 301 JVM tests passed
+regardless — Robolectric has no network security policy). Fixed by a debug-only
+network security config; release builds are unchanged.
+
+Known gap, pre-existing and unrelated to M9: the exercise library is downloaded
+only by ExerciseListViewModel, and no navigation route reaches that screen, so
+on a fresh install the exercise picker is permanently empty and no exercise can
+be added to a routine or workout. Tracked for M11.
 
 ⸻
 
