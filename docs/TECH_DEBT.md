@@ -2,9 +2,25 @@
 
 Project: MyFitnessLog
 Version: 1.0
-Last Updated: July 20, 2026
+Last Updated: July 22, 2026
 
 This document records known, accepted technical debt: deliberate limitations that are not defects in the current milestone but must be addressed in a later milestone. Each item states the observation, why it is currently acceptable, the recommended future implementation, the documentation that must change first, and when it is scheduled.
+
+This register holds debt that outlives a single task. Short-lived working items live in the development TODO and are not duplicated here.
+
+### Index
+
+| ID | Item | Status | Blocks |
+|---|---|---|---|
+| TD-001 | 405 returned as 500 | Open — deferred | — |
+| TD-002 | Category filtering in service, not repository | Open — note only | — |
+| TD-003 | History endpoint scans the whole table | Open — deferred | M10 (perf) |
+| TD-004 | WorkoutSet deletions never reach the backend | **Decision required** | M10 (correctness) |
+| TD-005 | No physical-device verification | Open — environment | M12 |
+| TD-006 | No release signing configuration | Open | **M12 (distribution)** |
+| TD-007 | Backend has no CORS configuration | Open | **M10 (hard blocker)** |
+| TD-008 | History differs between Android and backend | Decided, not implemented | M10 (correctness) |
+| TD-009 | RoutineEntity lacks description/displayOrder | Open — note only | — |
 
 ---
 
@@ -74,3 +90,212 @@ defined once and reused.
 
 Until a genuine second consumer exists, the repository stays unchanged and the
 logic remains in the service. YAGNI is the governing principle.
+
+---
+
+## TD-003 — Backend history endpoint scans the whole table
+
+Status: Open — deferred
+
+Milestone identified: Milestone 10 planning (2026-07-22)
+Scheduled for: before M10 Phase 2 (the web history list consumes this endpoint)
+
+### Observation
+
+`WorkoutSessionServiceImpl.getHistory()` calls `findAll()`, then filters out
+IN_PROGRESS sessions and sorts by `startedAt` **in Java**:
+
+```java
+return sessionRepository.findAll().stream()
+        .filter(session -> session.getStatus() != WorkoutStatus.IN_PROGRESS)
+        .sorted(Comparator.comparing(WorkoutSession::getStartedAt).reversed())
+        .toList();
+```
+
+Every session row is loaded into memory on every request. The `WorkoutSession`
+table is indexed on both `status` and `startedAt`; neither index is used.
+
+### Why this is currently acceptable
+
+V1 is single-user and the dataset is small (a heavy lifter produces a few hundred
+sessions a year, and the summary payload is tiny). Nothing is slow today.
+
+### Recommended implementation
+
+A derived or `@Query` finder that filters and orders in SQL. This also makes
+pagination trivial to add later, which the current shape does not.
+
+---
+
+## TD-004 — WorkoutSet deletions never reach the backend
+
+Status: Open — decision required
+
+Milestone identified: Milestone 9 Phase 2 (deferred twice, by agreement)
+Scheduled for: before M10 ships (it becomes user-visible there)
+
+### Observation
+
+`Routine` and `RoutineExercise` are soft-deleted, so the synchronization engine
+can still see and propagate the deletion. `WorkoutSet` is **hard-deleted**: once
+the row is gone locally there is no record that it ever existed, so the backend
+is never told. `WorkoutRepositoryImpl.deleteSet` therefore deliberately does not
+request a sync — there would be nothing to upload.
+
+### Impact
+
+The backend retains sets the device has deleted. This is invisible while Android
+is the only client. It stops being invisible in M10: the web history view would
+display sets that the phone does not, for the same user and the same workout.
+
+### Options compared (M9 Phase 2 planning)
+
+| Approach | Complexity | Storage | Multi-device |
+|---|---|---|---|
+| Tombstone table | Medium — one entity, one DAO, deletes must write two tables transactionally | Smallest; rows removed after upload | Best — an append-only delete log is what a future pull-sync needs |
+| Soft-delete flag on WorkoutSet | Lowest; consistent with existing entities | Rows never leave the DB | Contaminates every history read path with `isDeleted = 0` |
+| Pending-delete queue | Highest — a second sync mechanism alongside the status column | Small | Overkill for one-way V1 sync |
+
+### Recommendation
+
+Tombstone table. The soft-delete flag is cheaper today but adds a filter to every
+history query, and history correctness is this project's highest priority.
+
+Record the outcome as an ADR (ADR-0007) once decided: it changes synchronization
+semantics, not just an implementation detail.
+
+---
+
+## TD-005 — No physical-device verification
+
+Status: Open — environment limitation
+
+Milestone identified: Milestone 9 finalization
+Scheduled for: M11, before M12 release
+
+### Observation
+
+All Android runtime verification has been performed on an emulator (Pixel 6,
+API 35). The application has never run on physical hardware.
+
+Emulator verification did prove the parts most likely to differ from JVM tests:
+`SyncWorker` executing in a real process, Hilt worker-factory injection, the
+platform cleartext policy, and synchronization to PostgreSQL over a LAN address
+(`192.168.1.7`) rather than the emulator loopback — the same routing a phone
+would use.
+
+### What remains unverified
+
+A phone joining Wi-Fi and reaching the host; real-device performance, battery
+behaviour under WorkManager, and doze-mode effects on background sync; behaviour
+across manufacturers' background-execution restrictions, which are stricter than
+stock Android.
+
+### Recommended implementation
+
+One full pass of the core flows on a physical device, including a background sync
+after the screen has been off long enough for doze to apply.
+
+---
+
+## TD-006 — No release signing configuration
+
+Status: Open — blocks distribution
+
+Milestone identified: Milestone 9 finalization
+Scheduled for: M12 (Version 1 Release)
+
+### Observation
+
+`android/app/build.gradle.kts` defines no `signingConfig`. `assembleRelease`
+produces `app-release-unsigned.apk`, which cannot be installed on any device.
+
+There is therefore currently **no build that can be distributed to anyone**,
+including the developer's own phone (which uses the debug build).
+
+### Recommended implementation
+
+A release signing config sourced from `local.properties` or environment
+variables — never committed keystore credentials — plus a documented release
+procedure in the README.
+
+### Related
+
+The release build also has no HTTPS backend to point at: `API_BASE_URL` defaults
+to a development address and release builds forbid cleartext (correctly). A real
+release requires a deployed backend behind TLS.
+
+---
+
+## TD-007 — Backend has no CORS configuration
+
+Status: Open — blocks M10
+
+Milestone identified: Milestone 10 planning (2026-07-22)
+Scheduled for: before M10 Phase 2
+
+### Observation
+
+Nothing in `backend/src/main` configures CORS (no `addCorsMappings`,
+`@CrossOrigin`, or `CorsConfigurationSource`). A browser client served from a
+different origin — the Vite dev server on `:5173` — fails at the preflight
+request, so **no web request succeeds at all** until this exists.
+
+### Recommended implementation
+
+A `WebMvcConfigurer` permitting the development origin and, later, the deployed
+web origin. `GET` only and no credentials for V1, since the web client is
+read-only and there is no authentication.
+
+---
+
+## TD-008 — History means different things to Android and the backend
+
+Status: Open — decision required
+
+Milestone identified: Milestone 10 planning (2026-07-22)
+Scheduled for: before M10 Phase 2
+
+### Observation
+
+The two clients disagree on what "history" contains:
+
+* Android (`WorkoutHistoryDao`): `WHERE status = 'COMPLETED'` — DISCARDED
+  workouts are deliberately hidden from the user.
+* Backend (`WorkoutSessionServiceImpl.getHistory()`): filters out only
+  IN_PROGRESS, so **DISCARDED sessions are returned**.
+
+A web client rendering that endpoint verbatim would show abandoned workouts that
+the phone hides — the same user seeing two different histories.
+
+### Decision (2026-07-22)
+
+The **backend filters to COMPLETED**, matching Android and ADR-0001. History gets
+one definition across every client; duplicating the filter in each frontend is
+maintenance burden that will eventually drift. A `?status=` parameter remains a
+reasonable future enhancement if discarded workouts ever become user-visible.
+
+### Recommended implementation
+
+Fold into TD-003 — the same query is being rewritten to filter in SQL.
+
+---
+
+## TD-009 — RoutineEntity lacks description and displayOrder
+
+Status: Open — note only
+
+Milestone identified: Milestone 9 Phase 1
+Scheduled for: whenever routine descriptions or manual ordering reach the UI
+
+### Observation
+
+The backend's routine contract accepts optional `description` and `displayOrder`.
+The Room `RoutineEntity` has neither, because no screen in ANDROID_FLOW edits
+them, so the sync mappers send both as null. This is contract-valid — both are
+optional server-side — but routine ordering cannot round-trip.
+
+### Recommended implementation
+
+Add the columns (with a Room migration, per CODING_STANDARDS §20b) at the same
+time the UI gains the corresponding controls, not before.

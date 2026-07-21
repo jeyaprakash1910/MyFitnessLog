@@ -4,18 +4,21 @@ An **offline-first** workout tracking application. The backend is the permanent
 source of truth; the Android app keeps a synchronized local copy so it works
 fully offline.
 
-> Status (July 21, 2026): Android client complete (exercise library, routine
-> management, workout logging with timers, and read-only workout history); the
-> backend implements the full write/read REST contract with idempotent sync
-> semantics; **one-way background synchronization (Android → backend) is
-> implemented and tested (M9)**. Next milestone: the read-only web client (M10).
-> See [docs/ROADMAP.md](docs/ROADMAP.md) for the authoritative status.
+> Status (July 22, 2026): the Android app is **usable day to day** — build
+> routines, log workouts offline, and have them synchronize to the backend
+> automatically in the background (M9), verified end to end on an emulator
+> against a live backend and PostgreSQL. The backend implements the full
+> write/read REST contract with idempotent sync semantics. Next milestone: the
+> read-only web client (M10).
+> See [docs/ROADMAP.md](docs/ROADMAP.md) for the authoritative status and
+> [docs/TECH_DEBT.md](docs/TECH_DEBT.md) for known limitations — notably that
+> there is no signed release build yet, and no authentication (V2).
 
 ## Repository layout
 
 ```
 backend/   Spring Boot REST API (Java 21, Maven, PostgreSQL, Flyway)   — M1–M2, M8 done
-android/   Android app (Kotlin, Compose, Room, Hilt, Retrofit, WorkManager) — M3–M7, M9 done
+android/   Android app (Kotlin, Compose, Room, Hilt, Retrofit, WorkManager) — M3–M7, M9, M9.5 done
 web/       React read-only history client                              — not started (M10)
 docs/      Product, architecture, database, API, sync, coding standards, ADRs
 ```
@@ -31,7 +34,9 @@ docs/      Product, architecture, database, API, sync, coding standards, ADRs
   snapshot. The single V1 user is attached server-side. Interactive docs at
   `/swagger-ui/index.html`.
 - **Android (offline-first, Room is the source of truth):**
-  - Exercise library: download + local cache, list, local search, category filter.
+  - Exercise library: its own tab — download + local cache, list, local search,
+    category filter. Downloaded on demand (categories then exercises, in that
+    order — exercises reference categories by foreign key).
   - Routine management: list, detail, create/edit (add/remove/reorder exercises,
     edit targets), duplicate, soft-delete.
   - Workout logging: start/resume a workout from a routine (immutable snapshot of
@@ -46,14 +51,15 @@ docs/      Product, architecture, database, API, sync, coding standards, ADRs
     (the UI never waits on the network), with idempotent replay, exponential
     backoff, failure isolation per aggregate, and recovery of work stranded by
     process death.
-- **301 automated Android tests** (JVM/Robolectric) + **86 backend tests**
-  (JUnit 5/MockMvc over real PostgreSQL, incl. an end-to-end sync-graph
-  idempotency proof) pass — 387 total. Two of the Android tests drive the real
-  sync stack against a running backend and skip automatically when none is
-  reachable.
+- **309 automated Android tests** (305 JVM/Robolectric + 4 instrumented, the
+  latter needing an emulator) + **86 backend tests** (JUnit 5/MockMvc over real
+  PostgreSQL, incl. an end-to-end sync-graph idempotency proof) pass — 395
+  total. Two of the Android tests drive the real sync stack against a running
+  backend and skip automatically when none is reachable.
 
-Not yet built: the web client (M10), bidirectional/pull synchronization, and
-deletion propagation for hard-deleted workout sets. See the roadmap.
+Not yet built: the web client (M10), authentication (V2), bidirectional/pull
+synchronization, and deletion propagation for hard-deleted workout sets
+(TD-004). See the roadmap and technical debt register.
 
 ## Documentation (read these first)
 

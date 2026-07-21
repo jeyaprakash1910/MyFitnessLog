@@ -32,7 +32,8 @@ This document describes the full Version 1 flow. Status of each screen today:
 | Home (routine list) | ✅ Implemented |
 | Routine Details | ✅ Implemented (Edit + Start Workout; no per-set history yet) |
 | Edit Routine | ✅ Implemented (name, add/remove/reorder exercises, edit targets) |
-| Exercise Search / Picker | ✅ Implemented as the "add exercise to routine" picker |
+| Exercise Library (browse) | ✅ Implemented as the "Exercises" tab (list, search, category filter). Routed in M9.5 — the screen existed from M4 but was unreachable. |
+| Exercise Search / Picker | ✅ Implemented as the "add exercise to routine / workout" picker; downloads the library on open |
 | Workout (active logging) | ✅ Implemented (sets add/edit/delete/toggle, complete, discard) |
 | Manual (ad-hoc) workout | ✅ Implemented (start with no routine; add exercises via the picker) |
 | Rest Timer + Workout timer | ✅ Implemented (elapsed derived; rest countdown transient) |

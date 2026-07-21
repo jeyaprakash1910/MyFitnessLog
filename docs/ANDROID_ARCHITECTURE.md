@@ -366,8 +366,10 @@ before synchronization is introduced.
 17. Navigation Conventions
 
 - Single Activity + Navigation Compose. Home hosts the routine list (ANDROID_FLOW
-  defines Home as routines). Top-level destinations (Home/Workout/History/
-  Settings) keep the bottom navigation bar.
+  defines Home as routines). Top-level destinations (Home/Workout/Exercises/
+  History/Settings) keep the bottom navigation bar. Exercises was added in M9.5:
+  the browsable library screen existed from M4 but had never been routed, which
+  is why nothing downloaded the exercise catalogue.
 - Drill-down destinations (routine detail/edit/add-exercise) render full-screen:
   the bottom bar is hidden and the top bar shows a back arrow.
 - Feature routes live in the feature (e.g. RoutineRoutes, WorkoutRoutes); the app

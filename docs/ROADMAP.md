@@ -146,15 +146,17 @@ M6 Workout Logging (Android)	✅ Completed (all 5 phases)
 M7 Workout History (Android)	✅ Completed (all 4 phases)
 M8 Backend Sync APIs	✅ Completed (all 6 phases)
 M9 Synchronization	✅ Completed (all 4 phases)
+M9.5 Dogfooding Readiness	✅ Completed (T1–T4)
 M10 Web Application	⬜ Next
-M11 Testing & Polish	⬜ Pending
+M11 Hardening & Polish (continuous)	🔶 Ongoing from M9.5
 M12 Version 1 Release	⬜ Pending
 
 Current milestone: M10 (Web Application).
-Test count: 301 automated Android tests (JVM/Robolectric) + 86 backend tests
-(JUnit 5/MockMvc over real PostgreSQL) = 387 passing. Two Android tests
-(LiveBackendSyncTest) run the real sync stack against a running backend and skip
-automatically when none is reachable.
+Test count: 309 automated Android tests (305 JVM/Robolectric + 4 instrumented,
+the latter requiring an emulator) + 86 backend tests (JUnit 5/MockMvc over real
+PostgreSQL) = 395 passing. Two Android tests (LiveBackendSyncTest) run the real
+sync stack against a running backend and skip automatically when none is
+reachable.
 Database version: Android Room v3 (unchanged by M9 — sync needed no schema
 change); backend Flyway v4 (adds the default-user seed).
 Backend: full write/read APIs per API_SPECIFICATION.md.
@@ -175,10 +177,9 @@ synchronization could not have worked on any device (all 301 JVM tests passed
 regardless — Robolectric has no network security policy). Fixed by a debug-only
 network security config; release builds are unchanged.
 
-Known gap, pre-existing and unrelated to M9: the exercise library is downloaded
-only by ExerciseListViewModel, and no navigation route reaches that screen, so
-on a fresh install the exercise picker is permanently empty and no exercise can
-be added to a routine or workout. Tracked for M11.
+That run also exposed a pre-existing gap unrelated to M9: nothing downloaded the
+exercise library, so the picker was permanently empty on a fresh install. Both
+defects are fixed in M9.5.
 
 ⸻
 
@@ -404,6 +405,41 @@ Not verified: no on-device run — see the deferred close-out in section 4.
 
 ⸻
 
+13b. M9.5 — Dogfooding Readiness ✅ Completed
+
+Goal: make the application safe and complete enough to use daily, so that
+Milestone 10 and later polish are driven by real usage rather than speculation.
+
+Not a planned milestone. It exists because preparing to use the app in earnest
+exposed defects sitting inside milestones already marked complete — the kind
+only found by running the thing.
+
+Delivered:
+
+* T1 — Removed `fallbackToDestructiveMigration()` from Room and established a
+  migration policy: every schema change now ships with a `Migration` and a
+  data-preservation test. Previously the next schema bump would have silently
+  deleted the entire local database, including any workout not yet synchronized.
+* T2 — Fixed the exercise library. Two defects: nothing ever downloaded it (the
+  only caller was a screen absent from the navigation graph), and the download
+  path refreshed exercises without their categories, violating a foreign key on
+  a cold database. `refreshLibrary()` now owns the ordering and the unsafe entry
+  point was removed. `ExerciseListScreen` was wired in as a fifth destination.
+* T3 — Made the backend URL configurable via `apiBaseUrl` in `local.properties`,
+  defaulting to the emulator loopback, so syncing from a physical device is a
+  configuration change rather than a source edit.
+* T4 — Brought the documentation back in line with the implementation.
+
+Exit criteria (met): a fresh install can download the exercise library, build a
+routine, log a complete workout with sets, and synchronize it to PostgreSQL;
+local data survives a schema change; no developer-specific configuration is
+committed.
+
+Verified on an emulator against a live backend and PostgreSQL. Not verified:
+synchronization from physical Android hardware (see TECH_DEBT TD-005).
+
+⸻
+
 14. M10 — Web Application ⬜ Pending
 
 Goal: build the read-only web client for viewing workout history.
@@ -418,20 +454,32 @@ on desktop and tablet.
 
 ⸻
 
-15. M11 — Testing & Polish ⬜ Pending
+15. M11 — Hardening & Polish 🔶 Ongoing
 
-Goal: improve quality and prepare for release.
+Goal: improve quality and prepare for release, driven by real usage.
 
-Deliverables:
+Reframed after M9.5. This is no longer a single cleanup milestone at the end of
+the project: the application is now in daily use, so issues are found and fixed
+continuously rather than batched. Two of its original deliverables have already
+landed early — the backend test gap was closed alongside M8 (86 tests), and the
+emulator pass of the core flows was completed during M9 finalization.
 
-* Backend: unit and integration tests (the current backend test gap is closed
-  here at the latest, ideally earlier alongside M8).
-* Android: consolidated UI, repository, and ViewModel testing; at least one full
-  on-device / emulator pass of the core flows.
-* General: performance improvements, bug fixes, documentation updates.
+Ongoing inputs:
 
-Exit criteria: critical bugs resolved; core workflows verified; documentation
-matches implementation.
+* Observations recorded while actually using the app (UX friction, bugs,
+  workflow annoyances, performance).
+* Items from the technical debt register (TECH_DEBT.md) as they become
+  relevant or blocking.
+
+Remaining deliverables:
+
+* Android: consolidated UI, repository, and ViewModel testing; run the
+  instrumented suites regularly now that an emulator exists.
+* A physical-device pass of the core flows (TD-005).
+* Performance improvements, bug fixes, documentation consistency.
+
+Exit criteria: critical bugs resolved; core workflows verified on real hardware;
+documentation matches implementation.
 
 ⸻
 
@@ -479,12 +527,33 @@ Version 5: Nutrition tracking, analytics dashboard, AI insights, recommendations
 
 19. Success Criteria
 
-Version 1 is considered complete when:
+Version 1 is considered complete when all of the following hold. Status as of
+2026-07-22:
 
-* Users can create workout routines.
-* Users can perform complete workouts offline.
-* Workout history is permanently stored.
-* Android synchronizes with the backend automatically.
-* Workout history is viewable on the web.
-* All documentation is consistent with the implementation.
-* The application is stable, maintainable, and ready for future expansion.
+* ✅ Users can create workout routines.
+      Verified on an emulator: routine created, exercises added with targets.
+* ✅ Users can perform complete workouts offline.
+      Achieved in M9.5 (T2). Previously blocked — the exercise picker was
+      permanently empty on a fresh install, so no exercise could be added to any
+      workout. Now verified end to end on a fresh install: library downloaded,
+      exercise added, set logged, workout completed.
+* ✅ Workout history is permanently stored.
+      Room is the on-device record (durable across restarts, and no longer at
+      risk from a destructive migration after T1); the backend holds the
+      permanent copy in PostgreSQL.
+* ✅ Android synchronizes with the backend automatically.
+      One-way (Android → backend). SyncWorker observed running in a real process
+      and rows confirmed in PostgreSQL.
+* ⬜ Workout history is viewable on the web.
+      M10, not started.
+* 🔶 All documentation is consistent with the implementation.
+      Aligned as of M9.5 T4; requires maintenance as M10 lands.
+* 🔶 The application is stable, maintainable, and ready for future expansion.
+      Open items tracked in TECH_DEBT.md — notably deletion propagation
+      (TD-004), physical-device verification (TD-005), and release signing
+      (TD-006).
+
+Explicitly out of scope for V1 (see §18): authentication and multi-user support
+are Version 2. V1 attaches a single default user server-side, so a V1 release
+means personal or trusted-group use on a private backend, not public
+distribution.
