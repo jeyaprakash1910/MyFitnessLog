@@ -174,3 +174,126 @@ dependencies {
     androidTestImplementation(libs.hilt.android.testing)
     kspAndroidTest(libs.hilt.compiler)
 }
+
+// ---------------------------------------------------------------------------
+// Device safety guard
+// ---------------------------------------------------------------------------
+//
+// Gradle's `connectedAndroidTest` installs an app + test APK and uninstalls both
+// afterwards. On 2026-07-22 that cleanup ran against the developer's daily-use
+// phone and deleted the app's Room database — two routines and four workout
+// sessions. Nothing was permanently lost (it had all synced, and the backend is
+// the source of truth per ADR-0003), but synchronization is one-way, so the
+// phone could not get its history back.
+//
+// The rule that followed — "never point connectedAndroidTest at the daily-use
+// device" — would otherwise have stayed a convention in a document. This makes
+// it structural: device-lifecycle tasks refuse to run against anything that is
+// not an emulator.
+//
+// Note what is *not* being prevented. The instrumented tests pass perfectly well
+// on real hardware; all six do. It is the install/uninstall lifecycle that is
+// unsafe on a device holding irreplaceable data, which is why the error points
+// at `am instrument` — it runs the same tests and uninstalls nothing.
+//
+// Escape hatch: -PallowPhysicalDeviceTests=true, deliberately verbose so that
+// using it is a decision rather than a reflex.
+//
+// Everything the check needs is resolved at configuration time into plain
+// serializable values; the execution-time action closes over nothing but those.
+// Capturing build-script functions here would break the configuration cache.
+
+run {
+    val adbPath = android.sdkDirectory.resolve("platform-tools/adb").absolutePath
+    val overrideRequested =
+        providers.gradleProperty("allowPhysicalDeviceTests").orNull == "true"
+    val explicitSerial = providers.environmentVariable("ANDROID_SERIAL").orNull
+
+    // connected*AndroidTest installs then uninstalls; uninstall* removes outright.
+    val deviceLifecycleTask = Regex("^(connected.*AndroidTest|uninstall.*)$")
+
+    tasks.matching { deviceLifecycleTask.matches(it.name) }.configureEach {
+        val taskName = name
+        doFirst {
+            if (overrideRequested) {
+                logger.warn(
+                    "\n[device-guard] OVERRIDDEN for '$taskName'. This task can uninstall " +
+                        "the app, which deletes its database. Be sure nothing on the target " +
+                        "device is irreplaceable.\n",
+                )
+                return@doFirst
+            }
+
+            val adb = File(adbPath)
+            if (!adb.canExecute()) {
+                logger.warn("[device-guard] adb not found at $adbPath; skipping the check.")
+                return@doFirst
+            }
+
+            fun adb(vararg args: String): String = try {
+                val process = ProcessBuilder(listOf(adb.absolutePath) + args)
+                    .redirectErrorStream(true)
+                    .start()
+                val text = process.inputStream.bufferedReader().readText()
+                process.waitFor()
+                text
+            } catch (e: Exception) {
+                ""
+            }
+
+            val targets = if (!explicitSerial.isNullOrBlank()) {
+                listOf(explicitSerial)
+            } else {
+                adb("devices").lineSequence().drop(1).mapNotNull { line ->
+                    val parts = line.trim().split(Regex("\\s+"))
+                    if (parts.size >= 2 && parts[1] == "device") parts[0] else null
+                }.toList()
+            }
+            if (targets.isEmpty()) return@doFirst
+
+            // The serial alone is not enough: a physical device reached over
+            // wireless debugging also gets an adb-style serial, so the build
+            // properties are the authority and the serial is only a fast path.
+            val physical = targets.filterNot { serial ->
+                serial.startsWith("emulator-") ||
+                    adb("-s", serial, "shell", "getprop", "ro.kernel.qemu").trim() == "1" ||
+                    adb("-s", serial, "shell", "getprop", "ro.build.characteristics")
+                        .contains("emulator") ||
+                    adb("-s", serial, "shell", "getprop", "ro.product.model").trim()
+                        .startsWith("sdk_")
+            }
+            if (physical.isEmpty()) return@doFirst
+
+            val described = physical.joinToString {
+                val model = adb("-s", it, "shell", "getprop", "ro.product.model").trim()
+                if (model.isEmpty()) it else "$it ($model)"
+            }
+
+            throw GradleException(
+                """
+                |
+                |'$taskName' would run against a physical device: $described
+                |
+                |This task installs and uninstalls APKs, and an uninstall deletes the
+                |app's database. On a daily-use phone that is real training data, and
+                |because synchronization is one-way it cannot be restored from the
+                |backend.
+                |
+                |Run it on the emulator instead:
+                |    ANDROID_SERIAL=emulator-5554 ./gradlew $taskName
+                |
+                |To exercise instrumented tests on the phone without the uninstall step:
+                |    adb install -r app/build/outputs/apk/debug/app-debug.apk
+                |    adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+                |    adb shell am instrument -w com.myfitnesslog.test/com.myfitnesslog.HiltTestRunner
+                |
+                |Back up first, whatever you do:
+                |    adb exec-out run-as com.myfitnesslog cat databases/myfitnesslog.db > backup.db
+                |
+                |If you are certain, re-run with -PallowPhysicalDeviceTests=true
+                |
+                """.trimMargin(),
+            )
+        }
+    }
+}
