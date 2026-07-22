@@ -1,8 +1,8 @@
 # Technical Debt Register
 
 Project: MyFitnessLog
-Version: 1.0
-Last Updated: July 22, 2026
+Version: 1.2
+Last Updated: July 22, 2026 (M10 complete; TD-010 added)
 
 This document records known, accepted technical debt: deliberate limitations that are not defects in the current milestone but must be addressed in a later milestone. Each item states the observation, why it is currently acceptable, the recommended future implementation, the documentation that must change first, and when it is scheduled.
 
@@ -14,13 +14,14 @@ This register holds debt that outlives a single task. Short-lived working items 
 |---|---|---|---|
 | TD-001 | 405 returned as 500 | Open — deferred | — |
 | TD-002 | Category filtering in service, not repository | Open — note only | — |
-| TD-003 | History endpoint scans the whole table | Open — deferred | M10 (perf) |
-| TD-004 | WorkoutSet deletions never reach the backend | **Decision required** | M10 (correctness) |
+| TD-003 | History endpoint scans the whole table | ✅ Resolved 2026-07-22 | — |
+| TD-004 | WorkoutSet deletions never reach the backend | ✅ Resolved 2026-07-22 (ADR-0007) | — |
 | TD-005 | No physical-device verification | Open — environment | M12 |
 | TD-006 | No release signing configuration | Open | **M12 (distribution)** |
-| TD-007 | Backend has no CORS configuration | Open | **M10 (hard blocker)** |
-| TD-008 | History differs between Android and backend | Decided, not implemented | M10 (correctness) |
+| TD-007 | Backend has no CORS configuration | ✅ Resolved 2026-07-22 | — |
+| TD-008 | History differs between Android and backend | ✅ Resolved 2026-07-22 | — |
 | TD-009 | RoutineEntity lacks description/displayOrder | Open — note only | — |
+| TD-010 | Workout history is not paginated | Open — deferred | M11 (scaling) |
 
 ---
 
@@ -95,7 +96,7 @@ logic remains in the service. YAGNI is the governing principle.
 
 ## TD-003 — Backend history endpoint scans the whole table
 
-Status: Open — deferred
+Status: ✅ Resolved 2026-07-22 (M10 prerequisites)
 
 Milestone identified: Milestone 10 planning (2026-07-22)
 Scheduled for: before M10 Phase 2 (the web history list consumes this endpoint)
@@ -125,11 +126,23 @@ sessions a year, and the summary payload is tiny). Nothing is slow today.
 A derived or `@Query` finder that filters and orders in SQL. This also makes
 pagination trivial to add later, which the current shape does not.
 
+### Resolution
+
+`WorkoutSessionRepository.findByStatusOrderByStartedAtDesc(status, Pageable)`
+replaces the `findAll()` + Java stream. The `Pageable` parameter is what makes
+pagination a caller-side change rather than a rewrite; the service passes
+`Pageable.unpaged()` today.
+
+One assumption above was wrong and worth recording: the table was **not** indexed
+on `status` — V1 indexed `startedAt` alone. Flyway `V5` adds the composite
+`("status", "startedAt" DESC)` that this query actually needs, in the statement's
+own column order and direction.
+
 ---
 
 ## TD-004 — WorkoutSet deletions never reach the backend
 
-Status: Open — decision required
+Status: ✅ Resolved 2026-07-22 (M10 prerequisites) — see ADR-0007
 
 Milestone identified: Milestone 9 Phase 2 (deferred twice, by agreement)
 Scheduled for: before M10 ships (it becomes user-visible there)
@@ -163,6 +176,17 @@ history query, and history correctness is this project's highest priority.
 
 Record the outcome as an ADR (ADR-0007) once decided: it changes synchronization
 semantics, not just an implementation detail.
+
+### Resolution
+
+The tombstone table was chosen and implemented; **ADR-0007** records the decision
+and the alternatives. Room v4 adds `workout_set_tombstone` (additive migration
+`MIGRATION_3_4`), `WorkoutSetDao.deleteAndRecord` writes the delete and the
+tombstone in one transaction, and the sync engine gained a deletion phase that
+runs after the set uploads and before the session's terminal transition.
+
+Verified against a live backend and PostgreSQL: a set uploaded and then deleted
+is absent from the backend's snapshot while its sibling remains.
 
 ---
 
@@ -229,7 +253,7 @@ release requires a deployed backend behind TLS.
 
 ## TD-007 — Backend has no CORS configuration
 
-Status: Open — blocks M10
+Status: ✅ Resolved 2026-07-22 (M10 prerequisites)
 
 Milestone identified: Milestone 10 planning (2026-07-22)
 Scheduled for: before M10 Phase 2
@@ -247,11 +271,22 @@ A `WebMvcConfigurer` permitting the development origin and, later, the deployed
 web origin. `GET` only and no credentials for V1, since the web client is
 read-only and there is no authentication.
 
+### Resolution
+
+`CorsConfig` (a `WebMvcConfigurer`) maps `/api/**` with `GET` only, no
+credentials, and origins from `app.cors.allowed-origins` — defaulting to the Vite
+dev server, overridable per deployment, and disabled entirely when empty. A
+hardcoded origin was avoided so the deployed web origin needs no code change.
+
+Documented in API_SPECIFICATION §5b and verified both by test and by a real
+preflight over the wire (allowed origin → 200 with `Allow-Methods: GET`; unknown
+origin and write verbs → 403).
+
 ---
 
 ## TD-008 — History means different things to Android and the backend
 
-Status: Open — decision required
+Status: ✅ Resolved 2026-07-22 (M10 prerequisites)
 
 Milestone identified: Milestone 10 planning (2026-07-22)
 Scheduled for: before M10 Phase 2
@@ -279,6 +314,17 @@ reasonable future enhancement if discarded workouts ever become user-visible.
 
 Fold into TD-003 — the same query is being rewritten to filter in SQL.
 
+### Resolution
+
+Folded into TD-003 as planned: `getHistory()` now queries
+`findByStatusOrderByStartedAtDesc(COMPLETED, …)`, so the filter is one SQL
+predicate rather than a rule each client repeats. Recorded in
+API_SPECIFICATION §7 (Workout Sessions) as part of the endpoint contract.
+
+Note the small contract change this implies for existing consumers: the endpoint
+previously returned DISCARDED sessions and no longer does. Android is unaffected —
+it reads history from Room, and its DAO already filtered to COMPLETED.
+
 ---
 
 ## TD-009 — RoutineEntity lacks description and displayOrder
@@ -299,3 +345,52 @@ optional server-side — but routine ordering cannot round-trip.
 
 Add the columns (with a Room migration, per CODING_STANDARDS §20b) at the same
 time the UI gains the corresponding controls, not before.
+
+---
+
+## TD-010 — Workout history is not paginated
+
+Status: Open — deferred
+
+Milestone identified: Milestone 10 Phase 4 (2026-07-22)
+Scheduled for: M11, or whenever a real dataset makes it noticeable
+
+### Observation
+
+`GET /api/v1/workout-sessions` returns **every** completed session in one JSON
+array, and the web client renders all of them in one list. There is no `?page=`
+or `?size=` parameter and no windowing on the client.
+
+### Why this is currently acceptable
+
+V1 is single-user. The current dataset is 21 sessions; a heavy lifter produces a
+few hundred a year, and the summary payload is small (six fields, no nested
+data). Nothing is slow today, and the M10 measurements bear that out.
+
+### Impact as it grows
+
+Two separate costs, neither urgent:
+
+* The response grows linearly and is transferred in full on every load.
+* Rendering cost grows with it. The `Intl` formatter caching added in Phase 4
+  removed the sharpest edge here — formatting a 500-row list went from ~23 ms
+  (over a 16 ms frame budget) to ~0.6 ms — but the DOM node count still grows.
+
+### Recommended implementation
+
+Backend first: add `?page=` / `?size=` to the history endpoint. TD-003 already
+rewrote the query to take a `Pageable`, so the repository layer needs no change —
+only the controller and service signatures, plus the API specification.
+
+The web client is already shaped for it: `workoutKeys.history()` is a function so
+params can join the query key, and `WorkoutHistoryList` is a pure component that
+takes an array, so a paginated page passes one page's worth without the list or
+card changing. Client-side windowing is a separate, later option if a single
+page ever becomes large enough to matter.
+
+### Documentation that must change first
+
+* API_SPECIFICATION.md §7 — document the pagination parameters and the response
+  shape (array vs envelope). The choice between the two is the real decision;
+  an envelope is a breaking change for the Android client, which does not read
+  this endpoint today but might under a future pull-sync.

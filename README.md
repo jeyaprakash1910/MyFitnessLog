@@ -8,8 +8,9 @@ fully offline.
 > routines, log workouts offline, and have them synchronize to the backend
 > automatically in the background (M9), verified end to end on an emulator
 > against a live backend and PostgreSQL. The backend implements the full
-> write/read REST contract with idempotent sync semantics. Next milestone: the
-> read-only web client (M10).
+> write/read REST contract with idempotent sync semantics. The read-only web
+> client (M10) is complete: synchronized history and full workout detail render
+> in the browser, verified against real PostgreSQL data.
 > See [docs/ROADMAP.md](docs/ROADMAP.md) for the authoritative status and
 > [docs/TECH_DEBT.md](docs/TECH_DEBT.md) for known limitations — notably that
 > there is no signed release build yet, and no authentication (V2).
@@ -19,7 +20,7 @@ fully offline.
 ```
 backend/   Spring Boot REST API (Java 21, Maven, PostgreSQL, Flyway)   — M1–M2, M8 done
 android/   Android app (Kotlin, Compose, Room, Hilt, Retrofit, WorkManager) — M3–M7, M9, M9.5 done
-web/       React read-only history client                              — not started (M10)
+web/       React read-only history client (TypeScript, Vite, Tailwind)  — M10 done
 docs/      Product, architecture, database, API, sync, coding standards, ADRs
 ```
 
@@ -51,15 +52,21 @@ docs/      Product, architecture, database, API, sync, coding standards, ADRs
     (the UI never waits on the network), with idempotent replay, exponential
     backoff, failure isolation per aggregate, and recovery of work stranded by
     process death.
-- **309 automated Android tests** (305 JVM/Robolectric + 4 instrumented, the
-  latter needing an emulator) + **86 backend tests** (JUnit 5/MockMvc over real
-  PostgreSQL, incl. an end-to-end sync-graph idempotency proof) pass — 395
-  total. Two of the Android tests drive the real sync stack against a running
-  backend and skip automatically when none is reachable.
+- **Web history viewer** (read-only): the synchronized history list and full
+  workout detail — every snapshotted exercise and set with weight, reps,
+  category and RPE/RIR. Formatting is a verified mirror of the Android app's,
+  and decimal precision is preserved from PostgreSQL `NUMERIC` to rendered text
+  rather than being lost to JavaScript floats. Responsive from mobile to
+  desktop with zero axe WCAG 2.1 A/AA violations.
+- **540 automated tests** pass: **317 Android** (312 JVM/Robolectric + 5
+  instrumented, the latter needing an emulator), **90 backend** (JUnit 5/MockMvc
+  over real PostgreSQL, incl. an end-to-end sync-graph idempotency proof), and
+  **133 web** (Vitest + React Testing Library). Seven of them drive the real
+  stack against a running backend and skip automatically when none is reachable.
 
-Not yet built: the web client (M10), authentication (V2), bidirectional/pull
-synchronization, and deletion propagation for hard-deleted workout sets
-(TD-004). See the roadmap and technical debt register.
+Not yet built: authentication and multi-user support (V2), bidirectional/pull
+synchronization, and history pagination (TD-010). See the roadmap and technical
+debt register.
 
 ## Documentation (read these first)
 

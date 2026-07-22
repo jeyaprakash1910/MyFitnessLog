@@ -47,7 +47,7 @@ Repository layout:
 * backend/ — Spring Boot API (Java 21, Maven)
 * android/ — Android app (Kotlin, single Gradle module)
 * docs/    — architecture, database, API, sync, coding standards, ADRs
-* web/     — not started
+* web/     — React + TypeScript + Vite read-only history client (M10, complete)
 
 Backend status (M1–M2 and M8 Backend Sync APIs complete):
 
@@ -79,7 +79,7 @@ Android status (M3–M7 and M9 complete; next milestone is M10 Web Application):
 * Foundation: single Gradle module; Hilt DI, Jetpack Compose, Navigation Compose,
   Room, Retrofit + OkHttp + kotlinx.serialization, Material 3, version catalog,
   Gradle wrapper. Android SDK installed locally; NO AVD/emulator.
-* Room database version 3, exportSchema on (schemas v1/v2/v3 committed):
+* Room database version 4, exportSchema on (schemas v1–v4 committed):
   - Reference (download-only): ExerciseCategory, Exercise.
   - Routine templates (mutable): Routine, RoutineExercise.
   - Workout history (mutable, immutable once completed): WorkoutSession,
@@ -147,18 +147,19 @@ M7 Workout History (Android)	✅ Completed (all 4 phases)
 M8 Backend Sync APIs	✅ Completed (all 6 phases)
 M9 Synchronization	✅ Completed (all 4 phases)
 M9.5 Dogfooding Readiness	✅ Completed (T1–T4)
-M10 Web Application	⬜ Next
+M10 Web Application	✅ Completed (prerequisites + Phases 1–4)
 M11 Hardening & Polish (continuous)	🔶 Ongoing from M9.5
 M12 Version 1 Release	⬜ Pending
 
-Current milestone: M10 (Web Application).
-Test count: 309 automated Android tests (305 JVM/Robolectric + 4 instrumented,
-the latter requiring an emulator) + 86 backend tests (JUnit 5/MockMvc over real
-PostgreSQL) = 395 passing. Two Android tests (LiveBackendSyncTest) run the real
+Current milestone: M11 (Hardening & Polish); M10 is complete.
+Test count: 317 automated Android tests (312 JVM/Robolectric + 5 instrumented,
+the latter requiring an emulator) + 90 backend tests (JUnit 5/MockMvc over real
+PostgreSQL) + 133 web tests (Vitest/RTL, 4 of them live-backend) = 540 passing. Three Android tests (LiveBackendSyncTest) run the real
 sync stack against a running backend and skip automatically when none is
 reachable.
-Database version: Android Room v3 (unchanged by M9 — sync needed no schema
-change); backend Flyway v4 (adds the default-user seed).
+Database version: Android Room v4 (adds `workout_set_tombstone` for set-deletion
+propagation, ADR-0007); backend Flyway v5 (V4 seeds the default user, V5 indexes
+WorkoutSession on status + startedAt for the history query).
 Backend: full write/read APIs per API_SPECIFICATION.md.
 Sync: one-way Android → backend, complete (transport, engine, scheduling,
 triggers). Deferred within M9: deletion propagation for hard-deleted workout
@@ -440,17 +441,60 @@ synchronization from physical Android hardware (see TECH_DEBT TD-005).
 
 ⸻
 
-14. M10 — Web Application ⬜ Pending
+14. M10 — Web Application ✅ Completed
+
+Prerequisites ✅ Completed 2026-07-22 — backend and sync work that had to land
+before a second client could exist, done as one task ahead of any React code:
+
+* TD-007 — CORS. `CorsConfig` permits configured browser origins, GET only, no
+  credentials. Without it no web request would have succeeded at all.
+* TD-003 — the history query filters and orders in SQL via a `Pageable` finder
+  instead of loading every session and sorting in Java. Flyway V5 adds the
+  composite index it needs (the table was never indexed on `status`).
+* TD-008 — history is now defined once, on the backend: COMPLETED only. The
+  endpoint previously returned DISCARDED sessions, which would have shown the
+  web user workouts their phone hides.
+* TD-004 — workout-set deletions reach the backend, via tombstones (ADR-0007,
+  Room v4). Previously a set deleted on the phone lived on in PostgreSQL — the
+  divergence would have become user-visible the moment a second client read it.
+
+Verified end to end against a running backend and PostgreSQL, not only by test.
 
 Goal: build the read-only web client for viewing workout history.
 
-Deliverables: React app, workout history page, workout detail page, responsive
-layout, API integration.
+Delivered across four reviewed phases:
+
+* Phase 1 — Foundation: Vite + React + TypeScript under `web/`, Tailwind, ESLint
+  + Prettier, React Router, validated environment configuration, and a typed
+  Axios client with centralized error normalization. Its defining decision is
+  decimal-safe parsing: `weight`/`rpe`/`rir` are read as exact strings from the
+  raw response text, because `JSON.parse` would silently turn `102.50` into
+  `102.5` and discard the scale preserved end to end since M9.
+* Phase 2 — History list: TanStack Query with hierarchical keys, loading/empty/
+  error states, retry matching the API client, and formatting mirroring Android.
+  Filtering and ordering are left to the backend, never re-applied client-side.
+* Phase 3 — Workout detail: the full nested snapshot in a single request, sets as
+  a semantic table, and Not Found for anything outside the history contract —
+  matching Android's existing `WorkoutDetailUiState.NotFound`.
+* Phase 4 — Responsive layout, accessibility and polish: one column from 375 px
+  to 1280 px, a scrollable sets table, corrected heading hierarchy, shared focus
+  styling, WCAG-AA contrast, per-route document titles, and cached `Intl`
+  formatters.
+
+Two properties are worth recording because they were measured, not assumed:
+formatting output is **identical to Android's Kotlin** across 33 fixtures (run
+through the real `HistoryFormatting.kt`), and decimal scale survives from a
+PostgreSQL `NUMERIC` to the rendered DOM.
 
 Depends on: M8 (endpoints) and M9 (data actually synced to the backend).
 
-Exit criteria: history matches backend data; details render correctly; responsive
-on desktop and tablet.
+Exit criteria (met): history matches backend data, verified live (21 real
+sessions, COMPLETED only, newest first); details render correctly from real
+snapshots; responsive with zero horizontal overflow at 375/768/1280 px and **0
+axe-core WCAG 2.1 A/AA violations**, verified in Chrome.
+
+Not verified: Firefox/Safari, a real screen-reader pass, physical devices.
+Deferred: pagination (TD-010).
 
 ⸻
 
@@ -476,6 +520,8 @@ Remaining deliverables:
 * Android: consolidated UI, repository, and ViewModel testing; run the
   instrumented suites regularly now that an emulator exists.
 * A physical-device pass of the core flows (TD-005).
+* Web: pagination for the history list (TD-010); a cross-browser pass beyond
+  Chromium; a real screen-reader pass. None block daily use.
 * Performance improvements, bug fixes, documentation consistency.
 
 Exit criteria: critical bugs resolved; core workflows verified on real hardware;
@@ -544,8 +590,10 @@ Version 1 is considered complete when all of the following hold. Status as of
 * ✅ Android synchronizes with the backend automatically.
       One-way (Android → backend). SyncWorker observed running in a real process
       and rows confirmed in PostgreSQL.
-* ⬜ Workout history is viewable on the web.
-      M10, not started.
+* ✅ Workout history is viewable on the web.
+      Achieved in M10. Verified against real synchronized data: 21 sessions
+      rendered from PostgreSQL through the live backend, with workout detail,
+      responsive layout and zero WCAG 2.1 A/AA violations.
 * 🔶 All documentation is consistent with the implementation.
       Aligned as of M9.5 T4; requires maintenance as M10 lands.
 * 🔶 The application is stable, maintainable, and ready for future expansion.
