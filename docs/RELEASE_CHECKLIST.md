@@ -284,6 +284,16 @@ git push origin main --follow-tags
 
 - [ ] Push verified on the remote (`git ls-remote --tags origin`)
 - [ ] Keystore backup still current
+- [ ] GitHub Release published against the **existing** tag:
+
+      ```bash
+      gh release create vX.Y.Z --title "…" --notes-file docs/VX_RELEASE_NOTES.md --verify-tag
+      ```
+
+      Always pass `--verify-tag`. Without it `gh` creates a missing tag rather
+      than failing, so a typo publishes a release pointing at whatever `main`
+      happens to be.
+- [ ] Release verified: not a draft, and the asset list is what you intended
 
 ---
 
