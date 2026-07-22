@@ -19,7 +19,12 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import com.myfitnesslog.core.data.local.WorkoutStatus
+import com.myfitnesslog.feature.exercise.data.local.ExerciseEntity
+import com.myfitnesslog.feature.workout.data.local.WorkoutExerciseEntity
+import com.myfitnesslog.feature.workout.data.local.WorkoutSessionEntity
 import java.io.IOException
+import java.time.Instant
 import java.util.UUID
 
 /**
@@ -36,6 +41,16 @@ class ExerciseRepositoryImplTest {
 
     private val categoryId = UUID.randomUUID()
     private val benchId = UUID.randomUUID()
+    private val legsCategoryId = UUID.randomUUID()
+    private val inclineId = UUID.randomUUID()
+
+    private val NOW: Instant = Instant.parse("2026-07-22T09:00:00Z")
+
+    private fun inclineDto(name: String) = ExerciseDto(
+        id = inclineId.toString(),
+        categoryId = categoryId.toString(),
+        name = name,
+    )
 
     @Before
     fun setUp() = runTest {
@@ -51,6 +66,8 @@ class ExerciseRepositoryImplTest {
         categoryApi = StubCategoryApi()
         repository = ExerciseRepositoryImpl(
             dao = database.exerciseDao(),
+            categoryDao = database.exerciseCategoryDao(),
+            database = database,
             api = api,
             categoryRepository = ExerciseCategoryRepositoryImpl(
                 dao = database.exerciseCategoryDao(),
@@ -188,6 +205,183 @@ class ExerciseRepositoryImplTest {
         cold.database.close()
     }
 
+    // ---- Reconciliation (M11 Phase 2, defect D-3) -------------------------
+
+    @Test
+    fun `refreshLibrary removes exercises the backend no longer serves`() = runTest {
+        val cold = coldStack()
+        cold.categoryApi.response = listOf(
+            ExerciseCategoryDto(id = categoryId.toString(), name = "Chest"),
+        )
+        cold.api.response = listOf(benchDto("Bench Press"), inclineDto("Incline Press"))
+        cold.repository.refreshLibrary()
+        assertEquals(2, cold.repository.observeAll().first().size)
+
+        // The catalogue withdraws one exercise.
+        cold.api.response = listOf(benchDto("Bench Press"))
+        cold.repository.refreshLibrary()
+
+        assertEquals(
+            listOf("Bench Press"),
+            cold.repository.observeAll().first().map { it.name },
+        )
+        cold.database.close()
+    }
+
+    @Test
+    fun `refreshLibrary removes categories the backend no longer serves`() = runTest {
+        val cold = coldStack()
+        cold.categoryApi.response = listOf(
+            ExerciseCategoryDto(id = categoryId.toString(), name = "Chest"),
+            ExerciseCategoryDto(id = legsCategoryId.toString(), name = "Legs"),
+        )
+        cold.api.response = listOf(benchDto("Bench Press"))
+        cold.repository.refreshLibrary()
+        assertEquals(2, cold.database.exerciseCategoryDao().observeAll().first().size)
+
+        // "Legs" is withdrawn. Nothing references it, so it must go — this is
+        // exactly the case V6 had to work around by renaming in place.
+        cold.categoryApi.response = listOf(
+            ExerciseCategoryDto(id = categoryId.toString(), name = "Chest"),
+        )
+        cold.repository.refreshLibrary()
+
+        assertEquals(
+            listOf("Chest"),
+            cold.database.exerciseCategoryDao().observeAll().first().map { it.name },
+        )
+        cold.database.close()
+    }
+
+    @Test
+    fun `refreshLibrary keeps a withdrawn exercise that workout history references`() = runTest {
+        // History is immutable (ADR-0001) and holds a RESTRICT foreign key to
+        // the catalogue. A withdrawn exercise that appears in a past workout must
+        // remain resolvable; it simply stops being offered for new work.
+        val cold = coldStack()
+        cold.categoryApi.response = listOf(
+            ExerciseCategoryDto(id = categoryId.toString(), name = "Chest"),
+        )
+        cold.api.response = listOf(benchDto("Bench Press"))
+        cold.repository.refreshLibrary()
+
+        val sessionId = UUID.randomUUID()
+        cold.database.workoutSessionDao().upsert(
+            WorkoutSessionEntity(
+                id = sessionId,
+                routineId = null,
+                status = WorkoutStatus.COMPLETED,
+                startedAt = NOW,
+                endedAt = NOW,
+                notes = null,
+                createdAt = NOW,
+                updatedAt = NOW,
+            ),
+        )
+        cold.database.workoutExerciseDao().upsert(
+            WorkoutExerciseEntity(
+                id = UUID.randomUUID(),
+                workoutSessionId = sessionId,
+                exerciseId = benchId,
+                exerciseName = "Bench Press",
+                exerciseOrder = 0,
+                targetSets = 3,
+                minTargetReps = 8,
+                maxTargetReps = 12,
+                targetRestSeconds = 90,
+                notes = null,
+                createdAt = NOW,
+                updatedAt = NOW,
+            ),
+        )
+
+        // The catalogue drops it entirely.
+        cold.api.response = emptyList()
+        cold.repository.refreshLibrary()
+
+        assertEquals(
+            listOf("Bench Press"),
+            cold.repository.observeAll().first().map { it.name },
+        )
+        cold.database.close()
+    }
+
+    @Test
+    fun `refreshLibrary applies the backend category order`() = runTest {
+        // Ordering is the catalogue's, not alphabetical (M11 Phase 2, D-2).
+        val cold = coldStack()
+        cold.categoryApi.response = listOf(
+            ExerciseCategoryDto(id = categoryId.toString(), name = "Chest", displayOrder = 1),
+            ExerciseCategoryDto(id = legsCategoryId.toString(), name = "Back", displayOrder = 0),
+        )
+        cold.api.response = emptyList()
+
+        cold.repository.refreshLibrary()
+
+        assertEquals(
+            listOf("Back", "Chest"),
+            cold.database.exerciseCategoryDao().observeAll().first().map { it.name },
+        )
+        cold.database.close()
+    }
+
+    @Test
+    fun `an empty catalogue response does not wipe the local library`() = runTest {
+        // Reconciliation deletes rows the server no longer serves. A backend that
+        // returns nothing — half-deployed, unseeded, misconfigured — would
+        // therefore delete everything and leave the picker blank, the exact
+        // failure that made the app unusable before M9.5 T2. An empty catalogue
+        // is not a state this product can legitimately be in, so the destructive
+        // half of the reconciliation is skipped.
+        val cold = coldStack()
+        cold.categoryApi.response = listOf(
+            ExerciseCategoryDto(id = categoryId.toString(), name = "Chest"),
+        )
+        cold.api.response = listOf(benchDto("Bench Press"))
+        cold.repository.refreshLibrary()
+        assertEquals(1, cold.repository.observeAll().first().size)
+
+        cold.categoryApi.response = emptyList()
+        cold.api.response = emptyList()
+        cold.repository.refreshLibrary()
+
+        assertEquals(
+            listOf("Bench Press"),
+            cold.repository.observeAll().first().map { it.name },
+        )
+        assertEquals(1, cold.database.exerciseCategoryDao().observeAll().first().size)
+        cold.database.close()
+    }
+
+    @Test
+    fun `a healthy response after an empty one reconciles normally`() = runTest {
+        // The guard must not become a permanent block on deletions.
+        val cold = coldStack()
+        cold.categoryApi.response = listOf(
+            ExerciseCategoryDto(id = categoryId.toString(), name = "Chest"),
+        )
+        cold.api.response = listOf(benchDto("Bench Press"), inclineDto("Incline Press"))
+        cold.repository.refreshLibrary()
+
+        cold.api.response = emptyList()
+        cold.categoryApi.response = emptyList()
+        cold.repository.refreshLibrary()
+        assertEquals(2, cold.repository.observeAll().first().size)
+
+        // Server recovers, now genuinely serving one fewer exercise.
+        cold.categoryApi.response = listOf(
+            ExerciseCategoryDto(id = categoryId.toString(), name = "Chest"),
+        )
+        cold.api.response = listOf(benchDto("Bench Press"))
+        cold.repository.refreshLibrary()
+
+        assertEquals(
+            listOf("Bench Press"),
+            cold.repository.observeAll().first().map { it.name },
+        )
+        cold.database.close()
+    }
+
     private class ColdStack(
         val database: MyFitnessLogDatabase,
         val api: FakeExerciseApi,
@@ -213,6 +407,8 @@ class ExerciseRepositoryImplTest {
             categoryApi = catApi,
             repository = ExerciseRepositoryImpl(
                 dao = db.exerciseDao(),
+                categoryDao = db.exerciseCategoryDao(),
+                database = db,
                 api = exerciseApi,
                 categoryRepository = ExerciseCategoryRepositoryImpl(
                     dao = db.exerciseCategoryDao(),

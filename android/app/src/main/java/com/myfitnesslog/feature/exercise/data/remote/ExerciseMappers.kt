@@ -16,6 +16,7 @@ fun ExerciseCategoryDto.toEntity(): ExerciseCategoryEntity =
     ExerciseCategoryEntity(
         id = UUID.fromString(id),
         name = name,
+        displayOrder = displayOrder,
     )
 
 fun ExerciseDto.toEntity(): ExerciseEntity =

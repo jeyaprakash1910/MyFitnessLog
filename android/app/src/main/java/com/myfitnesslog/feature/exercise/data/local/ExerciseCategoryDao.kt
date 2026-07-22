@@ -18,7 +18,13 @@ import java.util.UUID
 @Dao
 interface ExerciseCategoryDao {
 
-    @Query("SELECT * FROM exercise_category ORDER BY name ASC")
+    /**
+     * Categories in the backend's curated order, with `name` as a deterministic
+     * tiebreak so equal positions still sort stably (and so a response from a
+     * backend that omits `displayOrder` degrades to the previous alphabetical
+     * behaviour rather than an arbitrary one).
+     */
+    @Query("SELECT * FROM exercise_category ORDER BY displayOrder ASC, name ASC")
     fun observeAll(): Flow<List<ExerciseCategoryEntity>>
 
     @Query("SELECT * FROM exercise_category WHERE id = :id")
@@ -29,4 +35,21 @@ interface ExerciseCategoryDao {
 
     @Upsert
     suspend fun upsertAll(categories: List<ExerciseCategoryEntity>)
+
+    /**
+     * Removes categories the backend no longer serves.
+     *
+     * Must run *after* [ExerciseDao.deleteMissing]: `Exercise` has a RESTRICT
+     * foreign key to this table, so a category is only removable once the
+     * exercises pointing at it have gone. Any category still referenced is kept,
+     * for the same reason exercises are (see that method).
+     */
+    @Query(
+        """
+        DELETE FROM exercise_category
+        WHERE id NOT IN (:serverIds)
+          AND id NOT IN (SELECT categoryId FROM exercise)
+        """,
+    )
+    suspend fun deleteMissing(serverIds: List<UUID>): Int
 }

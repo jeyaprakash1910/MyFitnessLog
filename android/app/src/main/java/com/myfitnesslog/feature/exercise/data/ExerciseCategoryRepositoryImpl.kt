@@ -28,7 +28,19 @@ class ExerciseCategoryRepositoryImpl @Inject constructor(
     override fun observeById(id: UUID): Flow<ExerciseCategoryEntity?> = dao.observeById(id)
 
     override suspend fun refresh() = withContext(ioDispatcher) {
-        val categories = api.getCategories().map { it.toEntity() }
-        dao.upsertAll(categories)
+        dao.upsertAll(fetch())
+    }
+
+    /**
+     * Fetches the server's categories without writing them.
+     *
+     * Exists so [ExerciseRepositoryImpl.refreshLibrary] can perform the whole
+     * catalogue reconciliation — categories and exercises, upserts and
+     * deletions — inside a single transaction. Writing here as well would put
+     * part of that work outside it, so a failure could leave categories replaced
+     * while exercises still referenced the old set.
+     */
+    override suspend fun fetch(): List<ExerciseCategoryEntity> = withContext(ioDispatcher) {
+        api.getCategories().map { it.toEntity() }
     }
 }

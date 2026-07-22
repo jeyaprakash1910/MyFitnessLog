@@ -226,6 +226,8 @@ private class FakeCategoryRepository(
 
     override fun observeAll(): Flow<List<ExerciseCategoryEntity>> = categories
 
+    override suspend fun fetch(): List<ExerciseCategoryEntity> = categories.value
+
     override fun observeById(id: UUID): Flow<ExerciseCategoryEntity?> =
         categories.map { list -> list.firstOrNull { it.id == id } }
 

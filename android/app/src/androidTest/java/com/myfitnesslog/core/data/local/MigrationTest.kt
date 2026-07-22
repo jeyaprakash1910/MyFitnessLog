@@ -216,6 +216,48 @@ class MigrationTest {
     }
 
     /**
+     * v4 → v5 (adds `exercise_category.displayOrder`, M11 Phase 2) preserves the
+     * catalogue and the workouts that reference it.
+     *
+     * The column is added with `DEFAULT 0`, so this also asserts the deliberate
+     * consequence: every existing row gets position 0, which makes the DAO's
+     * `ORDER BY displayOrder, name` fall back to alphabetical until the next
+     * library refresh writes real positions — never an arbitrary order.
+     */
+    @Test
+    fun migration4To5PreservesCatalogueAndDefaultsDisplayOrder() {
+        val chest = "30000000-0000-0000-0000-000000000001"
+        val back = "30000000-0000-0000-0000-000000000002"
+        val exercise = "30000000-0000-0000-0000-000000000003"
+
+        helper.createDatabase(TEST_DB, 4).use { db ->
+            db.execSQL(
+                "INSERT INTO exercise_category (id, name) VALUES (?, ?), (?, ?)",
+                arrayOf(chest, "Chest", back, "Back"),
+            )
+            db.execSQL(
+                "INSERT INTO exercise (id, categoryId, name) VALUES (?, ?, ?)",
+                arrayOf(exercise, chest, "Bench Press"),
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, 5, true, MIGRATION_4_5).use { db ->
+            db.query("SELECT id, name, displayOrder FROM exercise_category ORDER BY name").use { c ->
+                assertTrue("Categories did not survive the migration.", c.moveToFirst())
+                assertEquals("Back", c.getString(1))
+                assertEquals(0, c.getInt(2))
+                assertTrue(c.moveToNext())
+                assertEquals("Chest", c.getString(1))
+                assertEquals(0, c.getInt(2))
+            }
+            db.query("SELECT name FROM exercise WHERE id = '$exercise'").use { c ->
+                assertTrue("The exercise did not survive the migration.", c.moveToFirst())
+                assertEquals("Bench Press", c.getString(0))
+            }
+        }
+    }
+
+    /**
      * Every schema version between the baseline and the current one must have a
      * migration path. The moment the version is bumped without adding a
      * `Migration`, this fails, which is exactly the point.

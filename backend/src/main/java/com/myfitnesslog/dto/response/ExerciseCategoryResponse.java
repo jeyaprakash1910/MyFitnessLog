@@ -8,6 +8,14 @@ import java.util.UUID;
  */
 public record ExerciseCategoryResponse(
         UUID id,
-        String name
+        String name,
+        /**
+         * Curated display position, ascending. The list endpoint already returns
+         * categories in this order; exposing the value lets a client that stores
+         * categories locally (Android caches them in Room) preserve that order
+         * instead of falling back to alphabetical, which scrambles the intended
+         * muscle-group grouping.
+         */
+        int displayOrder
 ) {
 }

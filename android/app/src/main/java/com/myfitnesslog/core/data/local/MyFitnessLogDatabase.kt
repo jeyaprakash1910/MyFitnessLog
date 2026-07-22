@@ -44,6 +44,8 @@ import com.myfitnesslog.feature.workout.data.local.WorkoutSetTombstoneEntity
  *        Milestone 6.
  *  - v4: workout_set_tombstone, so hard-deleted sets can be propagated to the
  *        backend (ADR-0007), added ahead of Milestone 10.
+ *  - v5: exercise_category.displayOrder, so the picker can present categories in
+ *        the catalogue's curated order rather than alphabetically (M11 Phase 2).
  *
  * There is no destructive fallback. Every version bump ships with a `Migration`
  * in [MIGRATIONS] and a data-preservation case in `MigrationTest`.
@@ -59,7 +61,7 @@ import com.myfitnesslog.feature.workout.data.local.WorkoutSetTombstoneEntity
         WorkoutSetEntity::class,
         WorkoutSetTombstoneEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 @TypeConverters(

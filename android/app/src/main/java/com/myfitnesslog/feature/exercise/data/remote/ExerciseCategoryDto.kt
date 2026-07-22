@@ -14,4 +14,11 @@ import kotlinx.serialization.Serializable
 data class ExerciseCategoryDto(
     val id: String,
     val name: String,
+    /**
+     * Curated display position from the backend. Defaulted so a response from an
+     * older backend that does not send the field still deserializes, in which
+     * case every category shares position 0 and the name tiebreak orders them —
+     * the previous behaviour.
+     */
+    val displayOrder: Int = 0,
 )

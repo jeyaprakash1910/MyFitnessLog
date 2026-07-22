@@ -10,11 +10,15 @@ import java.util.UUID
  *
  * This entity is a download-only cache populated from the backend
  * `GET /exercise-categories` endpoint, whose response contract exposes only
- * `id` and `name` (see docs/API_SPECIFICATION.md). It therefore mirrors that
- * API contract rather than the full DATABASE.md schema: columns the API never
- * returns (displayOrder, createdAt, updatedAt, isDeleted) are intentionally
- * omitted because the app has no source of truth for them and does not use
- * them (KISS/YAGNI). The backend remains the source of truth (ADR-0003).
+ * `id`, `name` and `displayOrder` (see docs/API_SPECIFICATION.md). It therefore
+ * mirrors that API contract rather than the full DATABASE.md schema: columns the
+ * API never returns (createdAt, updatedAt, isDeleted) are intentionally omitted
+ * because the app has no source of truth for them and does not use them
+ * (KISS/YAGNI). The backend remains the source of truth (ADR-0003).
+ *
+ * `displayOrder` was added to both the response contract and this cache in M11
+ * Phase 2: it had been omitted on the same YAGNI grounds, but the catalogue does
+ * curate an order and the client was silently discarding it.
  *
  * Reference data carries no sync status because it is never uploaded — sync is
  * one-way, Android → backend, for user data only (SYNC.md, ANDROID_ARCHITECTURE.md).
@@ -31,4 +35,16 @@ data class ExerciseCategoryEntity(
 
     @ColumnInfo(name = "name")
     val name: String,
+
+    /**
+     * Curated display position from the backend, ascending.
+     *
+     * Stored because the picker must present categories in the order the
+     * catalogue intends — grouping related muscle groups — rather than
+     * alphabetically. Without it, Flyway V6's deliberate ordering (Quads 6,
+     * Hamstrings 7, Glutes 8, Calves 9) had no effect on the client and Calves
+     * sorted between Biceps and Cardio (M11 Phase 1, defect D-2).
+     */
+    @ColumnInfo(name = "displayOrder", defaultValue = "0")
+    val displayOrder: Int = 0,
 )

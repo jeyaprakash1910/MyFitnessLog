@@ -27,4 +27,10 @@ interface ExerciseCategoryRepository {
      * upsert only runs after a successful response.
      */
     suspend fun refresh()
+
+    /**
+     * Fetches the server's categories without persisting them, so a caller can
+     * write them inside its own transaction alongside related data.
+     */
+    suspend fun fetch(): List<ExerciseCategoryEntity>
 }

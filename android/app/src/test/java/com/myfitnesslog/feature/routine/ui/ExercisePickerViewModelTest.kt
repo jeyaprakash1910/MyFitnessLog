@@ -221,8 +221,9 @@ private class DaoCategoryRepository(
     override fun observeById(id: UUID): Flow<ExerciseCategoryEntity?> =
         database.exerciseCategoryDao().observeById(id)
     // The picker refreshes categories through ExerciseRepository.refreshLibrary,
-    // which fetches categories before exercises; nothing calls this directly.
+    // which fetches categories before exercises; nothing calls these directly.
     override suspend fun refresh() = Unit
+    override suspend fun fetch(): List<ExerciseCategoryEntity> = emptyList()
 }
 
 /** Minimal [ExerciseRepository] backed directly by the in-memory DAO. */

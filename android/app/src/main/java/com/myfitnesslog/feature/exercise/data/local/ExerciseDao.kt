@@ -46,4 +46,30 @@ interface ExerciseDao {
 
     @Upsert
     suspend fun upsertAll(exercises: List<ExerciseEntity>)
+
+    /**
+     * Removes catalogue exercises the backend no longer serves.
+     *
+     * Reference data is server-authoritative (ADR-0003), so the local copy must
+     * converge on the server's set — otherwise a withdrawn exercise lingers in
+     * the picker forever, which is why the V6 migration had to rename a category
+     * in place rather than remove it (M11 Phase 1, defect D-3).
+     *
+     * **Rows still referenced are deliberately kept.** `RoutineExercise` and
+     * `WorkoutExercise` hold RESTRICT foreign keys to this table, so deleting a
+     * referenced row would either fail outright or, with a different cascade
+     * rule, destroy workout history. A withdrawn exercise that appears in a past
+     * workout is part of that immutable record (ADR-0001) and must remain
+     * resolvable. It simply stops being offered for new work once the catalogue
+     * drops it.
+     */
+    @Query(
+        """
+        DELETE FROM exercise
+        WHERE id NOT IN (:serverIds)
+          AND id NOT IN (SELECT exerciseId FROM routine_exercise)
+          AND id NOT IN (SELECT exerciseId FROM workout_exercise)
+        """,
+    )
+    suspend fun deleteMissing(serverIds: List<UUID>): Int
 }

@@ -64,8 +64,30 @@ val MIGRATION_3_4: Migration = object : Migration(3, 4) {
 }
 
 /**
+ * v4 → v5: adds `exercise_category.displayOrder` (M11 Phase 2, defect D-2).
+ *
+ * Additive, with a `DEFAULT 0` so existing rows get a valid value without a
+ * backfill. Zero is deliberately the same for every existing row: the DAO's
+ * `ORDER BY displayOrder, name` therefore degrades to the previous alphabetical
+ * ordering until the next library refresh writes the real positions, so the
+ * picker never enters an arbitrary intermediate order.
+ *
+ * The DDL must match what Room generates for `ExerciseCategoryEntity`, including
+ * the `NOT NULL DEFAULT 0`, or post-migration validation fails. `app/schemas/5.json`
+ * is the reference.
+ */
+val MIGRATION_4_5: Migration = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "ALTER TABLE `exercise_category` " +
+                "ADD COLUMN `displayOrder` INTEGER NOT NULL DEFAULT 0",
+        )
+    }
+}
+
+/**
  * Every migration the database ships with, passed to `addMigrations` in
  * DatabaseModule. Declared last so each migration is defined before this list
  * references it.
  */
-val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_3_4)
+val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_3_4, MIGRATION_4_5)
