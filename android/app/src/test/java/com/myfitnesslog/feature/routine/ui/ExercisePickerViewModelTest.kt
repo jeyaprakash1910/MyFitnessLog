@@ -3,7 +3,9 @@ package com.myfitnesslog.feature.routine.ui
 import androidx.lifecycle.SavedStateHandle
 import com.myfitnesslog.core.data.local.MyFitnessLogDatabase
 import com.myfitnesslog.core.sync.testing.RecordingSyncTrigger
+import com.myfitnesslog.feature.exercise.data.ExerciseCategoryRepository
 import com.myfitnesslog.feature.exercise.data.ExerciseRepository
+import com.myfitnesslog.feature.exercise.data.local.ExerciseCategoryEntity
 import com.myfitnesslog.feature.exercise.data.local.ExerciseEntity
 import com.myfitnesslog.feature.routine.RoutineTestData
 import com.myfitnesslog.feature.routine.awaitFirst
@@ -106,6 +108,7 @@ class ExercisePickerViewModelTest {
     private fun viewModel(args: Map<String, String>) = ExercisePickerViewModel(
         savedStateHandle = SavedStateHandle(args),
         exerciseRepository = exerciseRepository,
+        categoryRepository = DaoCategoryRepository(database),
         routineRepository = routineRepository,
         workoutRepository = workoutRepository,
     )
@@ -124,6 +127,59 @@ class ExercisePickerViewModelTest {
         val vm = routineViewModel()
         vm.uiState.awaitFirst { it.exercises.size == 2 }
         vm.onQueryChange("squat")
+        val state = vm.uiState.awaitFirst { it.query == "squat" && it.exercises.size == 1 }
+        assertEquals(listOf("Squat"), state.exercises.map { it.name })
+    }
+
+    // ---- Category filtering ----------------------------------------------
+
+    @Test
+    fun categoryChipsComeFromRoom() = runBlocking {
+        val vm = routineViewModel()
+        val state = vm.uiState.awaitFirst { it.categories.isNotEmpty() }
+        assertEquals(listOf("Legs"), state.categories.map { it.name })
+        // "All" is rendered by the screen, not carried in state, so nothing is
+        // selected until the user picks a chip.
+        assertEquals(null, state.selectedCategoryId)
+    }
+
+    @Test
+    fun selectingCategoryFiltersLocally() = runBlocking {
+        val chestId = UUID.randomUUID()
+        database.exerciseCategoryDao().upsert(ExerciseCategoryEntity(chestId, "Chest"))
+        database.exerciseDao().upsertAll(
+            listOf(ExerciseEntity(UUID.randomUUID(), chestId, "Incline Press")),
+        )
+        val vm = routineViewModel()
+        vm.uiState.awaitFirst { it.exercises.size == 3 }
+
+        vm.onCategorySelected(chestId)
+
+        val state = vm.uiState.awaitFirst { it.selectedCategoryId == chestId && it.exercises.size == 1 }
+        assertEquals(listOf("Incline Press"), state.exercises.map { it.name })
+    }
+
+    @Test
+    fun clearingCategoryRestoresTheFullList() = runBlocking {
+        val vm = routineViewModel()
+        vm.uiState.awaitFirst { it.exercises.size == 2 }
+        vm.onCategorySelected(RoutineTestData.categoryId)
+        vm.uiState.awaitFirst { it.selectedCategoryId != null }
+
+        vm.onCategorySelected(null)
+
+        val state = vm.uiState.awaitFirst { it.selectedCategoryId == null && it.exercises.size == 2 }
+        assertEquals(listOf("Bench Press", "Squat"), state.exercises.map { it.name })
+    }
+
+    @Test
+    fun categoryAndSearchCombine() = runBlocking {
+        val vm = routineViewModel()
+        vm.uiState.awaitFirst { it.exercises.size == 2 }
+
+        vm.onCategorySelected(RoutineTestData.categoryId)
+        vm.onQueryChange("squat")
+
         val state = vm.uiState.awaitFirst { it.query == "squat" && it.exercises.size == 1 }
         assertEquals(listOf("Squat"), state.exercises.map { it.name })
     }
@@ -154,6 +210,19 @@ class ExercisePickerViewModelTest {
         val added = workoutRepository.observeWorkoutExercises(sessionId).awaitFirst { it.isNotEmpty() }
         assertEquals(listOf("Squat"), added.map { it.exerciseName })
     }
+}
+
+/** Minimal [ExerciseCategoryRepository] backed directly by the in-memory DAO. */
+private class DaoCategoryRepository(
+    private val database: MyFitnessLogDatabase,
+) : ExerciseCategoryRepository {
+    override fun observeAll(): Flow<List<ExerciseCategoryEntity>> =
+        database.exerciseCategoryDao().observeAll()
+    override fun observeById(id: UUID): Flow<ExerciseCategoryEntity?> =
+        database.exerciseCategoryDao().observeById(id)
+    // The picker refreshes categories through ExerciseRepository.refreshLibrary,
+    // which fetches categories before exercises; nothing calls this directly.
+    override suspend fun refresh() = Unit
 }
 
 /** Minimal [ExerciseRepository] backed directly by the in-memory DAO. */

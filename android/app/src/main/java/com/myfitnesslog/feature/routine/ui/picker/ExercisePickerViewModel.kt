@@ -3,6 +3,7 @@ package com.myfitnesslog.feature.routine.ui.picker
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.myfitnesslog.feature.exercise.data.ExerciseCategoryRepository
 import com.myfitnesslog.feature.exercise.data.ExerciseRepository
 import com.myfitnesslog.feature.routine.data.RoutineRepository
 import com.myfitnesslog.feature.routine.ui.RoutineRoutes
@@ -37,6 +38,7 @@ import javax.inject.Inject
 class ExercisePickerViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val exerciseRepository: ExerciseRepository,
+    private val categoryRepository: ExerciseCategoryRepository,
     private val routineRepository: RoutineRepository,
     private val workoutRepository: WorkoutRepository,
 ) : ViewModel() {
@@ -49,6 +51,7 @@ class ExercisePickerViewModel @Inject constructor(
         savedStateHandle.get<String>(WorkoutRoutes.ARG_SESSION_ID)?.let(UUID::fromString)
 
     private val query = MutableStateFlow("")
+    private val selectedCategoryId = MutableStateFlow<UUID?>(null)
 
     private val _events = MutableSharedFlow<Added>(extraBufferCapacity = 1)
     val events = _events.asSharedFlow()
@@ -64,16 +67,27 @@ class ExercisePickerViewModel @Inject constructor(
         refreshLibrary()
     }
 
+    private val filteredExercises =
+        combine(query, selectedCategoryId) { q, categoryId -> q to categoryId }
+            .flatMapLatest { (q, categoryId) ->
+                exerciseRepository.observeFiltered(
+                    categoryId = categoryId,
+                    query = q.trim().ifBlank { null },
+                )
+            }
+
     val uiState: StateFlow<ExercisePickerUiState> =
         combine(
             query,
-            query.flatMapLatest { q ->
-                exerciseRepository.observeFiltered(categoryId = null, query = q.trim().ifBlank { null })
-            },
+            selectedCategoryId,
+            categoryRepository.observeAll(),
+            filteredExercises,
             refreshState,
-        ) { currentQuery, exercises, refresh ->
+        ) { currentQuery, currentCategoryId, categories, exercises, refresh ->
             ExercisePickerUiState(
                 query = currentQuery,
+                categories = categories.map { PickerCategoryItem(it.id, it.name) },
+                selectedCategoryId = currentCategoryId,
                 // Straight from Room: cached rows appear immediately and are
                 // never cleared by a failing refresh.
                 exercises = exercises.map { ExercisePickerItem(it.id, it.name) },
@@ -111,6 +125,11 @@ class ExercisePickerViewModel @Inject constructor(
 
     fun onQueryChange(newQuery: String) {
         query.value = newQuery
+    }
+
+    /** Filters the list to one category, or to all of them when null. */
+    fun onCategorySelected(categoryId: UUID?) {
+        selectedCategoryId.value = categoryId
     }
 
     fun onExerciseSelected(exerciseId: UUID) {

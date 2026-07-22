@@ -8,6 +8,7 @@ import com.myfitnesslog.feature.routine.ui.picker.ExercisePickerContent
 import com.myfitnesslog.feature.routine.ui.picker.ExercisePickerItem
 import com.myfitnesslog.feature.routine.ui.picker.ExercisePickerTestTags
 import com.myfitnesslog.feature.routine.ui.picker.ExercisePickerUiState
+import com.myfitnesslog.feature.routine.ui.picker.PickerCategoryItem
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -27,7 +28,7 @@ class ExercisePickerContentTest {
     fun showsSearchAndList() {
         composeRule.setContent {
             ExercisePickerContent(
-                ExercisePickerUiState("", listOf(ExercisePickerItem(squatId, "Squat"))),
+                ExercisePickerUiState(exercises = listOf(ExercisePickerItem(squatId, "Squat"))),
                 {}, {},
             )
         }
@@ -36,11 +37,35 @@ class ExercisePickerContentTest {
     }
 
     @Test
+    fun tappingCategoryChipInvokesFilter() {
+        val chestId = UUID.randomUUID()
+        var selected: UUID? = null
+        var cleared = false
+        composeRule.setContent {
+            ExercisePickerContent(
+                ExercisePickerUiState(
+                    categories = listOf(PickerCategoryItem(chestId, "Chest")),
+                    exercises = listOf(ExercisePickerItem(squatId, "Squat")),
+                ),
+                {},
+                {},
+                onCategorySelected = { if (it == null) cleared = true else selected = it },
+            )
+        }
+        composeRule.onNodeWithTag(ExercisePickerTestTags.CATEGORY_ROW).assertIsDisplayed()
+        composeRule.onNodeWithTag(ExercisePickerTestTags.categoryChip(chestId)).performClick()
+        assertEquals(chestId, selected)
+
+        composeRule.onNodeWithTag(ExercisePickerTestTags.CATEGORY_CHIP_ALL).performClick()
+        assertEquals(true, cleared)
+    }
+
+    @Test
     fun tappingItemInvokesSelection() {
         var selected: UUID? = null
         composeRule.setContent {
             ExercisePickerContent(
-                ExercisePickerUiState("", listOf(ExercisePickerItem(squatId, "Squat"))),
+                ExercisePickerUiState(exercises = listOf(ExercisePickerItem(squatId, "Squat"))),
                 {},
                 { selected = it },
             )

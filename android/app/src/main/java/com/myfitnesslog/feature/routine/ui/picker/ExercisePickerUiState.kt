@@ -8,6 +8,12 @@ data class ExercisePickerItem(
     val name: String,
 )
 
+/** Presentation model for one selectable category chip. */
+data class PickerCategoryItem(
+    val id: UUID,
+    val name: String,
+)
+
 /**
  * Immutable state for the exercise picker.
  *
@@ -20,6 +26,8 @@ data class ExercisePickerItem(
  */
 data class ExercisePickerUiState(
     val query: String = "",
+    val categories: List<PickerCategoryItem> = emptyList(),
+    val selectedCategoryId: UUID? = null,
     val exercises: List<ExercisePickerItem> = emptyList(),
     val isRefreshing: Boolean = false,
     val errorMessage: String? = null,
