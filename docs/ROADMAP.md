@@ -632,12 +632,23 @@ Version 1 is considered complete when all of the following hold. Status as of
       Achieved in M10. Verified against real synchronized data: 21 sessions
       rendered from PostgreSQL through the live backend, with workout detail,
       responsive layout and zero WCAG 2.1 A/AA violations.
-* 🔶 All documentation is consistent with the implementation.
-      Aligned as of M9.5 T4; requires maintenance as M10 lands.
-* 🔶 The application is stable, maintainable, and ready for future expansion.
-      Open items tracked in TECH_DEBT.md — notably deletion propagation
-      (TD-004), physical-device verification (TD-005), and release signing
-      (TD-006).
+* ✅ All documentation is consistent with the implementation.
+      Audited in M12 Phase 4 by sampling claims against behaviour rather than
+      reading for plausibility. That found and fixed genuine errors — a wrong
+      Flyway range and backend test count in the README, a wrong migration range
+      in the release checklist, a live-test description obsoleted by M12 Phase 3,
+      and a developer's LAN address in a public example. It also found two
+      omissions: the web client had no build instructions, and `.gitignore`
+      excluded `web/.env.example`, so the web app could not be configured from a
+      fresh clone. Requires maintenance, as always; the checklist now makes
+      sampling a release gate.
+* ✅ The application is stable, maintainable, and ready for future expansion.
+      All three blockers named here are resolved: deletion propagation (TD-004,
+      TD-011), physical-device verification (TD-005) and release signing
+      (TD-006). TD-013 — automated tests writing to the system of record — was
+      found and fixed during M12. What remains open in TECH_DEBT.md is
+      note-only or deliberately deferred (TD-001, TD-002, TD-009, TD-010,
+      TD-012); none blocks V1.
 
 Explicitly out of scope for V1 (see §18): authentication and multi-user support
 are Version 2. V1 attaches a single default user server-side, so a V1 release
