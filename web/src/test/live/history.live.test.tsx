@@ -14,34 +14,61 @@ import { renderWithProviders } from '@/test/renderWithProviders';
  * cannot catch a contract drift (a renamed field, a changed null-ability, a
  * status filter regression); this can.
  *
- * It **skips** rather than fails when no backend is reachable, so the normal
- * suite stays runnable offline. Start the backend to exercise it:
+ * It runs only against a backend explicitly named by `VITE_LIVE_TEST_BASE_URL`
+ * that also reports `disposable: true` from `/health` — the same rule as
+ * Android's `LiveBackendSyncTest`, for the same reason (TD-013).
+ *
+ * This test only *reads*, so it never polluted anything the way the Android one
+ * did. It is held to the identical standard anyway: a rule that applies to some
+ * live tests and not others is a rule nobody can apply confidently, and a
+ * read-only test is one refactor away from writing.
  *
  * ```
- * cd backend && mvn spring-boot:run
+ * cd backend && mvn spring-boot:run -Dspring-boot.run.profiles=livetest
+ * VITE_LIVE_TEST_BASE_URL=http://localhost:8081/api/v1 npm run test
  * ```
  */
-const LIVE_BASE_URL = 'http://localhost:8080/api/v1';
+const LIVE_BASE_URL = (import.meta.env.VITE_LIVE_TEST_BASE_URL ?? '').replace(/\/+$/, '');
 
 let backendIsUp = false;
 
-async function probeBackend(): Promise<boolean> {
+/**
+ * Null when unreachable (skip); false when it answers without declaring itself
+ * disposable, which means the URL points at the system of record.
+ */
+async function probeDisposable(): Promise<boolean | null> {
   try {
     const response = await fetch(`${LIVE_BASE_URL}/health`);
-    return response.ok;
+    if (!response.ok) return null;
+    const body: unknown = await response.json();
+    return (body as { disposable?: boolean }).disposable === true;
   } catch {
-    return false;
+    return null;
   }
 }
 
 beforeAll(async () => {
-  backendIsUp = await probeBackend();
-  if (backendIsUp) {
-    // The suite-wide test env points at a dummy host; talk to the real one here.
-    apiClient.defaults.baseURL = LIVE_BASE_URL;
-  } else {
-    console.warn('No backend on localhost:8080 — skipping live history test.');
+  if (!LIVE_BASE_URL) {
+    console.warn('VITE_LIVE_TEST_BASE_URL is not set — skipping the live history test.');
+    return;
   }
+
+  const disposable = await probeDisposable();
+  if (disposable === null) {
+    console.warn(`No backend reachable at ${LIVE_BASE_URL} — skipping the live history test.`);
+    return;
+  }
+  if (!disposable) {
+    throw new Error(
+      `Refusing to run: ${LIVE_BASE_URL} does not report \`disposable: true\`. Only the ` +
+        "backend's `livetest` profile does. Point this at the disposable instance " +
+        '(port 8081), never at the system of record — see TD-013.',
+    );
+  }
+
+  backendIsUp = true;
+  // The suite-wide test env points at a dummy host; talk to the real one here.
+  apiClient.defaults.baseURL = LIVE_BASE_URL;
 });
 
 describe('history against a live backend', () => {

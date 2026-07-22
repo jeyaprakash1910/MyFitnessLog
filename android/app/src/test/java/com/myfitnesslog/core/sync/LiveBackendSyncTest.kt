@@ -45,13 +45,28 @@ import java.util.UUID
  * instance accepts it. This one closes that gap: real Room, real repositories,
  * real mappers, real Retrofit, real HTTP, real PostgreSQL.
  *
- * **Skipped unless a backend is reachable on localhost:8080.** It is not part of
- * the normal suite — CI and everyday runs have no backend, and
- * [assumeTrue] makes it a skip rather than a failure. Run it deliberately:
+ * **This test writes real data, so it runs only against a backend that declares
+ * itself disposable.** Two independent things must both be true:
+ *
+ * 1. `MFL_LIVE_TEST_BASE_URL` is set. There is no default — absent it, the test
+ *    skips. Nothing can be written by simply having a server running.
+ * 2. That backend reports `disposable: true` from `/health`, which only the
+ *    `livetest` Spring profile does. If it does not, the test **fails** rather
+ *    than skipping: the URL is pointing somewhere it must never write.
+ *
+ * The previous gate asked only whether *a* backend answered on localhost:8080,
+ * and treated the answer as permission. That was true enough when no backend ran
+ * locally; once M9.5 dogfooding made one permanently reachable, every ordinary
+ * `testDebugUnitTest` run wrote into the system of record — 71 test routines by
+ * the time it was noticed (TD-013). Reachability was never evidence of
+ * disposability, so the check is now for disposability itself.
+ *
+ * Run it deliberately:
  *
  * ```
- * (cd backend && mvn spring-boot:run)
- * ./gradlew :app:testDebugUnitTest --tests '*LiveBackendSyncTest'
+ * (cd backend && mvn spring-boot:run -Dspring-boot.run.profiles=livetest)
+ * MFL_LIVE_TEST_BASE_URL=http://localhost:8081/api/v1/ \
+ *   ./gradlew :app:testDebugUnitTest --tests '*LiveBackendSyncTest'
  * ```
  *
  * Uses ids seeded by Flyway (`20000000-…`) so it does not depend on the
@@ -61,7 +76,15 @@ import java.util.UUID
 class LiveBackendSyncTest {
 
     private companion object {
-        const val BASE_URL = "http://localhost:8080/api/v1/"
+        /**
+         * Explicitly configured target. No default: an unset variable means this
+         * test does not run, which is what makes an accidental production write
+         * impossible rather than merely unlikely.
+         */
+        val BASE_URL: String? = System.getenv("MFL_LIVE_TEST_BASE_URL")
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?.let { if (it.endsWith("/")) it else "$it/" }
 
         /** Flyway-seeded master data — the reference-data assumption in SYNC.md. */
         val SEEDED_EXERCISE_ID: UUID =
@@ -78,15 +101,46 @@ class LiveBackendSyncTest {
 
     private val clock = Clock.fixed(Instant.parse("2026-07-21T09:00:00Z"), ZoneOffset.UTC)
 
-    private fun backendIsUp(): Boolean = runCatching {
+    /**
+     * Reads `disposable` from the target's health endpoint.
+     *
+     * Returns null when the backend cannot be reached at all — a skip — and
+     * false when it answers without declaring itself disposable, which is a
+     * failure, because that is the production backend replying.
+     */
+    private fun backendIsDisposable(baseUrl: String): Boolean? = runCatching {
         OkHttpClient().newCall(
-            Request.Builder().url("http://localhost:8080/api/v1/health").build(),
-        ).execute().use { it.isSuccessful }
-    }.getOrDefault(false)
+            Request.Builder().url("${baseUrl}health").build(),
+        ).execute().use { response ->
+            if (!response.isSuccessful) return null
+            response.body?.string()?.contains("\"disposable\":true") == true
+        }
+    }.getOrNull()
 
     @Before
     fun setUp() = runTest {
-        assumeTrue("No backend on localhost:8080 — skipping live test.", backendIsUp())
+        val baseUrl = BASE_URL
+        assumeTrue(
+            "MFL_LIVE_TEST_BASE_URL is not set — skipping the live sync test. " +
+                "Start a disposable backend with " +
+                "`mvn spring-boot:run -Dspring-boot.run.profiles=livetest` and set " +
+                "MFL_LIVE_TEST_BASE_URL=http://localhost:8081/api/v1/",
+            baseUrl != null,
+        )
+        requireNotNull(baseUrl)
+
+        val disposable = backendIsDisposable(baseUrl)
+        assumeTrue("No backend reachable at $baseUrl — skipping live test.", disposable != null)
+
+        // Deliberately a failure, not a skip: the target answered but is not a
+        // throwaway, so this run was about to write into data someone cares
+        // about. Silently skipping would hide the misconfiguration.
+        assertTrue(
+            "Refusing to run: $baseUrl does not report `disposable: true`. Only the " +
+                "backend's `livetest` profile does. Point this at the disposable " +
+                "instance (port 8081), never at the system of record — see TD-013.",
+            disposable == true,
+        )
 
         database = Room.inMemoryDatabaseBuilder(
             ApplicationProvider.getApplicationContext(),
@@ -104,7 +158,7 @@ class LiveBackendSyncTest {
 
         val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
         val retrofit = Retrofit.Builder()
-            .baseUrl(BASE_URL)
+            .baseUrl(requireNotNull(BASE_URL))
             .client(OkHttpClient())
             .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
             .build()
@@ -235,7 +289,7 @@ class LiveBackendSyncTest {
 
         // The backend soft-deletes, so the routine disappears from the list.
         val listBody = OkHttpClient().newCall(
-            Request.Builder().url("${BASE_URL}routines").build(),
+            Request.Builder().url("${requireNotNull(BASE_URL)}routines").build(),
         ).execute().use { it.body!!.string() }
         assertTrue(
             "Deleted routine still present in GET /routines",
@@ -303,7 +357,7 @@ class LiveBackendSyncTest {
 
         // Read the backend's own snapshot back: it is the assertion that matters.
         val detail = OkHttpClient().newCall(
-            Request.Builder().url("${BASE_URL}workout-sessions/$sessionId").build(),
+            Request.Builder().url("${requireNotNull(BASE_URL)}workout-sessions/$sessionId").build(),
         ).execute().use { it.body!!.string() }
         assertTrue("Deleted set still present on the backend: $detail", !detail.contains("$doomedSetId"))
         assertTrue("Kept set missing from the backend: $detail", detail.contains("$keptSetId"))

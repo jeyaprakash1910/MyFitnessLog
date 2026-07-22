@@ -1,0 +1,32 @@
+# Live-test profile — a disposable backend for tests that need a real server.
+#
+# TD-013: LiveBackendSyncTest wrote into the production database during an
+# ordinary `./gradlew testDebugUnitTest` run, because it probed localhost:8080
+# and treated "a backend answered" as "this backend is safe to write to". By
+# M12 Phase 2 that had put 71 test routines into the system of record.
+#
+# The fix is separation, not detection. This profile is a *different backend*:
+# different port, different database, and — crucially — it announces itself as
+# disposable at /api/v1/health. Live tests refuse to run against anything that
+# does not make that declaration, and the default profile never makes it, so
+# pointing a live test at production fails loudly instead of silently writing.
+#
+# Start it with:
+#     mvn spring-boot:run -Dspring-boot.run.profiles=livetest
+#
+# The database is created once (see docs/RELEASE_CHECKLIST.md); Flyway migrates
+# it exactly as it does production, so live tests exercise the real schema.
+server:
+  port: 8081
+
+spring:
+  datasource:
+    url: ${LIVETEST_DB_URL:jdbc:postgresql://localhost:5432/myfitnesslog_livetest}
+    username: ${LIVETEST_DB_USERNAME:myfitnesslog}
+    password: ${LIVETEST_DB_PASSWORD:myfitnesslog}
+
+app:
+  test-environment:
+    # The declaration that makes this backend writable by automated tests.
+    # Never set this true on a backend holding data anyone cares about.
+    disposable: true

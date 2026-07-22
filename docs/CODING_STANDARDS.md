@@ -340,6 +340,38 @@ shouldCreateRoutine()
 shouldRejectInvalidWorkout()
 shouldReturnWorkoutHistory()
 
+19b. Tests must never touch the system of record
+
+**No automated test may read or write the production database.** Not "should
+not by default", not "unless a backend happens to be running" — never.
+
+A test that talks to a real server must satisfy two conditions, both required:
+
+1. **Its target is named explicitly, with no default.** An unset environment
+   variable means the test skips. `MFL_LIVE_TEST_BASE_URL` (Android),
+   `VITE_LIVE_TEST_BASE_URL` (web).
+2. **That server declares itself disposable** via `disposable: true` from
+   `GET /api/v1/health`, which only the backend's `livetest` profile does
+   (port 8081, database `myfitnesslog_livetest`). If the server answers without
+   declaring it, the test **fails** — it does not skip. Skipping would hide a
+   misconfiguration that was about to write into real data.
+
+Never infer disposability. Reachability, port number, hostname and "localhost"
+are all properties of *where* a server is, not of *what it holds*. Only the
+server knows that, so only the server may state it.
+
+This rule exists because it was learned expensively. `LiveBackendSyncTest` was
+gated on "is a backend reachable on localhost:8080", documented as safe because
+"CI and everyday runs have no backend". That was true when written and silently
+became false when M9.5 dogfooding put a backend on localhost permanently. By the
+time anyone noticed, 71 of the 75 routines in the production database were test
+artifacts (TD-013).
+
+The general lesson, which outlives this instance: **a safeguard that encodes an
+assumption about the environment stops protecting you the moment the environment
+changes, and it does so without failing.** Check the property you actually care
+about.
+
 ⸻
 
 20. Flyway

@@ -3,7 +3,7 @@ API Specification
 Project: MyFitnessLog
 Version: 1.0
 Status: Approved
-Last Updated: July 20, 2026
+Last Updated: July 22, 2026 (M12 Phase 3 — health `disposable` field)
 
 ⸻
 
@@ -200,6 +200,29 @@ Method	Endpoint	Description
 POST	/workout-exercises/{id}/sets	Add set
 PUT	/workout-sets/{id}	Update set
 DELETE	/workout-sets/{id}	Delete set
+
+Health
+
+Method	Endpoint	Description
+GET	/health	Liveness, and whether this backend's data is disposable
+
+Response fields: `status`, `disposable`.
+
+```json
+{ "status": "UP", "disposable": false }
+```
+
+`disposable` tells an automated test whether this instance may be written to. It
+is `true` only under the `livetest` Spring profile, which runs on port 8081
+against the throwaway `myfitnesslog_livetest` database. Every other profile
+reports `false`, and a client must treat an absent field as `false` too.
+
+This is part of the contract rather than a diagnostic, because tests depend on
+it to refuse to run. It exists because reachability was previously used as a
+proxy for disposability: the Android live sync test probed for any backend on
+localhost and wrote to whatever answered, which put 71 test routines into the
+system of record (TD-013). A server is the only party that knows what it is, so
+it is the party that declares it.
 
 ⸻
 

@@ -94,12 +94,24 @@ rather than as the forgotten edit it actually is.
 - [ ] `./gradlew :app:testDebugUnitTest` — green
 - [ ] `mvn test` (backend) — green
 
-> ⚠️ **Until TD-013 is fixed, stop the local backend before running the Android
-> suite, or run it with `--tests '*' --tests '!*LiveBackendSyncTest'`.**
-> `LiveBackendSyncTest` is gated on a backend being reachable at
-> `localhost:8080`, which on a dogfooding machine is always true — so an ordinary
-> test run writes routines and sessions into the production database. As of
-> 2026-07-22 that is how 71 of its 75 routines got there.
+- [ ] `npm run test` (web) — green
+
+Live tests skip by default and cannot reach the production backend (TD-013,
+resolved in M12 Phase 3). To exercise them, start the disposable backend and
+name it explicitly:
+
+```bash
+cd backend && mvn spring-boot:run -Dspring-boot.run.profiles=livetest   # :8081
+MFL_LIVE_TEST_BASE_URL=http://localhost:8081/api/v1/ \
+  ./gradlew :app:testDebugUnitTest --tests '*LiveBackendSyncTest' --rerun-tasks
+VITE_LIVE_TEST_BASE_URL=http://localhost:8081/api/v1 npm run test
+```
+
+- [ ] Live tests run against port **8081**, never 8080
+
+> `--rerun-tasks` matters: Gradle does not treat environment variables as task
+> inputs, so changing `MFL_LIVE_TEST_BASE_URL` alone leaves the test task
+> UP-TO-DATE and it silently does not re-run.
 - [ ] Migrations verified: Room v1→v5 and Flyway V1→V6, from an **empty**
       database and from real data. A new install exercises the empty path, and
       it is the one least often run.

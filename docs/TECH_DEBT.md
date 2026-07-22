@@ -24,7 +24,7 @@ This register holds debt that outlives a single task. Short-lived working items 
 | TD-010 | Workout history is not paginated | Open — deferred | post-V1 (scaling) |
 | TD-011 | Routine deletions never reached the backend | ✅ Resolved 2026-07-22 | — |
 | TD-012 | Reference data keeps referenced withdrawn rows | Open — note only | — |
-| TD-013 | Live sync tests write into the production database | Open | before V1 release |
+| TD-013 | Live sync tests write into the production database | ✅ Resolved 2026-07-22 (M12 Phase 3) | — |
 
 ---
 
@@ -523,7 +523,8 @@ means the local catalogue is not always a strict subset of the server's.
 
 ## TD-013 — Live sync tests write into the production database
 
-Status: Open
+Status: ✅ Resolved 2026-07-22 (M12 Phase 3) — elevated to a V1 release blocker
+by the Phase 2 review, then fixed by environment separation
 
 Milestone identified: Milestone 12 Phase 2 (2026-07-22)
 Scheduled for: before the V1 release tag
@@ -595,3 +596,34 @@ them in place.
 `CODING_STANDARDS.md` (testing section) should state that no test may write to
 the development/production database, and `TESTING` guidance in the README should
 say which database live tests use.
+
+### Resolution (M12 Phase 3)
+
+Fixed by separating environments, not by detecting bad ones. Two independent
+conditions must now both hold before any live test runs:
+
+1. **An explicitly configured target.** `MFL_LIVE_TEST_BASE_URL` (Android) and
+   `VITE_LIVE_TEST_BASE_URL` (web), with **no default**. Unset means skip, so a
+   merely-running backend can no longer cause a write.
+2. **The backend declares itself disposable.** `GET /api/v1/health` returns
+   `disposable`, which is `true` only under the new `livetest` Spring profile
+   (port 8081, database `myfitnesslog_livetest`). Anything else — including a
+   backend predating the field, where it is simply absent — is treated as
+   precious, and the test **fails** rather than skipping, because the target
+   answered but is not throwaway.
+
+The second condition is what makes this structural rather than procedural: the
+environment states what it is, instead of the client guessing. Pointing a live
+test at the system of record now cannot write to it, whatever URL is supplied.
+
+Verified by running all three paths and checking row counts either side:
+
+| Configuration | Result | Production `Routine` |
+|---|---|---|
+| No variable set | 5 skipped | 76 → 76 |
+| → production (8080) | **5 failures**, refused | 76 → 76 |
+| → livetest (8081) | 5 passed | 76 → 76 (livetest 0 → 5) |
+
+Suites after the change: Android 336 passed / 5 skipped, backend 92 passed, web
+129 passed / 4 skipped. The skips are precisely the live tests that previously
+ran against production by default.
