@@ -2,7 +2,7 @@
 
 Project: MyFitnessLog
 Version: 1.0
-Last Updated: July 22, 2026 (M12 Phase 4 — release gate added)
+Last Updated: July 22, 2026 (M12 Phase 5 — v1.0.0 released)
 
 The authoritative procedure for cutting a MyFitnessLog release. Work through it
 in order; every step is here because skipping it has a specific consequence,
@@ -14,6 +14,11 @@ those are Version 2 concerns (ROADMAP §18). The procedure below is written for
 that reality and says explicitly where a hosted deployment would differ.
 
 ---
+
+> **v1.0.0 run, 22 July 2026.** Every gate in §9b passed except the off-machine
+> keystore backup, which requires a human to move a file and is recorded as the
+> release's one outstanding prerequisite. Details in
+> `docs/internal/MILESTONE_12_PHASE_05_IMPLEMENTATION.md`.
 
 ## 0. Prerequisites (one time)
 

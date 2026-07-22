@@ -1,8 +1,8 @@
 # Technical Debt Register
 
 Project: MyFitnessLog
-Version: 1.3
-Last Updated: July 22, 2026 (M11 Track A complete; TD-005 resolved, TD-011/TD-012 added)
+Version: 1.4
+Last Updated: July 22, 2026 (v1.0.0 released; TD-006 and TD-013 resolved in M12)
 
 This document records known, accepted technical debt: deliberate limitations that are not defects in the current milestone but must be addressed in a later milestone. Each item states the observation, why it is currently acceptable, the recommended future implementation, the documentation that must change first, and when it is scheduled.
 
