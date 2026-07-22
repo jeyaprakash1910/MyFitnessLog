@@ -2,7 +2,7 @@
 
 Project: MyFitnessLog
 Version: 1.0
-Last Updated: July 22, 2026 (M12 Phase 2)
+Last Updated: July 22, 2026 (M12 Phase 4 — release gate added)
 
 The authoritative procedure for cutting a MyFitnessLog release. Work through it
 in order; every step is here because skipping it has a specific consequence,
@@ -112,7 +112,7 @@ VITE_LIVE_TEST_BASE_URL=http://localhost:8081/api/v1 npm run test
 > `--rerun-tasks` matters: Gradle does not treat environment variables as task
 > inputs, so changing `MFL_LIVE_TEST_BASE_URL` alone leaves the test task
 > UP-TO-DATE and it silently does not re-run.
-- [ ] Migrations verified: Room v1→v5 and Flyway V1→V6, from an **empty**
+- [ ] Migrations verified: Room v1→v5 and Flyway V1→V7, from an **empty**
       database and from real data. A new install exercises the empty path, and
       it is the one least often run.
 - [ ] No test weakened or skipped to make a release-build difference disappear.
@@ -276,6 +276,34 @@ git push origin main --follow-tags
 
 - [ ] Push verified on the remote (`git ls-remote --tags origin`)
 - [ ] Keystore backup still current
+
+---
+
+## 9b. Release gate
+
+A release does not go out unless every one of these is true. Unlike the steps
+above, which are procedure, these are the *properties* the release must have —
+each one is here because its absence has already cost this project something.
+
+- [ ] **Live tests executed only against the disposable backend** (port 8081,
+      `disposable: true`). Never 8080.
+- [ ] **Production row counts unchanged by the test run.** Check, do not assume:
+      `psql -d myfitnesslog -At -c 'select count(*) from "Routine";'` before and
+      after. This is the property TD-013 violated for months while every test
+      passed.
+- [ ] **Production database backup taken _and restored_**, with row counts
+      compared. An unverified dump is a belief.
+- [ ] **Test databases isolated** — backend tests on `myfitnesslog_test`, live
+      tests on `myfitnesslog_livetest`; neither on `myfitnesslog`.
+- [ ] **Keystore backup verified** in a second location that survives this
+      machine. Losing it makes every installed copy permanently un-updatable.
+- [ ] **Release APK verified as the artifact**, not as build configuration:
+      `apksigner verify` passes, `aapt2 dump badging` shows the intended version,
+      and `run-as` is refused.
+- [ ] **The full workflow run on the physical device from the release build**,
+      with the resulting data confirmed in PostgreSQL.
+- [ ] **Documentation claims sampled against behaviour.** Every M12 audit found
+      stale numbers in documents that read as correct.
 
 ---
 

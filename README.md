@@ -63,8 +63,11 @@ docs/      Product, architecture, database, API, sync, coding standards, ADRs
   instrumented, verified identical on emulator and physical hardware),
   **92 backend** (JUnit 5/MockMvc over real PostgreSQL, incl. an end-to-end
   sync-graph idempotency proof), and **133 web** (Vitest + React Testing
-  Library). Nine of them drive the real stack against a running backend and skip
-  automatically when none is reachable.
+  Library). Nine of them drive the real stack against a running backend; they
+  skip unless one is named explicitly, and refuse to run against a backend that
+  does not declare itself disposable, so a test can never write to real data
+  (TD-013). Counting them, the suite is 567 tests; by default 558 run and those
+  nine skip.
 
 Not yet built: authentication and multi-user support (V2), bidirectional/pull
 synchronization, and history pagination (TD-010). See the roadmap and technical
@@ -97,8 +100,8 @@ Requires JDK 21 and a local PostgreSQL (a `myfitnesslog` database for the app an
 a `myfitnesslog_test` database for tests).
 ```bash
 cd backend
-mvn spring-boot:run   # Flyway migrates (V1–V4) on start; API at :8080/api/v1
-mvn test              # 86 tests (JUnit 5 + MockMvc) against the test database
+mvn spring-boot:run   # Flyway migrates (V1–V7) on start; API at :8080/api/v1
+mvn test              # 92 tests (JUnit 5 + MockMvc) against the test database
 ```
 Tests run against a real PostgreSQL (faithful to the quoted-identifier schema and
 CHECK constraints). They are portable to Testcontainers on a Docker-capable machine
@@ -134,6 +137,24 @@ The version lives in `android/version.properties`. Edit `versionName` only;
 procedure** — including backing up the keystore (lose it and no installed copy
 can ever be updated) and backing up PostgreSQL before installing anything.
 
+### Web
+
+Requires Node 20+.
+
+```bash
+cd web
+cp .env.example .env.local     # sets VITE_API_BASE_URL; the app refuses to start without it
+npm install
+npm run dev                    # http://localhost:5173
+npm run test                   # 133 tests (Vitest + React Testing Library)
+npm run build                  # type-check and production build
+```
+
+The backend must be running for the app to show anything: the web client is
+read-only and renders synchronized history straight from the API. `VITE_API_BASE_URL`
+has no default on purpose — a silently-wrong base URL is harder to diagnose than
+a refusal to start.
+
 #### Configuring the backend URL
 
 The app reads its base URL from `BuildConfig.API_BASE_URL`, populated at build
@@ -148,7 +169,7 @@ same Wi-Fi:
 
 ```properties
 # android/local.properties
-apiBaseUrl=http://192.168.1.7:8080/api/v1/
+apiBaseUrl=http://192.168.1.42:8080/api/v1/   # your machine's LAN address
 ```
 
 Then rebuild and reinstall (`./gradlew installDebug`) — the value is baked in at

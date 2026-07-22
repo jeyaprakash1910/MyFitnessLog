@@ -11,6 +11,9 @@
 # Environment
 .env
 .env.*
+# ...but the example must ship: VITE_API_BASE_URL has no default, so without a
+# committed template the web app cannot be configured from a fresh clone.
+!.env.example
 
 # Logs
 *.log

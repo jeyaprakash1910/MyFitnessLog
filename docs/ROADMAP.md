@@ -167,9 +167,12 @@ M12 Version 1 Release	⬜ Pending
 Current milestone: M12 (Version 1 Release). M11 Track A is complete.
 Test count: 342 automated Android tests (336 JVM/Robolectric + 6 instrumented)
 + 92 backend tests (JUnit 5/MockMvc over real PostgreSQL) + 133 web tests
-(Vitest/RTL, 4 of them live-backend) = 567 passing. Five Android tests
-(LiveBackendSyncTest) run the real sync stack against a running backend and skip
-automatically when none is reachable. The instrumented tests pass identically on
+(Vitest/RTL, 4 of them live-backend) = 567 total, of which 558 run by default.
+The nine live tests (five Android `LiveBackendSyncTest`, four web) drive the real
+stack against a running backend. Since M12 Phase 3 they skip unless a target is
+named explicitly (`MFL_LIVE_TEST_BASE_URL` / `VITE_LIVE_TEST_BASE_URL`) and
+**fail** rather than skip if that target does not report `disposable: true`, so
+no test can write to the system of record (TD-013). The instrumented tests pass identically on
 the emulator and on physical hardware (Android 16).
 Database version: Android Room v5 (v4 added `workout_set_tombstone` for
 set-deletion propagation, ADR-0007; v5 added `exercise_category.displayOrder` so
