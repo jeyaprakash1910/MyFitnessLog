@@ -32,6 +32,14 @@ captures/
 *.apk
 *.aab
 
+# Signing material. The keystore IS the app's identity: committing it cannot be
+# undone by rotation, because Android refuses an update signed by a different
+# key. Keep it and its credentials outside the repository entirely
+# (docs/RELEASE_CHECKLIST.md).
+*.jks
+*.keystore
+keystore.properties
+
 # Kotlin
 *.class
 

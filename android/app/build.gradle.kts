@@ -1,3 +1,4 @@
+import java.net.URI
 import java.util.Properties
 
 /**
@@ -25,6 +26,148 @@ fun resolveApiBaseUrl(): String {
     return if (url.endsWith("/")) url else "$url/"
 }
 
+/**
+ * Application version, read from the tracked `version.properties`.
+ *
+ * `versionName` is the only value anyone edits. `versionCode` is derived from
+ * it — MAJOR * 10000 + MINOR * 100 + PATCH — so the two can never disagree and
+ * nobody has to remember to bump a second number. Android rejects an upgrade
+ * whose versionCode did not increase, and that failure looks like a broken
+ * install rather than a forgotten edit, so deriving it removes an entire class
+ * of release-day confusion.
+ *
+ * 1.0.0 becomes 10000, leaving room below it (the previous hand-set value was
+ * 1) and 99 patch releases between minors.
+ */
+fun resolveVersion(): Pair<Int, String> {
+    val file = rootProject.file("version.properties")
+    require(file.exists()) { "version.properties is missing; see docs/RELEASE_CHECKLIST.md" }
+    val name = Properties().apply { file.inputStream().use(::load) }
+        .getProperty("versionName")?.trim().orEmpty()
+
+    val parts = Regex("""^(\d+)\.(\d+)\.(\d+)$""").find(name)?.destructured
+        ?: throw GradleException("versionName '$name' must be MAJOR.MINOR.PATCH")
+    val (major, minor, patch) = parts.toList().map(String::toInt)
+    require(minor < 100 && patch < 100) {
+        "versionName '$name': MINOR and PATCH must each be below 100"
+    }
+    return (major * 10000 + minor * 100 + patch) to name
+}
+
+/**
+ * Signing configuration, read from `local.properties` or the environment.
+ *
+ * Never from a tracked file: a committed keystore or password is compromised
+ * permanently, and unlike most secrets this one cannot be rotated — the signing
+ * key *is* the app's identity, and Android will not accept an update signed by
+ * a different one.
+ *
+ * Returns null when nothing is configured, which is the ordinary case on a
+ * machine that only builds debug. `assembleRelease` then still produces an
+ * unsigned APK, exactly as before; it does not fail. The build warns instead,
+ * because a release build silently coming out unsigned is precisely the
+ * surprise TD-006 was about.
+ */
+fun resolveSigningCredentials(): Map<String, String>? {
+    val localProperties = rootProject.file("local.properties").takeIf { it.exists() }
+        ?.let { file -> Properties().apply { file.inputStream().use(::load) } }
+
+    fun value(property: String, environment: String): String? =
+        (localProperties?.getProperty(property) ?: System.getenv(environment))
+            ?.trim()?.takeIf { it.isNotEmpty() }
+
+    val storeFile = value("releaseKeystorePath", "MFL_KEYSTORE_PATH") ?: return null
+    val storePassword = value("releaseKeystorePassword", "MFL_KEYSTORE_PASSWORD")
+    val keyAlias = value("releaseKeyAlias", "MFL_KEY_ALIAS")
+    val keyPassword = value("releaseKeyPassword", "MFL_KEY_PASSWORD") ?: storePassword
+
+    if (storePassword == null || keyAlias == null || keyPassword == null) {
+        throw GradleException(
+            "releaseKeystorePath is set but the rest of the signing configuration is " +
+                "not. Needed: releaseKeystorePassword, releaseKeyAlias " +
+                "(releaseKeyPassword defaults to the store password). " +
+                "See docs/RELEASE_CHECKLIST.md.",
+        )
+    }
+    return mapOf(
+        "storeFile" to storeFile,
+        "storePassword" to storePassword,
+        "keyAlias" to keyAlias,
+        "keyPassword" to keyPassword,
+    )
+}
+
+/**
+ * Generates the release network security configuration.
+ *
+ * Android forbids cleartext from API 28, and it is right to. But Version 1 is a
+ * *local production release* (ROADMAP M12 / MILESTONE_12_PLAN §4, Option B):
+ * the backend stays on the LAN over plain HTTP, and deploying TLS purely to
+ * satisfy a release milestone was rejected as speculative infrastructure.
+ *
+ * So the release build needs an exemption, and the only question is how wide.
+ * The debug config permits cleartext to *any* host, which is defensible there —
+ * debug builds are never distributed. It is not defensible in a release build.
+ *
+ * This narrows it to exactly one host: whatever `apiBaseUrl` names. Nothing
+ * else on the network becomes reachable in cleartext, so the exemption is as
+ * small as the deployment actually requires. It is generated rather than
+ * checked in because a resource file cannot read local.properties, and the LAN
+ * address is machine-specific — the alternative is a tracked file containing
+ * somebody's IP address, which is how it eventually gets committed.
+ *
+ * When the backend moves behind TLS, `apiBaseUrl` becomes an https URL and this
+ * emits a config that permits no cleartext at all. The exemption removes itself
+ * rather than needing to be remembered.
+ */
+abstract class GenerateNetworkSecurityConfig : DefaultTask() {
+    @get:Input
+    abstract val baseUrl: Property<String>
+
+    @get:OutputDirectory
+    abstract val outputDirectory: DirectoryProperty
+
+    @TaskAction
+    fun generate() {
+        val host = runCatching { URI(baseUrl.get()).host }.getOrNull()
+        val cleartext = baseUrl.get().startsWith("http://") && !host.isNullOrBlank()
+
+        val body = if (cleartext) {
+            """
+            |    <!-- Cleartext to the configured backend host only. -->
+            |    <base-config cleartextTrafficPermitted="false" />
+            |    <domain-config cleartextTrafficPermitted="true">
+            |        <domain includeSubdomains="false">$host</domain>
+            |    </domain-config>
+            """.trimMargin()
+        } else {
+            """
+            |    <!-- The backend is reached over TLS; no exemption is needed. -->
+            |    <base-config cleartextTrafficPermitted="false" />
+            """.trimMargin()
+        }
+
+        val xml = outputDirectory.get().asFile.resolve("xml").apply { mkdirs() }
+            .resolve("network_security_config.xml")
+        xml.writeText(
+            """
+            |<?xml version="1.0" encoding="utf-8"?>
+            |<!-- GENERATED by :app:generateReleaseNetworkSecurityConfig. Do not edit. -->
+            |<network-security-config>
+            |$body
+            |</network-security-config>
+            |
+            """.trimMargin(),
+        )
+        if (cleartext) {
+            logger.lifecycle(
+                "[release] cleartext permitted to '$host' only (local production release; " +
+                    "set an https apiBaseUrl to remove this entirely).",
+            )
+        }
+    }
+}
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -34,6 +177,13 @@ plugins {
     alias(libs.plugins.hilt)
 }
 
+val generateReleaseNetworkSecurityConfig =
+    tasks.register<GenerateNetworkSecurityConfig>("generateReleaseNetworkSecurityConfig") {
+        description = "Writes the release network security config from apiBaseUrl."
+        baseUrl.set(resolveApiBaseUrl())
+        outputDirectory.set(layout.buildDirectory.dir("generated/res/networkSecurityConfig"))
+    }
+
 android {
     namespace = "com.myfitnesslog"
     compileSdk = 35
@@ -42,8 +192,9 @@ android {
         applicationId = "com.myfitnesslog"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        // Both derived from version.properties; see resolveVersion().
+        versionCode = resolveVersion().first
+        versionName = resolveVersion().second
 
         testInstrumentationRunner = "com.myfitnesslog.HiltTestRunner"
 
@@ -55,6 +206,27 @@ android {
         }
     }
 
+    signingConfigs {
+        val credentials = resolveSigningCredentials()
+        if (credentials != null) {
+            create("release") {
+                storeFile = file(credentials.getValue("storeFile"))
+                storePassword = credentials.getValue("storePassword")
+                keyAlias = credentials.getValue("keyAlias")
+                keyPassword = credentials.getValue("keyPassword")
+
+                // v2/v3 are what the platform verifies. v1 (JAR signing) is only
+                // needed below API 24 and minSdk is 26, so AGP skips it and
+                // `apksigner verify` reports "v1: false, v2: true, v3: true" —
+                // that is correct, not a partial signature. Stated explicitly so
+                // the schemes are a decision rather than a default.
+                enableV1Signing = false
+                enableV2Signing = true
+                enableV3Signing = true
+            }
+        }
+    }
+
     buildTypes {
         debug {
             // Debug-only network logging is gated on this flag at runtime.
@@ -62,6 +234,21 @@ android {
             buildConfigField("String", "API_BASE_URL", "\"${resolveApiBaseUrl()}\"")
         }
         release {
+            signingConfig = signingConfigs.findByName("release")
+            if (signingConfig == null) {
+                logger.warn(
+                    "\n[release] No signing configuration found — assembleRelease will " +
+                        "produce an UNSIGNED apk, which installs nowhere. Configure " +
+                        "releaseKeystorePath in local.properties; see " +
+                        "docs/RELEASE_CHECKLIST.md.\n",
+                )
+            }
+
+            // R8 stays off for V1. Room, Hilt, Retrofit and kotlinx.serialization
+            // all depend on generated code or reflection, so enabling shrinking
+            // is a real risk; the app is small enough that it buys nothing worth
+            // that risk. proguardFiles stays configured so turning it on later is
+            // a one-line change made deliberately (MILESTONE_12_PLAN §5).
             isMinifyEnabled = false
             buildConfigField("boolean", "ENABLE_NETWORK_LOGGING", "false")
             // Release has no development fallback: a real deployment must set
@@ -101,8 +288,22 @@ android {
         getByName("androidTest") {
             assets.srcDir("$projectDir/schemas")
         }
+        // AGP's legacy sourceSet container does not carry a task dependency from
+        // a provider, so the directory is declared here and the generator is
+        // hooked onto preReleaseBuild below — resource merging happens after
+        // preBuild, so the file is always present by the time aapt looks.
+        getByName("release") {
+            res.srcDir(generateReleaseNetworkSecurityConfig.map { it.outputDirectory })
+        }
     }
 }
+
+// See the sourceSets note above: this is what actually guarantees the generated
+// network security config exists before resources are merged.
+// `matching` rather than `named`: AGP creates these tasks lazily during its own
+// evaluation, so they do not exist yet at this point in the script.
+tasks.matching { it.name == "preReleaseBuild" || it.name == "mergeReleaseResources" }
+    .configureEach { dependsOn(generateReleaseNetworkSecurityConfig) }
 
 dependencies {
     // AndroidX core / lifecycle / activity

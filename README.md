@@ -13,7 +13,8 @@ fully offline.
 > in the browser, verified against real PostgreSQL data.
 > See [docs/ROADMAP.md](docs/ROADMAP.md) for the authoritative status and
 > [docs/TECH_DEBT.md](docs/TECH_DEBT.md) for known limitations — notably that
-> there is no signed release build yet, and no authentication (V2).
+> there is no authentication (V2). Version 1 is a **local production release**:
+> a signed APK against a backend on your own network, not a public deployment.
 
 ## Repository layout
 
@@ -114,6 +115,25 @@ ANDROID_SERIAL=emulator-5554 ./gradlew connectedDebugAndroidTest  # instrumented
 # which deletes its database. The build blocks it. See CODING_STANDARDS 20c.
 ```
 
+#### Building a release
+
+```bash
+cd android
+./gradlew assembleRelease            # signed APK, if credentials are configured
+adb install -r app/build/outputs/apk/release/app-release.apk
+```
+
+Signing credentials come from `android/local.properties` (gitignored) or `MFL_*`
+environment variables. Without them the build still succeeds but produces an
+**unsigned** APK — it warns when it does, and an unsigned APK installs nowhere.
+
+The version lives in `android/version.properties`. Edit `versionName` only;
+`versionCode` is derived from it, so the two cannot disagree.
+
+**[docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md) is the authoritative
+procedure** — including backing up the keystore (lose it and no installed copy
+can ever be updated) and backing up PostgreSQL before installing anything.
+
 #### Configuring the backend URL
 
 The app reads its base URL from `BuildConfig.API_BASE_URL`, populated at build
@@ -136,10 +156,15 @@ build time. A trailing slash is added automatically if you omit it, since
 Retrofit rejects a base URL without one.
 
 Notes:
-- Debug builds permit cleartext HTTP to any host (`src/debug/res/xml/network_security_config.xml`);
-  release builds keep the platform default of cleartext forbidden. Android has
-  blocked cleartext by default since API 28, so without this every request fails
-  with `UnknownServiceException`.
+- Android has blocked cleartext HTTP by default since API 28, so without an
+  explicit policy every request fails with `UnknownServiceException`.
+  **Debug** builds permit cleartext to any host
+  (`src/debug/res/xml/network_security_config.xml`) — acceptable only because
+  debug builds are never distributed. **Release** builds permit it to exactly
+  the one host `apiBaseUrl` names and deny it everywhere else; that config is
+  generated at build time, so it cannot drift from the URL the app actually
+  uses. Point `apiBaseUrl` at an `https://` URL and the exemption disappears
+  entirely.
 - The app is fully usable with no backend at all — writes stay `PENDING` locally
   and upload whenever one becomes reachable.
 

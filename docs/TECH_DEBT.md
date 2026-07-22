@@ -17,7 +17,7 @@ This register holds debt that outlives a single task. Short-lived working items 
 | TD-003 | History endpoint scans the whole table | ✅ Resolved 2026-07-22 | — |
 | TD-004 | WorkoutSet deletions never reach the backend | ✅ Resolved 2026-07-22 (ADR-0007) | — |
 | TD-005 | No physical-device verification | ✅ Resolved 2026-07-22 | — |
-| TD-006 | No release signing configuration | Open | **M12 (distribution)** |
+| TD-006 | No release signing configuration | ✅ Resolved 2026-07-22 | — |
 | TD-007 | Backend has no CORS configuration | ✅ Resolved 2026-07-22 | — |
 | TD-008 | History differs between Android and backend | ✅ Resolved 2026-07-22 | — |
 | TD-009 | RoutineEntity lacks description/displayOrder | Open — note only | — |
@@ -246,7 +246,7 @@ if background sync is ever reported as unreliable after a break from training.
 
 ## TD-006 — No release signing configuration
 
-Status: Open — blocks distribution
+Status: ✅ Resolved 2026-07-22 (M12 Phase 1)
 
 Milestone identified: Milestone 9 finalization
 Scheduled for: M12 (Version 1 Release)
@@ -265,11 +265,41 @@ A release signing config sourced from `local.properties` or environment
 variables — never committed keystore credentials — plus a documented release
 procedure in the README.
 
-### Related
+### Resolution (M12 Phase 1)
 
-The release build also has no HTTPS backend to point at: `API_BASE_URL` defaults
-to a development address and release builds forbid cleartext (correctly). A real
-release requires a deployed backend behind TLS.
+Signing credentials are read from `local.properties` or `MFL_*` environment
+variables; the keystore (RSA 4096, valid to 2056) lives outside the repository
+and `.gitignore` refuses `*.jks`, `*.keystore` and `keystore.properties`.
+Missing credentials produce an unsigned APK **with a loud warning**; partial
+credentials fail the build.
+
+`versionCode` is now derived from a single tracked `versionName`
+(`android/version.properties`), so the two cannot disagree and no one has to
+remember to bump a second number.
+
+Verified on the artifact rather than in the source: `apksigner verify` reports
+`Verifies` with v2 and v3 true (v1 is correctly absent at `minSdk 26`), and the
+release build ran the complete workflow — library download, routine creation,
+workout logging, sync — with the data confirmed in PostgreSQL.
+
+Procedure recorded in `docs/RELEASE_CHECKLIST.md`.
+
+### Related — the HTTPS question, resolved differently than expected
+
+This entry previously stated that "a real release requires a deployed backend
+behind TLS." The M12 review decided otherwise: **Version 1 is a local production
+release** (Option B) — a signed APK against a LAN backend, with no hosting, TLS
+or authentication, all of which belong to V2.
+
+The release build therefore does need a cleartext exemption, and it is generated
+at build time scoped to the **single host** `apiBaseUrl` names, denying
+cleartext everywhere else. It is deliberately far narrower than the debug config
+(which permits any host, acceptable only because debug builds are never
+distributed). When `apiBaseUrl` becomes an `https://` URL the generator emits a
+config granting no exemption at all, so the relaxation removes itself rather
+than depending on anyone remembering it.
+
+Deploying behind TLS remains documented but unexecuted; see the M12 plan §4.
 
 ---
 
