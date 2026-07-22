@@ -2,7 +2,7 @@
 
 Project: MyFitnessLog
 Version: 1.0
-Last Updated: July 22, 2026 (M12 Phase 1)
+Last Updated: July 22, 2026 (M12 Phase 2)
 
 The authoritative procedure for cutting a MyFitnessLog release. Work through it
 in order; every step is here because skipping it has a specific consequence,
@@ -93,6 +93,13 @@ rather than as the forgotten edit it actually is.
 
 - [ ] `./gradlew :app:testDebugUnitTest` — green
 - [ ] `mvn test` (backend) — green
+
+> ⚠️ **Until TD-013 is fixed, stop the local backend before running the Android
+> suite, or run it with `--tests '*' --tests '!*LiveBackendSyncTest'`.**
+> `LiveBackendSyncTest` is gated on a backend being reachable at
+> `localhost:8080`, which on a dogfooding machine is always true — so an ordinary
+> test run writes routines and sessions into the production database. As of
+> 2026-07-22 that is how 71 of its 75 routines got there.
 - [ ] Migrations verified: Room v1→v5 and Flyway V1→V6, from an **empty**
       database and from real data. A new install exercises the empty path, and
       it is the one least often run.
@@ -116,8 +123,27 @@ pg_dump -Fc myfitnesslog > myfitnesslog-$(date +%Y%m%d).dump
 - [ ] Dump **restored into a scratch database and row counts compared.** An
       unverified backup is a belief, not a backup.
 
-Optionally, the device database too — though on a release build `run-as` is
-unavailable, which is itself confirmation the build is not debuggable.
+### 4.1 The device database, if the build there is still debuggable
+
+```bash
+adb exec-out run-as com.myfitnesslog cat databases/myfitnesslog.db     > myfitnesslog.db
+adb exec-out run-as com.myfitnesslog cat databases/myfitnesslog.db-wal > myfitnesslog.db-wal
+adb exec-out run-as com.myfitnesslog cat databases/myfitnesslog.db-shm > myfitnesslog.db-shm
+sqlite3 myfitnesslog.db "PRAGMA wal_checkpoint(TRUNCATE); PRAGMA integrity_check;"
+```
+
+- [ ] **All three files copied, not just `.db`.** Room runs SQLite in WAL mode.
+      Measured on 2026-07-22: the database file was 4 KB and the write-ahead log
+      was 272 KB. Copying `myfitnesslog.db` alone yields a file that opens
+      without error and contains almost nothing — the worst kind of backup,
+      because it looks like one.
+- [ ] Checkpointed and `integrity_check` → `ok`
+
+On a **release** build `run-as` is refused ("package not debuggable"), so this is
+not possible — which is itself confirmation the build is a real release. Plan
+device backups before installing a release build, not after.
+
+- [ ] Row counts recorded, so a later restore can be checked against something
 
 ---
 
@@ -175,11 +201,34 @@ adb install -r app/build/outputs/apk/release/app-release.apk
 > `app/build.gradle.kts` now refuses these tasks on physical devices; do not
 > reach for `-PallowPhysicalDeviceTests=true` to get around it.
 
-If the install fails with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`, the installed
-app was signed with a different key (typically a debug build). The only fix is
-an uninstall, which destroys local data — **back up first and understand what is
-lost.** This is why the first install of a signed release should happen on a
-device whose data is expendable, or knowingly.
+If the install fails with:
+
+```
+Failure [INSTALL_FAILED_UPDATE_INCOMPATIBLE: Existing package com.myfitnesslog
+signatures do not match newer version; ignoring!]
+```
+
+the installed app was signed with a different key — typically a debug build.
+Nothing has been damaged; Android refused the install and left the app alone, so
+this is safe to discover by trying.
+
+The only remedy is an uninstall, which destroys local data. Before doing it,
+**find out what that data actually is** rather than assuming:
+
+```bash
+adb exec-out run-as com.myfitnesslog cat databases/myfitnesslog.db > /tmp/d.db
+adb exec-out run-as com.myfitnesslog cat databases/myfitnesslog.db-wal > /tmp/d.db-wal
+sqlite3 /tmp/d.db "select (select count(*) from routine), (select count(*) from workout_session);"
+```
+
+A phone holding zero routines and zero sessions loses only the exercise
+catalogue, which re-downloads on first launch. A phone holding unsynced training
+history loses it permanently, because sync is one-way. **Identical command,
+completely different cost** — and the only way to know which you are facing is to
+look. This is exactly the distinction the M11 incident turned on.
+
+Note also that delaying does not make this safer: once real workouts are logged
+on the device, the same uninstall becomes genuinely destructive.
 
 ---
 

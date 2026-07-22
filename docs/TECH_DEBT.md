@@ -24,6 +24,7 @@ This register holds debt that outlives a single task. Short-lived working items 
 | TD-010 | Workout history is not paginated | Open — deferred | post-V1 (scaling) |
 | TD-011 | Routine deletions never reached the backend | ✅ Resolved 2026-07-22 | — |
 | TD-012 | Reference data keeps referenced withdrawn rows | Open — note only | — |
+| TD-013 | Live sync tests write into the production database | Open | before V1 release |
 
 ---
 
@@ -517,3 +518,80 @@ resolvable.
 The consequence worth knowing: a withdrawn exercise can persist on a device
 indefinitely if any workout references it. That is correct, not a leak, but it
 means the local catalogue is not always a strict subset of the server's.
+
+---
+
+## TD-013 — Live sync tests write into the production database
+
+Status: Open
+
+Milestone identified: Milestone 12 Phase 2 (2026-07-22)
+Scheduled for: before the V1 release tag
+
+### Observation
+
+`LiveBackendSyncTest` is guarded by
+`assumeTrue(backendIsUp())`, which probes `http://localhost:8080/api/v1/health`.
+Its doc comment states it "is not part of the normal suite — CI and everyday
+runs have no backend."
+
+That assumption does not hold on this project's own machine. The backend has
+been running locally since M9.5 dogfooding began, so the probe succeeds and the
+test executes as part of an ordinary `./gradlew :app:testDebugUnitTest` — writing
+routines, sessions and sets into `myfitnesslog`, the database ADR-0003 designates
+as the system of record.
+
+Measured during M12 Phase 2:
+
+| | Test artifacts | Real | Total |
+|---|---|---|---|
+| Routines | **71** | 4 | 75 |
+| Sessions (via test routines) | **57** | — | 75 |
+
+**95% of the routines in the production database are test data.** The four real
+routines are `Push`, `Pull`, `Device Validation Push` and the M12 verification
+routine.
+
+### Why this matters
+
+It is not merely untidy. The backend is the only permanent copy of workout
+history (sync is one-way), and it is what the web client renders and what the
+M12 backup procedure preserves. Test data inflates every count anyone reasons
+about, and it means a routine list can never be read at face value.
+
+Nothing has been *lost* — the real rows are intact and identifiable — so this is
+debt, not a defect.
+
+### Root cause
+
+The gate asks the wrong question. `backendIsUp()` distinguishes *"a backend is
+reachable"* from *"no backend is reachable"*. What the test actually needs to
+know is *"is this backend disposable?"* — and reachability is not evidence of
+that. The guard was written when no backend ran locally, so the two questions
+happened to have the same answer; dogfooding silently separated them.
+
+This is the M11 pattern again: a safeguard that encodes an assumption about the
+environment rather than checking the property it actually cares about, and which
+therefore stops protecting anything the moment the environment changes.
+
+### Recommended implementation
+
+Any of these closes it; the first is preferred:
+
+1. **Point live tests at `myfitnesslog_test`**, which already exists for backend
+   integration tests. The system of record then cannot be written by a test run
+   at all — structural rather than conventional.
+2. Require an explicit opt-in (`-PliveSyncTests=true`), so running them is a
+   decision rather than a side effect of the environment.
+3. Have the tests clean up the rows they create — weakest, since a failed or
+   interrupted run leaves them behind.
+
+Existing test rows should be removed only with the project owner's approval;
+they are in the owner's system of record, and M12 Phase 2 deliberately left
+them in place.
+
+### Documentation to change first
+
+`CODING_STANDARDS.md` (testing section) should state that no test may write to
+the development/production database, and `TESTING` guidance in the README should
+say which database live tests use.
