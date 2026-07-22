@@ -4,17 +4,26 @@ An **offline-first** workout tracking application. The backend is the permanent
 source of truth; the Android app keeps a synchronized local copy so it works
 fully offline.
 
-> Status (July 22, 2026): the Android app is **usable day to day** — build
-> routines, log workouts offline, and have them synchronize to the backend
-> automatically in the background (M9), verified end to end on an emulator
-> against a live backend and PostgreSQL. The backend implements the full
-> write/read REST contract with idempotent sync semantics. The read-only web
-> client (M10) is complete: synchronized history and full workout detail render
-> in the browser, verified against real PostgreSQL data.
-> See [docs/ROADMAP.md](docs/ROADMAP.md) for the authoritative status and
-> [docs/TECH_DEBT.md](docs/TECH_DEBT.md) for known limitations — notably that
-> there is no authentication (V2). Version 1 is a **local production release**:
-> a signed APK against a backend on your own network, not a public deployment.
+> **Version 1.0.0 released — 22 July 2026.**
+> [Release](https://github.com/jeyaprakash1910/MyFitnessLog/releases/tag/v1.0.0) ·
+> [Release notes](docs/V1_RELEASE_NOTES.md)
+>
+> Build routines, log workouts fully offline, and have them synchronize to the
+> backend in the background. The signed release build is verified on physical
+> hardware (OnePlus CPH2717, Android 16) against a live backend and PostgreSQL,
+> with the resulting rows confirmed in the database. The backend implements the
+> full write/read REST contract with idempotent sync semantics, and the read-only
+> web client renders synchronized history and workout detail in the browser.
+>
+> Version 1 is a **local production release**: a signed APK against a backend on
+> your own network, not a public deployment. There is no authentication — the
+> backend attaches a single default user — so the network boundary is the
+> security boundary. Multi-user support is Version 2.
+>
+> No prebuilt APK is distributed: each install needs its own backend URL compiled
+> in, so build it yourself (see [Building a release](#building-a-release)).
+> See [docs/ROADMAP.md](docs/ROADMAP.md) for authoritative status and
+> [docs/TECH_DEBT.md](docs/TECH_DEBT.md) for known limitations.
 
 ## Repository layout
 

@@ -2,7 +2,7 @@ Product Requirements Document (PRD)
 
 Project: MyFitnessLog
 Version: 1.0
-Status: Approved
+Status: Approved — delivered in Version 1.0.0 (released 22 July 2026)
 Author: Jeyaprakash
 Last Updated: July 19, 2026
 

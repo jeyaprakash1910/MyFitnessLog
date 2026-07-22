@@ -2,7 +2,7 @@ Technology Stack
 
 Project: MyFitnessLog
 Version: 1.0
-Status: Approved
+Status: Approved — as released in Version 1.0.0 (22 July 2026)
 Last Updated: July 19, 2026
 
 ⸻

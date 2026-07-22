@@ -2,7 +2,7 @@ API Specification
 
 Project: MyFitnessLog
 Version: 1.0
-Status: Approved
+Status: Approved — as released in Version 1.0.0 (22 July 2026)
 Last Updated: July 22, 2026 (M12 Phase 3 — health `disposable` field)
 
 ⸻

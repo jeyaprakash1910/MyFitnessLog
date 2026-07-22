@@ -162,9 +162,12 @@ M9 Synchronization	✅ Completed (all 4 phases)
 M9.5 Dogfooding Readiness	✅ Completed (T1–T4)
 M10 Web Application	✅ Completed (prerequisites + Phases 1–4)
 M11 Hardening & Polish	✅ Track A complete (Phases 1–4); Track B continuous
-M12 Version 1 Release	⬜ Pending
+M12 Version 1 Release	✅ Completed (Phases 1–5) — v1.0.0 released 22 Jul 2026
 
-Current milestone: M12 (Version 1 Release). M11 Track A is complete.
+Current status: **Version 1 released.** `v1.0.0` is tagged, pushed and published
+on GitHub (commit `4f80e76`), with the signed release APK verified on physical
+hardware. Every milestone M1–M12 is complete. The next milestone is Version 2
+(authentication and multi-user), not yet planned.
 Test count: 342 automated Android tests (336 JVM/Robolectric + 6 instrumented)
 + 92 backend tests (JUnit 5/MockMvc over real PostgreSQL) + 133 web tests
 (Vitest/RTL, 4 of them live-backend) = 567 total, of which 558 run by default.
@@ -567,19 +570,56 @@ hardware; documentation matches implementation.
 
 ⸻
 
-16. M12 — Version 1 Release ⬜ Pending
+16. M12 — Version 1 Release ✅ Completed
 
-Before releasing Version 1:
+Goal: release Version 1 as a signed, verified, reproducible artifact.
 
-* All milestones completed.
-* All APIs documented.
-* Database migrations verified.
-* Android application stable.
-* Backend stable.
-* Web application stable.
-* Documentation updated.
-* GitHub repository organized.
-* Release tag created.
+Delivered across five reviewed phases:
+
+* Phase 1 — Release build, signing and versioning (TD-006). Signing credentials
+  outside version control; `versionCode` derived from a single `versionName` so
+  it cannot be forgotten; release cleartext scoped to the one configured host and
+  removing itself once that URL becomes HTTPS. The release variant had never been
+  built before — four defects surfaced the first time it was.
+* Phase 2 — Physical-device verification and data protection. Signed APK
+  installed on a OnePlus CPH2717 (Android 16) after a verified backup; full
+  workflow confirmed in PostgreSQL. Found that the Room database file was 4 KB
+  while its WAL held 272 KB, so a naive backup would have been empty.
+* Phase 3 — Environment isolation (TD-013). Automated tests were writing into the
+  system of record. Fixed by having the backend declare itself disposable rather
+  than having clients guess from reachability.
+* Phase 4 — Documentation audit and repository readiness. Claims executed rather
+  than read; found stale version ranges, a stale test count, a leaked LAN address,
+  missing web build instructions, and a `.gitignore` rule that made the web client
+  unconfigurable from a fresh clone.
+* Phase 5 — Release and closure. `v1.0.0` tagged, pushed and published.
+
+Release checklist (all met):
+
+* ✅ All milestones completed.
+* ✅ All APIs documented — including the health `disposable` field (Phase 3).
+* ✅ Database migrations verified — Room v1→v5, Flyway V1→V7.
+* ✅ Android application stable — verified on physical hardware from the release
+  build, not the debug build.
+* ✅ Backend stable — restarted post-release; `/health` returns
+  `{"status":"UP","disposable":false}`, matching the documented contract.
+* ✅ Web application stable — 133 tests, zero WCAG 2.1 A/AA violations.
+* ✅ Documentation updated — audited by execution in Phase 4.
+* ✅ GitHub repository organized — no secret, credential or artifact has ever
+  been committed, verified across the whole history.
+* ✅ Release tag created — `v1.0.0` → `4f80e76`, published at
+  https://github.com/jeyaprakash1910/MyFitnessLog/releases/tag/v1.0.0
+
+Post-release, all closed:
+
+* ✅ Signing keystore backed up to three locations, with the backup's fingerprint
+  matched against the signer of the released APK — proof it can still sign an
+  update, not merely that a file was copied.
+* ✅ Fresh PostgreSQL dump taken and verified by restoring it.
+* ✅ 71 historical test routines removed with their cascade; zero orphans.
+* ✅ Signed APK archived with its digest, signer digest and tagged commit.
+
+Release notes: docs/V1_RELEASE_NOTES.md. Procedure: docs/RELEASE_CHECKLIST.md.
 
 ⸻
 

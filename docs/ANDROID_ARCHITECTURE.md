@@ -2,7 +2,7 @@ Android Architecture
 
 Project: MyFitnessLog
 Version: 1.0
-Status: Approved — reflects Milestone 7 (complete)
+Status: Approved — as built and released in Version 1.0.0 (22 July 2026)
 Last Updated: July 22, 2026
 
 ⸻

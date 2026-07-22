@@ -1,5 +1,9 @@
 # Database Design
 
+**Status:** As released in Version 1.0.0 (22 July 2026) — Flyway V1–V7 on
+PostgreSQL, Room v1–v5 on Android. Both migration chains are verified from an
+empty database and from real data.
+
 ## Overview
 
 This document defines the complete relational database design for **MyFitnessLog Version 1**.

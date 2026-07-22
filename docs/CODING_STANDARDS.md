@@ -2,7 +2,7 @@ Coding Standards
 
 Project: MyFitnessLog
 Version: 1.0
-Status: Approved
+Status: Approved — in force through Version 1.0.0 (22 July 2026)
 Last Updated: July 20, 2026
 
 ⸻
