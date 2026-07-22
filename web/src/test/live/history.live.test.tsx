@@ -1,0 +1,182 @@
+import { screen, waitFor, within } from '@testing-library/react';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { apiClient } from '@/api';
+import { HistoryPage } from '@/pages/HistoryPage';
+import { WorkoutDetailPage } from '@/pages/WorkoutDetailPage';
+import { renderWithProviders } from '@/test/renderWithProviders';
+
+/**
+ * Renders the real history page against a **running backend and real
+ * PostgreSQL** — the web counterpart of Android's `LiveBackendSyncTest`.
+ *
+ * Nothing is mocked: the real Axios client, the real decimal-preserving parse,
+ * the real query hook and the real components. Component tests with fixtures
+ * cannot catch a contract drift (a renamed field, a changed null-ability, a
+ * status filter regression); this can.
+ *
+ * It **skips** rather than fails when no backend is reachable, so the normal
+ * suite stays runnable offline. Start the backend to exercise it:
+ *
+ * ```
+ * cd backend && mvn spring-boot:run
+ * ```
+ */
+const LIVE_BASE_URL = 'http://localhost:8080/api/v1';
+
+let backendIsUp = false;
+
+async function probeBackend(): Promise<boolean> {
+  try {
+    const response = await fetch(`${LIVE_BASE_URL}/health`);
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+beforeAll(async () => {
+  backendIsUp = await probeBackend();
+  if (backendIsUp) {
+    // The suite-wide test env points at a dummy host; talk to the real one here.
+    apiClient.defaults.baseURL = LIVE_BASE_URL;
+  } else {
+    console.warn('No backend on localhost:8080 — skipping live history test.');
+  }
+});
+
+describe('history against a live backend', () => {
+  it('renders real workouts, or shows the empty state if none are synced', async (ctx) => {
+    // Reported as *skipped*, not passed — a test that never ran must not be
+    // counted as evidence (the same contract as Android's assumeTrue).
+    if (!backendIsUp) ctx.skip();
+
+    renderWithProviders(<HistoryPage />);
+
+    await waitFor(
+      () => {
+        const list = screen.queryByTestId('history-list');
+        const empty = screen.queryByTestId('history-empty');
+        expect(list ?? empty).not.toBeNull();
+      },
+      { timeout: 10_000 },
+    );
+
+    // An error state means the contract or CORS broke — that is the failure
+    // this test exists to catch, so assert it explicitly rather than implicitly.
+    expect(screen.queryByTestId('history-error')).toBeNull();
+
+    const list = screen.queryByTestId('history-list');
+    if (list) {
+      const rows = screen.getAllByRole('listitem');
+      expect(rows.length).toBeGreaterThan(0);
+      // Every row must have rendered a real derived duration, not a placeholder.
+      for (const row of rows) {
+        expect(row.textContent).toMatch(/\d+m|\d+h \d{2}m/);
+      }
+      console.log(`LIVE_HISTORY rendered ${rows.length} workout rows`);
+    }
+    // Test timeout must exceed the waitFor above, or the test aborts first.
+  }, 20_000);
+
+  it('returns COMPLETED sessions only, newest first', async (ctx) => {
+    if (!backendIsUp) ctx.skip();
+
+    const response = await fetch(`${LIVE_BASE_URL}/workout-sessions`);
+    const sessions = (await response.json()) as Array<{ status: string; startedAt: string }>;
+
+    expect(sessions.every((s) => s.status === 'COMPLETED')).toBe(true);
+
+    const startedAt = sessions.map((s) => s.startedAt);
+    expect(startedAt).toEqual([...startedAt].sort().reverse());
+    console.log(`LIVE_HISTORY ${sessions.length} sessions, all COMPLETED, newest-first verified`);
+  });
+});
+
+describe('workout detail against a live backend', () => {
+  it('renders a real completed workout end to end', async (ctx) => {
+    if (!backendIsUp) ctx.skip();
+
+    const list = (await (await fetch(`${LIVE_BASE_URL}/workout-sessions`)).json()) as Array<{
+      id: string;
+    }>;
+    if (list.length === 0) ctx.skip();
+    const id = list[0]!.id;
+
+    renderWithProviders(<WorkoutDetailPage />, {
+      routePath: '/workouts/:workoutId',
+      initialEntries: [`/workouts/${id}`],
+    });
+
+    await waitFor(() => expect(screen.queryByTestId('workout-detail')).not.toBeNull(), {
+      timeout: 10_000,
+    });
+    expect(screen.queryByTestId('workout-not-found')).toBeNull();
+    expect(screen.queryByTestId('history-error')).toBeNull();
+
+    // A real duration rendered, not a placeholder.
+    const heading = screen.getByRole('heading', { level: 1 });
+    expect(heading.textContent).toMatch(/\d{4}/);
+
+    // Close the decimal loop: a NUMERIC weight from PostgreSQL must reach the
+    // rendered table as a trimmed exact value (`60 × 8`), never as `60.00` and
+    // never via a float round-trip.
+    const tables = screen.queryAllByRole('table');
+    if (tables.length > 0) {
+      // Data cells only — the column header also literally contains "×".
+      const values = within(tables[0]!)
+        .getAllByRole('cell')
+        .map((cell) => cell.textContent ?? '')
+        .filter((text) => text.includes('×'));
+      expect(values.length).toBeGreaterThan(0);
+      for (const value of values) {
+        expect(value).toMatch(/^-?\d+(\.\d*[1-9])? × \d+$/);
+      }
+      console.log(`LIVE_DETAIL set values: ${values.join(', ')}`);
+    }
+    console.log(`LIVE_DETAIL rendered workout ${id}`);
+  }, 20_000);
+
+  it('treats a genuinely DISCARDED workout as Not Found', async (ctx) => {
+    if (!backendIsUp) ctx.skip();
+
+    // Create and discard a workout through the API so the assertion runs against
+    // a real discarded row rather than a hardcoded id from someone's database.
+    const id = crypto.randomUUID();
+    const created = await fetch(`${LIVE_BASE_URL}/workout-sessions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id,
+        routineId: null,
+        startedAt: '2026-07-22T09:00:00Z',
+        notes: 'phase 3 live not-found check',
+      }),
+    });
+    expect(created.ok).toBe(true);
+
+    const discarded = await fetch(`${LIVE_BASE_URL}/workout-sessions/${id}/discard`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ endedAt: '2026-07-22T09:30:00Z', notes: null }),
+    });
+    expect(discarded.ok).toBe(true);
+
+    // It is absent from history...
+    const list = (await (await fetch(`${LIVE_BASE_URL}/workout-sessions`)).json()) as Array<{
+      id: string;
+    }>;
+    expect(list.some((w) => w.id === id)).toBe(false);
+
+    // ...and the detail page must not expose it either.
+    renderWithProviders(<WorkoutDetailPage />, {
+      routePath: '/workouts/:workoutId',
+      initialEntries: [`/workouts/${id}`],
+    });
+
+    await waitFor(() => expect(screen.queryByTestId('workout-not-found')).not.toBeNull(), {
+      timeout: 10_000,
+    });
+    expect(screen.queryByTestId('workout-detail')).toBeNull();
+    console.log(`LIVE_DETAIL discarded workout ${id} correctly hidden`);
+  }, 20_000);
+});

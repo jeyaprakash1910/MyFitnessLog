@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  /*
+   * One focus style for every interactive element.
+   *
+   * Defined once rather than repeated per component: focus visibility was
+   * previously present on only two of six interactive elements, which is exactly
+   * how keyboard users lose their place. `focus-visible` keeps the ring off
+   * mouse clicks while always showing it for keyboard and other non-pointer
+   * input.
+   */
+  .focus-ring {
+    @apply outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-slate-500;
+  }
+}
+
+@layer base {
+  /*
+   * Respect a user's reduced-motion preference. The app's only motion is the
+   * loading skeleton pulse, which is precisely the kind of continuous animation
+   * that setting exists to suppress.
+   */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
