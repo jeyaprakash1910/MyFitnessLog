@@ -15,9 +15,12 @@ that reality and says explicitly where a hosted deployment would differ.
 
 ---
 
-> **v1.0.0 run, 22 July 2026.** Every gate in §9b passed except the off-machine
-> keystore backup, which requires a human to move a file and is recorded as the
-> release's one outstanding prerequisite. Details in
+> **v1.0.0 released 22 July 2026 — every gate in §9b now passed.** The keystore
+> backup was outstanding at tag time and was closed immediately after: three
+> copies (local, external SSD, encrypted archive in cloud storage), with the SSD
+> copy verified byte-identical *and* its fingerprint matched against the signer
+> of the released APK — proof the backup can actually sign an update, not merely
+> that a file was copied. Details in
 > `docs/internal/MILESTONE_12_PHASE_05_IMPLEMENTATION.md`.
 
 ## 0. Prerequisites (one time)
@@ -300,8 +303,18 @@ each one is here because its absence has already cost this project something.
       compared. An unverified dump is a belief.
 - [ ] **Test databases isolated** — backend tests on `myfitnesslog_test`, live
       tests on `myfitnesslog_livetest`; neither on `myfitnesslog`.
-- [ ] **Keystore backup verified** in a second location that survives this
+- [ ] **Keystore backup verified** in at least one location that survives this
       machine. Losing it makes every installed copy permanently un-updatable.
+      Verify the *key*, not the file: its SHA-256 fingerprint must match the
+      signer of the shipped APK.
+
+      ```bash
+      keytool -list -v -keystore <backup>.jks -storepass "$(cat <backup>.password)" | grep SHA256:
+      apksigner verify --print-certs app-release.apk | grep 'SHA-256 digest'
+      ```
+
+      A copied file proves a copy exists. Matching fingerprints prove the backup
+      can still sign an update to what was released.
 - [ ] **Release APK verified as the artifact**, not as build configuration:
       `apksigner verify` passes, `aapt2 dump badging` shows the intended version,
       and `run-as` is refused.
