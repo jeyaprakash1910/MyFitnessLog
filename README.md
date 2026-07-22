@@ -58,11 +58,12 @@ docs/      Product, architecture, database, API, sync, coding standards, ADRs
   and decimal precision is preserved from PostgreSQL `NUMERIC` to rendered text
   rather than being lost to JavaScript floats. Responsive from mobile to
   desktop with zero axe WCAG 2.1 A/AA violations.
-- **540 automated tests** pass: **317 Android** (312 JVM/Robolectric + 5
-  instrumented, the latter needing an emulator), **90 backend** (JUnit 5/MockMvc
-  over real PostgreSQL, incl. an end-to-end sync-graph idempotency proof), and
-  **133 web** (Vitest + React Testing Library). Seven of them drive the real
-  stack against a running backend and skip automatically when none is reachable.
+- **567 automated tests** pass: **342 Android** (336 JVM/Robolectric + 6
+  instrumented, verified identical on emulator and physical hardware),
+  **92 backend** (JUnit 5/MockMvc over real PostgreSQL, incl. an end-to-end
+  sync-graph idempotency proof), and **133 web** (Vitest + React Testing
+  Library). Nine of them drive the real stack against a running backend and skip
+  automatically when none is reachable.
 
 Not yet built: authentication and multi-user support (V2), bidirectional/pull
 synchronization, and history pagination (TD-010). See the roadmap and technical
@@ -108,7 +109,9 @@ Requires JDK 17 and the Android SDK (`ANDROID_HOME` / `local.properties`).
 cd android
 ./gradlew assembleDebug              # build the debug APK
 ./gradlew testDebugUnitTest          # unit tests (JVM/Robolectric)
-./gradlew connectedDebugAndroidTest  # instrumented tests — needs a running emulator/device
+ANDROID_SERIAL=emulator-5554 ./gradlew connectedDebugAndroidTest  # instrumented — emulator only
+# Never point connectedAndroidTest at a daily-use phone: it uninstalls the app,
+# which deletes its database. The build blocks it. See CODING_STANDARDS 20c.
 ```
 
 #### Configuring the backend URL

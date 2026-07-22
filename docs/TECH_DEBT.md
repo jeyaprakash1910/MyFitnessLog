@@ -1,8 +1,8 @@
 # Technical Debt Register
 
 Project: MyFitnessLog
-Version: 1.2
-Last Updated: July 22, 2026 (M10 complete; TD-010 added)
+Version: 1.3
+Last Updated: July 22, 2026 (M11 Track A complete; TD-005 resolved, TD-011/TD-012 added)
 
 This document records known, accepted technical debt: deliberate limitations that are not defects in the current milestone but must be addressed in a later milestone. Each item states the observation, why it is currently acceptable, the recommended future implementation, the documentation that must change first, and when it is scheduled.
 
@@ -16,12 +16,14 @@ This register holds debt that outlives a single task. Short-lived working items 
 | TD-002 | Category filtering in service, not repository | Open — note only | — |
 | TD-003 | History endpoint scans the whole table | ✅ Resolved 2026-07-22 | — |
 | TD-004 | WorkoutSet deletions never reach the backend | ✅ Resolved 2026-07-22 (ADR-0007) | — |
-| TD-005 | No physical-device verification | Open — environment | M12 |
+| TD-005 | No physical-device verification | ✅ Resolved 2026-07-22 | — |
 | TD-006 | No release signing configuration | Open | **M12 (distribution)** |
 | TD-007 | Backend has no CORS configuration | ✅ Resolved 2026-07-22 | — |
 | TD-008 | History differs between Android and backend | ✅ Resolved 2026-07-22 | — |
 | TD-009 | RoutineEntity lacks description/displayOrder | Open — note only | — |
-| TD-010 | Workout history is not paginated | Open — deferred | M11 (scaling) |
+| TD-010 | Workout history is not paginated | Open — deferred | post-V1 (scaling) |
+| TD-011 | Routine deletions never reached the backend | ✅ Resolved 2026-07-22 | — |
+| TD-012 | Reference data keeps referenced withdrawn rows | Open — note only | — |
 
 ---
 
@@ -149,8 +151,10 @@ Scheduled for: before M10 ships (it becomes user-visible there)
 
 ### Observation
 
-`Routine` and `RoutineExercise` are soft-deleted, so the synchronization engine
-can still see and propagate the deletion. `WorkoutSet` is **hard-deleted**: once
+`Routine` and `RoutineExercise` are soft-deleted, which was believed to let the
+synchronization engine see and propagate the deletion. **That was not true** —
+see TD-011, raised in M11 when real-device data disproved it. `WorkoutSet` is
+**hard-deleted**: once
 the row is gone locally there is no record that it ever existed, so the backend
 is never told. `WorkoutRepositoryImpl.deleteSet` therefore deliberately does not
 request a sync — there would be nothing to upload.
@@ -192,7 +196,7 @@ is absent from the backend's snapshot while its sibling remains.
 
 ## TD-005 — No physical-device verification
 
-Status: Open — environment limitation
+Status: ✅ Resolved 2026-07-22 (M11 Phase 1)
 
 Milestone identified: Milestone 9 finalization
 Scheduled for: M11, before M12 release
@@ -219,6 +223,24 @@ stock Android.
 
 One full pass of the core flows on a physical device, including a background sync
 after the screen has been off long enough for doze to apply.
+
+### Resolution
+
+Performed on a OnePlus CPH2717 (Android 16, ColorOS) in M11 Phase 1. Verified:
+the Room v3→v4 migration against real training data; the 313-exercise library on
+the device; workout sync fidelity (all four sessions matched device↔PostgreSQL on
+status and set count); doze deferral (`WAIT:DEV_NOT_DOZING`, recovering cleanly on
+exit); absence of ColorOS background restrictions (`RUN_ANY_IN_BACKGROUND
+allowed`, standby bucket ACTIVE); and scroll performance (4.31% janky over 209
+frames, 90th percentile 14 ms).
+
+Instrumented tests were later confirmed to pass on the same hardware, identically
+to the emulator (M11 Phase 3).
+
+**Still unverified, and deliberately so:** long-idle ColorOS behaviour. The
+standby bucket was ACTIVE because the app is in daily use; the real risk appears
+only after days of disuse and cannot be fast-forwarded with a command. Reconsider
+if background sync is ever reported as unreliable after a break from training.
 
 ---
 
@@ -353,7 +375,7 @@ time the UI gains the corresponding controls, not before.
 Status: Open — deferred
 
 Milestone identified: Milestone 10 Phase 4 (2026-07-22)
-Scheduled for: M11, or whenever a real dataset makes it noticeable
+Scheduled for: post-V1, or whenever a real dataset makes it noticeable
 
 ### Observation
 
@@ -394,3 +416,74 @@ page ever becomes large enough to matter.
   shape (array vs envelope). The choice between the two is the real decision;
   an envelope is a breaking change for the Android client, which does not read
   this endpoint today but might under a future pull-sync.
+
+
+---
+
+## TD-011 — Routine and RoutineExercise deletions never reached the backend
+
+Status: ✅ Resolved 2026-07-22 (M11 Phase 2) — see ADR-0007 §Amendment
+
+Milestone identified: Milestone 11 Phase 1 (physical-device verification)
+
+### Observation
+
+Found in live data on a physical device, not by code review. A routine exercise
+removed at 23:38 was still `PENDING` after six later sync passes, and still
+present on the backend. For one routine the device showed 7 exercises and
+PostgreSQL held 8.
+
+### Cause
+
+`RoutineDao.getPendingSync()` and `RoutineExerciseDao.getPendingSync()` filtered
+`WHERE isDeleted = 0`, excluding precisely the rows whose deletion needed
+uploading, and the sync engine had no delete phase for these entities — although
+`RoutineApi.deleteRoutine` and `deleteRoutineExercise` already existed unused.
+
+The DAO comment described this as deferring propagation "to a later phase".
+Excluding the row did not defer the deletion; it discarded it.
+
+### Why this mattered
+
+It silently and permanently diverged the backend from the phone for every routine
+edit, and it falsified a premise stated in this register (TD-004) and in
+ADR-0007 — the very contrast used to justify tombstones for `WorkoutSet`.
+
+Not user-visible while nothing read routines back, which is exactly why it
+survived review: every test passed, because a test asserted the buggy behaviour.
+
+### Resolution
+
+The pending queries no longer filter on `isDeleted`; the engine dispatches on it
+and sends a DELETE for soft-deleted rows, within the existing routine phases. No
+new synchronization mechanism was added. A DELETE returning 404 counts as
+success, and a pending child create is skipped when its parent routine was
+deleted in the same pass.
+
+Verified against a live backend and PostgreSQL, and on the physical device where
+the original stuck row became `SYNCED` and the backend row disappeared —
+device 7, backend 7.
+
+---
+
+## TD-012 — Reference-data deletions are reconciled, but only when unreferenced
+
+Status: Open — note only (accepted behaviour, recorded for clarity)
+
+Milestone identified: Milestone 11 Phase 2
+
+### Note
+
+`refreshLibrary()` now removes catalogue rows the backend no longer serves
+(previously it only upserted, so a withdrawn exercise lingered forever — the
+reason Flyway V6 renamed a category in place rather than removing it).
+
+Rows still referenced by a routine or by workout history are **deliberately
+kept**: `RoutineExercise` and `WorkoutExercise` hold RESTRICT foreign keys to the
+catalogue, and a withdrawn exercise appearing in a past workout is part of that
+immutable record (ADR-0001). It stops being offered for new work but remains
+resolvable.
+
+The consequence worth knowing: a withdrawn exercise can persist on a device
+indefinitely if any workout references it. That is correct, not a leak, but it
+means the local catalogue is not always a strict subset of the server's.

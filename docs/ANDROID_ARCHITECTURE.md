@@ -99,10 +99,13 @@ Feature packages lift cleanly into Gradle modules later if needed.
 - Enums (WorkoutStatus, SetCategory) are stored by name. Money/precision values
   (weight, RPE, RIR) use BigDecimal stored as a plain string — see section 16.
 
-Current schema: database version 4, exportSchema on (schemas v1–v4 committed).
+Current schema: database version 5, exportSchema on (schemas v1–v5 committed).
 Entities: ExerciseCategory, Exercise (reference); Routine, RoutineExercise
 (templates); WorkoutSession, WorkoutExercise, WorkoutSet (history);
 WorkoutSetTombstone (sync outbox — see below).
+
+`exercise_category.displayOrder` (v5) stores the catalogue's curated ordering so
+the picker groups related muscle groups instead of sorting alphabetically.
 
 `workout_set_tombstone` (v4) is not part of the workout snapshot. It records that
 a set was hard-deleted so the synchronization engine can tell the backend, and

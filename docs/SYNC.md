@@ -160,9 +160,13 @@ Entities synchronized include:
 * WorkoutSession
 * WorkoutExercise
 * WorkoutSet
+* Routine and RoutineExercise **deletions**, carried by the soft-deleted row
+  itself: the engine inspects `isDeleted` and sends a DELETE rather than a
+  create. Until M11 Phase 2 these rows were filtered out of the pending query and
+  the deletion was silently discarded (TD-011).
 * WorkoutSet deletions, carried by `workout_set_tombstone` rows (ADR-0007).
-  Every other entity is soft-deleted, so its deletion travels on the row itself;
-  a workout set is hard-deleted and needs a record of its own.
+  A workout set is hard-deleted, so no row survives to carry the deletion and it
+  needs a record of its own — the one case where a tombstone is warranted.
 
 Reference data such as Exercise and ExerciseCategory is seeded by the backend and downloaded to Android.
 
@@ -223,6 +227,15 @@ offline stretch is not resurrected by a create later in the same pass, and
 *before* the transition because a sealed session rejects deletions too. See
 ADR-0007 for the tombstone mechanism that makes a hard-deleted set visible to a
 pass at all.
+
+**Routine and routine-exercise deletions need no separate phase.** They travel on
+the soft-deleted row, so the existing Routine and RoutineExercise phases dispatch
+on `isDeleted` and issue a DELETE instead of a create. Two rules make that safe:
+a DELETE returning 404 counts as success (the row is already absent, which is the
+goal state, and retrying an unchanged request would loop forever), and a pending
+*create* whose parent routine was deleted in the same pass is skipped, because
+the backend rejects additions to a soft-deleted routine permanently. Child
+deletions still upload, since deleting by id converges regardless of the parent.
 
 Sending the session start immediately (rather than deferring the whole workout
 until it ends) preserves the session UUID on the backend from the first moment,

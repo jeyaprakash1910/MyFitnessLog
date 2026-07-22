@@ -101,7 +101,7 @@ The API exposes the following resources:
 
 Resource	Purpose
 Exercises	Exercise library
-Exercise Categories	Exercise grouping
+Exercise Categories	Exercise grouping (id, name, displayOrder)
 Routines	Workout templates
 Routine Exercises	Exercises inside a routine
 Workout Sessions	Workout lifecycle
@@ -116,6 +116,19 @@ Exercise Categories
 
 Method	Endpoint	Description
 GET	/exercise-categories	List all categories
+
+Response fields: `id`, `name`, `displayOrder`.
+
+**Categories are returned in `displayOrder` ascending**, and the value is part of
+the contract rather than an implementation detail. Clients that cache categories
+locally — Android stores them in Room — can only reproduce the catalogue's
+intended grouping if the position travels with the row; without it the client
+falls back to alphabetical and the curation is lost (M11 Phase 2, TD-011's
+sibling defect D-2).
+
+Soft-deleted categories are excluded, so a withdrawn category simply stops
+appearing. Clients are expected to reconcile removals rather than accumulate
+stale rows.
 
 ⸻
 

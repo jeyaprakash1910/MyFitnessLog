@@ -381,9 +381,39 @@ Every Room schema change must:
 Never modify a committed schema JSON, and never edit a released Migration.
 
 This repository has no CI, so MigrationTest is the only thing enforcing the
-policy. It is an instrumented test and requires a running emulator or device:
+policy. It is an instrumented test and needs a running device — **the emulator**:
 
-    ./gradlew :app:connectedDebugAndroidTest
+    ANDROID_SERIAL=emulator-5554 ./gradlew :app:connectedDebugAndroidTest
+
+⸻
+
+20c. Running instrumented tests — never against your phone
+
+`connectedAndroidTest` installs an app + test APK and **uninstalls both
+afterwards**. An Android uninstall deletes the app's database, so pointing that
+task at a daily-use device destroys real training data — and because
+synchronization is one-way (SYNC.md §6), the backend cannot give it back. This
+happened on 2026-07-22; two routines and four workout sessions were lost from the
+phone.
+
+The build now refuses: `connected*AndroidTest` and `uninstall*` fail with an
+explanatory error when the target is not an emulator. That is a safety net, not
+permission to ignore the rule.
+
+To exercise instrumented tests on real hardware — which is worth doing, and they
+pass there — install both APKs manually and invoke the runner directly. This
+performs no uninstall:
+
+    adb install -r app/build/outputs/apk/debug/app-debug.apk
+    adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+    adb shell am instrument -w com.myfitnesslog.test/com.myfitnesslog.HiltTestRunner
+
+Back up the database first regardless:
+
+    adb exec-out run-as com.myfitnesslog cat databases/myfitnesslog.db > backup.db
+
+The override (`-PallowPhysicalDeviceTests=true`) exists for deliberate use on a
+device holding nothing you would miss. It is not a shortcut.
 
 ⸻
 

@@ -10,9 +10,17 @@ TECH_DEBT TD-004
 ## Context
 
 Every mutable entity on Android carries a `syncStatus` column, and the
-synchronization engine uploads rows that are PENDING or FAILED. Deletion fits
-that model for `Routine` and `RoutineExercise` because they are **soft**-deleted:
-the row survives, flips a flag, and the engine can still see and upload it.
+synchronization engine uploads rows that are PENDING or FAILED. Deletion was
+believed to fit that model for `Routine` and `RoutineExercise` because they are
+**soft**-deleted: the row survives, flips a flag, and the engine can still see
+and upload it.
+
+> **That premise was false when this ADR was written.** See the amendment at the
+> end of this document. The soft delete was recorded correctly, but the pending
+> query filtered `isDeleted = 0` and the engine had no delete phase, so those
+> deletions were discarded rather than propagated. The decision below is
+> unaffected — a hard-deleted set still needs a record of its own — but the
+> contrast it draws with routines did not hold in practice.
 
 `WorkoutSet` is **hard**-deleted. Once the row is gone there is no record it ever
 existed, so nothing is left for a pass to upload and the backend keeps a set the
@@ -100,3 +108,72 @@ Negative / accepted:
 
 Out of scope: deletion propagation for `WorkoutExercise` (nothing in the UI
 deletes one today) and bidirectional sync.
+
+
+---
+
+## Amendment — 2026-07-22 (Milestone 11, Phase 2)
+
+### What this ADR asserted
+
+That `Routine` and `RoutineExercise` deletions already propagated, because a soft
+delete leaves a row the engine can see and upload. That contrast was the whole
+reason `WorkoutSet` looked exceptional and warranted a tombstone.
+
+### How it was disproved
+
+Phase 1 read the live database on a physical device and found a routine exercise
+soft-deleted at 23:38, still `PENDING` after six subsequent sync passes, and
+still present on the backend. Measured divergence for one routine: 7 rows on the
+device, 8 on the backend.
+
+The cause was two-fold and entirely client-side:
+
+* `RoutineDao.getPendingSync()` and `RoutineExerciseDao.getPendingSync()` both
+  filtered `WHERE isDeleted = 0`, excluding exactly the rows whose deletion
+  needed uploading. The DAO comment even said propagation was "deferred to a
+  later phase" — but excluding the row did not defer the deletion, it discarded
+  it.
+* The engine had no delete phase for these entities, though
+  `RoutineApi.deleteRoutine` and `deleteRoutineExercise` already existed and were
+  never called.
+
+### What changed
+
+The pending queries no longer filter on `isDeleted`, and the engine dispatches on
+it: a soft-deleted row is sent as a DELETE instead of a create, inside the
+existing routine phases. On success the row keeps `isDeleted = true` and becomes
+`SYNCED`, so it is hidden from the UI and never re-uploaded.
+
+**No third synchronization mechanism was introduced.** The tombstone pattern in
+this ADR remains specific to `WorkoutSet`, which is genuinely different: it is
+hard-deleted, so no row survives to carry the deletion. Where a row does survive,
+the row itself is the carrier.
+
+Two supporting rules were needed:
+
+* **A DELETE that returns 404 counts as success.** The goal state is "absent from
+  the backend", and 404 means it already is. This is reachable normally — a
+  routine created and deleted while offline is never uploaded, so the DELETE
+  names an id the backend has never seen. Without this the row would be marked
+  FAILED and retried on every pass forever.
+* **A pending child create is skipped when its parent routine was deleted this
+  pass.** The backend resolves a routine's *active* row before adding to it, so
+  such a create would 404 permanently. Child *deletions* still upload, because
+  deleting by id converges regardless of the parent.
+
+### Alternatives rejected
+
+* **A tombstone table for routines**, mirroring `WorkoutSet`. Rejected: it adds a
+  third synchronization model to solve a problem the existing one already
+  encodes. The soft-delete column *is* the tombstone when the row survives.
+* **Hard-deleting locally and recording a tombstone.** Same objection, and it
+  would discard the soft-delete semantics the rest of the app relies on for
+  history and undo-adjacent behaviour.
+* **Leaving the filter and adding a separate "deleted rows" query.** Functionally
+  equivalent to removing the filter, but with two queries to keep in step.
+
+### Consequence for this document
+
+The Context section above no longer claims routine deletions propagate. The
+mechanism it selects for `WorkoutSet` is unchanged and remains correct.

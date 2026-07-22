@@ -67,19 +67,24 @@ Backend status (M1–M2 and M8 Backend Sync APIs complete):
   (201 create / 200 replay); valid status transitions (409 on illegal);
   completed/discarded workouts are immutable; the detail endpoint returns the
   full nested snapshot assembled in-transaction (OSIV disabled).
-* 86 automated backend tests (JUnit 5 + MockMvc) run against a real PostgreSQL
+* 92 automated backend tests (JUnit 5 + MockMvc) run against a real PostgreSQL
   database — including an end-to-end sync-graph idempotency proof. The backend
   test gap identified in M2 is now closed. (Local PostgreSQL is used to execute
   the tests; the same tests are portable to Testcontainers on a Docker-capable
   machine — see M11 / cross-cutting notes.)
+* Flyway V5 indexes WorkoutSession on (status, startedAt) for the history query;
+  V6/V7 expand the seeded library to 14 categories and 313 exercises.
+* CORS is configured for browser clients (GET only, no credentials) so the web
+  client can read the API — API_SPECIFICATION §5b.
 * The default user is attached server-side; the Android client sends no userId.
 
-Android status (M3–M7 and M9 complete; next milestone is M10 Web Application):
+Android status (M3–M7, M9, M9.5 complete; hardened through M11 Track A):
 
 * Foundation: single Gradle module; Hilt DI, Jetpack Compose, Navigation Compose,
   Room, Retrofit + OkHttp + kotlinx.serialization, Material 3, version catalog,
-  Gradle wrapper. Android SDK installed locally; NO AVD/emulator.
-* Room database version 4, exportSchema on (schemas v1–v4 committed):
+  Gradle wrapper. Android SDK installed locally; an AVD (`mfl_test`) and a
+  physical device (OnePlus CPH2717, Android 16) are both available and used.
+* Room database version 5, exportSchema on (schemas v1–v5 committed):
   - Reference (download-only): ExerciseCategory, Exercise.
   - Routine templates (mutable): Routine, RoutineExercise.
   - Workout history (mutable, immutable once completed): WorkoutSession,
@@ -89,7 +94,8 @@ Android status (M3–M7 and M9 complete; next milestone is M10 Web Application):
 * Repositories: ExerciseCategoryRepository, ExerciseRepository (read-only);
   RoutineRepository, WorkoutRepository (mutable); WorkoutHistoryRepository
   (read-only, over the immutable snapshot tables). Use case: StartWorkoutUseCase.
-* Implemented features (all offline-first, Room-only, no network calls yet):
+* Implemented features (offline-first; local writes are uploaded by the
+  synchronization engine, never awaited by the UI):
   - Exercise Library: initial download + local cache, list, local search,
     category filtering.
   - Routine Management: routine list (Home), routine detail, create/edit
@@ -114,12 +120,19 @@ Android status (M3–M7 and M9 complete; next milestone is M10 Web Application):
     Built on WorkoutHistoryRepository over the existing snapshot tables — no
     schema change, no writes, snapshot integrity preserved. History is now a
     real top-level destination; Workout Detail is a full-screen drill-down.
-* 172 automated tests pass, executed on the JVM via Robolectric (converters,
-  DAOs, repositories, StartWorkoutUseCase, WorkoutClock, RestTimer, ViewModels,
-  Compose UI, history DAO/repository/ViewModels/Content, formatting helpers).
-* Not yet built: backend write APIs (M8); WorkManager / synchronization (M9);
-  web client (M10); any on-device/emulator run (no AVD — verification is
-  test-based only).
+* 336 automated tests pass on the JVM via Robolectric (converters, DAOs,
+  repositories, StartWorkoutUseCase, WorkoutClock, RestTimer, ViewModels, Compose
+  UI, history and formatting helpers, and the full synchronization engine), plus
+  6 instrumented tests (Hilt graph + Room migrations) which pass identically on
+  the emulator and on physical hardware.
+* Synchronization propagates creates, updates **and deletions** — routine and
+  routine-exercise deletions travel on the soft-deleted row (M11 Phase 2); set
+  deletions use a tombstone table (ADR-0007).
+* Reference data reconciles: the local catalogue converges on the backend's,
+  keeping rows still referenced by history (TD-012).
+* Verified end to end on real hardware: fresh install, library download, routine
+  building, workout logging, background sync under doze, and rows confirmed in
+  PostgreSQL.
 
 Approved sequencing decision (July 20, 2026):
 
@@ -148,18 +161,21 @@ M8 Backend Sync APIs	✅ Completed (all 6 phases)
 M9 Synchronization	✅ Completed (all 4 phases)
 M9.5 Dogfooding Readiness	✅ Completed (T1–T4)
 M10 Web Application	✅ Completed (prerequisites + Phases 1–4)
-M11 Hardening & Polish (continuous)	🔶 Ongoing from M9.5
+M11 Hardening & Polish	✅ Track A complete (Phases 1–4); Track B continuous
 M12 Version 1 Release	⬜ Pending
 
-Current milestone: M11 (Hardening & Polish); M10 is complete.
-Test count: 317 automated Android tests (312 JVM/Robolectric + 5 instrumented,
-the latter requiring an emulator) + 90 backend tests (JUnit 5/MockMvc over real
-PostgreSQL) + 133 web tests (Vitest/RTL, 4 of them live-backend) = 540 passing. Three Android tests (LiveBackendSyncTest) run the real
-sync stack against a running backend and skip automatically when none is
-reachable.
-Database version: Android Room v4 (adds `workout_set_tombstone` for set-deletion
-propagation, ADR-0007); backend Flyway v5 (V4 seeds the default user, V5 indexes
-WorkoutSession on status + startedAt for the history query).
+Current milestone: M12 (Version 1 Release). M11 Track A is complete.
+Test count: 342 automated Android tests (336 JVM/Robolectric + 6 instrumented)
++ 92 backend tests (JUnit 5/MockMvc over real PostgreSQL) + 133 web tests
+(Vitest/RTL, 4 of them live-backend) = 567 passing. Five Android tests
+(LiveBackendSyncTest) run the real sync stack against a running backend and skip
+automatically when none is reachable. The instrumented tests pass identically on
+the emulator and on physical hardware (Android 16).
+Database version: Android Room v5 (v4 added `workout_set_tombstone` for
+set-deletion propagation, ADR-0007; v5 added `exercise_category.displayOrder` so
+the picker uses the catalogue's curated order); backend Flyway v7 (V4 seeds the
+default user, V5 indexes WorkoutSession on status + startedAt, V6/V7 expand the
+library to 14 categories and 313 exercises).
 Backend: full write/read APIs per API_SPECIFICATION.md.
 Sync: one-way Android → backend, complete (transport, engine, scheduling,
 triggers). Deferred within M9: deletion propagation for hard-deleted workout
@@ -498,34 +514,53 @@ Deferred: pagination (TD-010).
 
 ⸻
 
-15. M11 — Hardening & Polish 🔶 Ongoing
+15. M11 — Hardening & Polish ✅ Track A complete
 
 Goal: improve quality and prepare for release, driven by real usage.
 
-Reframed after M9.5. This is no longer a single cleanup milestone at the end of
-the project: the application is now in daily use, so issues are found and fixed
-continuously rather than batched. Two of its original deliverables have already
-landed early — the backend test gap was closed alongside M8 (86 tests), and the
-emulator pass of the core flows was completed during M9 finalization.
+Reframed after M9.5, then split during planning into two tracks, because the
+milestone is defined as usage-driven but had no usage data when it began:
 
-Ongoing inputs:
+* **Track A** — work identifiable up front. Closeable, and now closed.
+* **Track B** — whatever real use surfaces. Continuous; carries into M12 as
+  ordinary maintenance rather than blocking the milestone.
 
-* Observations recorded while actually using the app (UX friction, bugs,
-  workflow annoyances, performance).
-* Items from the technical debt register (TECH_DEBT.md) as they become
-  relevant or blocking.
+Track A delivered across four reviewed phases:
 
-Remaining deliverables:
+* Phase 1 — Physical-device verification (TD-005). Full core-flow pass on a
+  OnePlus CPH2717 (Android 16): migration on real data, library download, sync to
+  PostgreSQL, doze deferral, ColorOS background policy, and scroll performance
+  with 313 exercises. Found three defects, fixed none of them — deliberately, so
+  the pattern between them could be seen.
+* Phase 2 — Synchronization correctness. Routine and routine-exercise deletions
+  never reached the backend (TD-011): the pending query excluded soft-deleted
+  rows and the engine had no delete dispatch. Fixed by making the existing
+  pipeline look at the row it already had, **without** adding a third
+  synchronization mechanism. Reference data now reconciles removals (TD-012), and
+  `exercise_category.displayOrder` reaches the client (Room v5, plus an additive
+  API field). Verified on the user's own data: device and backend converged.
+* Phase 3 — Test consolidation. Audited the suite for tests encoding
+  implementation rather than requirements; the flaky-test concern was closed with
+  evidence (12 runs, 3 orderings). Found and fixed a production bug — an empty
+  catalogue response would have wiped the local library — and closed the
+  structural gap that let TD-011 survive: the end-to-end walkthrough had no
+  deletion coverage at all.
+* Phase 4 — Workflow hardening. Made the device-safety rule structural rather
+  than documentary, and brought the documentation back in line with the
+  implementation.
 
-* Android: consolidated UI, repository, and ViewModel testing; run the
-  instrumented suites regularly now that an emulator exists.
-* A physical-device pass of the core flows (TD-005).
-* Web: pagination for the history list (TD-010); a cross-browser pass beyond
-  Chromium; a real screen-reader pass. None block daily use.
-* Performance improvements, bug fixes, documentation consistency.
+Deliberately deferred, with reasons recorded in TECH_DEBT and the phase journals:
 
-Exit criteria: critical bugs resolved; core workflows verified on real hardware;
-documentation matches implementation.
+* Web pagination (TD-010) — real debt, invisible at present scale, and the M10
+  seams keep it a caller-side change.
+* Cross-browser and screen-reader passes for the web client — neither blocks
+  daily use; both matter before anyone else opens the app.
+* Long-idle ColorOS background behaviour — needs elapsed time, not a command.
+* Local purge of soft-deleted synced rows — deleting local data needs a safety
+  argument first.
+
+Exit criteria (met): critical bugs resolved; core workflows verified on real
+hardware; documentation matches implementation.
 
 ⸻
 
