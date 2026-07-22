@@ -122,11 +122,16 @@ class WorkoutSessionServiceImplTest {
     }
 
     @Test
-    void historyExcludesActiveAndOrdersNewestFirst() {
-        UUID completed = UUID.randomUUID();
-        service.startWorkout(new StartWorkoutSessionRequest(completed, null, Instant.parse("2026-07-19T09:00:00Z"), null));
-        service.completeWorkout(completed, new CompleteWorkoutSessionRequest(endedAt, null));
+    void historyReturnsCompletedOnlyNewestFirst() {
+        UUID older = UUID.randomUUID();
+        service.startWorkout(new StartWorkoutSessionRequest(older, null, Instant.parse("2026-07-19T09:00:00Z"), null));
+        service.completeWorkout(older, new CompleteWorkoutSessionRequest(endedAt, null));
 
+        UUID newer = UUID.randomUUID();
+        service.startWorkout(new StartWorkoutSessionRequest(newer, null, Instant.parse("2026-07-21T09:00:00Z"), null));
+        service.completeWorkout(newer, new CompleteWorkoutSessionRequest(endedAt, null));
+
+        // Neither an abandoned attempt nor a workout still being logged is history.
         UUID discarded = UUID.randomUUID();
         service.startWorkout(new StartWorkoutSessionRequest(discarded, null, Instant.parse("2026-07-20T09:00:00Z"), null));
         service.discardWorkout(discarded, new DiscardWorkoutSessionRequest(endedAt, null));
@@ -135,8 +140,7 @@ class WorkoutSessionServiceImplTest {
         startManual(active);
 
         var history = service.getHistory();
-        assertThat(history).extracting(WorkoutSession::getId).containsExactly(discarded, completed);
-        assertThat(history).noneMatch(s -> s.getId().equals(active));
+        assertThat(history).extracting(WorkoutSession::getId).containsExactly(newer, older);
     }
 
     @Test

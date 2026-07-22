@@ -72,6 +72,29 @@ Authentication will be introduced in a future version without changing endpoint 
 
 ⸻
 
+5b. Cross-Origin Requests (CORS)
+
+Browser clients are served from a different origin than the API, so the API
+declares an explicit CORS policy. Non-browser clients (Android) are unaffected —
+CORS is a browser mechanism.
+
+The policy is deliberately minimal and matches what the read-only web client
+needs, nothing more:
+
+Setting	Value
+Origins	`app.cors.allowed-origins` (default `http://localhost:5173`, the Vite dev server)
+Methods	`GET` only
+Headers	`Content-Type`
+Credentials	Not allowed
+Applies to	`/api/**`
+
+Consequences worth stating: a preflight for any write verb is rejected with 403,
+as is a request from an unlisted origin. An empty origin list disables CORS
+entirely. Allowing credentials is deliberately off — V1 has no authentication and
+sends no cookies, and enabling it would forbid a wildcard origin later.
+
+⸻
+
 6. Resource Overview
 
 The API exposes the following resources:
@@ -135,6 +158,17 @@ GET	/workout-sessions/{id}	Workout details
 POST	/workout-sessions	Start workout
 PUT	/workout-sessions/{id}/complete	Complete workout
 PUT	/workout-sessions/{id}/discard	Discard workout
+
+**History means COMPLETED sessions only.** `GET /workout-sessions` returns
+sessions whose status is COMPLETED, newest first (by `startedAt`). IN_PROGRESS
+workouts are not history yet, and DISCARDED ones are attempts the user chose to
+throw away.
+
+The filter is defined here, on the backend, so every client shares one
+definition — a client must not re-implement it. Fetching a discarded or active
+session by id via `GET /workout-sessions/{id}` still works; only the list is
+filtered. A `?status=` parameter is the intended extension if discarded workouts
+ever need to be shown.
 
 ⸻
 

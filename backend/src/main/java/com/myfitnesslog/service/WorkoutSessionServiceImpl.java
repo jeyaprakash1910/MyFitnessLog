@@ -18,19 +18,23 @@ import com.myfitnesslog.repository.RoutineRepository;
 import com.myfitnesslog.repository.WorkoutExerciseRepository;
 import com.myfitnesslog.repository.WorkoutSessionRepository;
 import com.myfitnesslog.repository.WorkoutSetRepository;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
 /**
  * Default {@link WorkoutSessionService}. Owns the workout lifecycle: idempotent
  * start, and valid COMPLETED/DISCARDED transitions with idempotent replay.
- * History is filtered/ordered in the service (the small in-memory approach used
- * elsewhere while the data set is small).
+ *
+ * <p>History means <b>COMPLETED sessions only</b>, defined here so every client
+ * shares one definition rather than each frontend re-implementing the filter and
+ * eventually drifting. IN_PROGRESS workouts are not history yet; DISCARDED ones
+ * are abandoned attempts the user chose to throw away, and Android has always
+ * hidden them. Filtering and ordering happen in SQL.
  */
 @Service
 public class WorkoutSessionServiceImpl implements WorkoutSessionService {
@@ -60,10 +64,8 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
     @Override
     @Transactional(readOnly = true)
     public List<WorkoutSession> getHistory() {
-        return sessionRepository.findAll().stream()
-                .filter(session -> session.getStatus() != WorkoutStatus.IN_PROGRESS)
-                .sorted(Comparator.comparing(WorkoutSession::getStartedAt).reversed())
-                .toList();
+        return sessionRepository.findByStatusOrderByStartedAtDesc(
+                WorkoutStatus.COMPLETED, Pageable.unpaged());
     }
 
     @Override

@@ -55,6 +55,15 @@ class WorkoutSessionControllerTest {
                 .andExpect(status().isOk());
     }
 
+    private void discard(UUID id) throws Exception {
+        mockMvc.perform(put("/api/v1/workout-sessions/{id}/discard", id)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"endedAt":"%s","notes":null}
+                                """.formatted(ENDED_AT)))
+                .andExpect(status().isOk());
+    }
+
     @Test
     void startReturns201ThenReplayReturns200() throws Exception {
         UUID id = UUID.randomUUID();
@@ -124,14 +133,17 @@ class WorkoutSessionControllerTest {
     }
 
     @Test
-    void historyExcludesActiveAndReturnsFinished() throws Exception {
+    void historyReturnsCompletedOnly() throws Exception {
         UUID finished = startManual();
         complete(finished);
         UUID active = startManual();
+        UUID abandoned = startManual();
+        discard(abandoned);
 
         mockMvc.perform(get("/api/v1/workout-sessions"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[?(@.id=='" + finished + "')].status").value("COMPLETED"))
-                .andExpect(jsonPath("$[?(@.id=='" + active + "')]").isEmpty());
+                .andExpect(jsonPath("$[?(@.id=='" + active + "')]").isEmpty())
+                .andExpect(jsonPath("$[?(@.id=='" + abandoned + "')]").isEmpty());
     }
 }

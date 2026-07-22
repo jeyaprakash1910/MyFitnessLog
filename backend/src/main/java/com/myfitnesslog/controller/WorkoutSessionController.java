@@ -41,7 +41,7 @@ public class WorkoutSessionController {
         this.workoutSessionMapper = workoutSessionMapper;
     }
 
-    /** Workout history: completed and discarded sessions, newest first. */
+    /** Workout history: completed sessions only, newest first. */
     @GetMapping
     public List<WorkoutSessionResponse> getHistory() {
         return workoutSessionMapper.toResponseList(workoutSessionService.getHistory());
