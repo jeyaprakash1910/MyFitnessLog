@@ -102,10 +102,47 @@ class SyncSourceRepositoryTest {
     }
 
     @Test
-    fun `soft-deleted routines are excluded from pending work`() = runTest {
-        // Deletion propagation is deferred; uploading a deleted routine as a
-        // create would resurrect it on the backend.
-        database.routineDao().upsert(SyncEntityFixtures.routine(isDeleted = true))
+    fun `soft-deleted routines are included in pending work so the deletion uploads`() = runTest {
+        // This test previously asserted the opposite, on the reasoning that
+        // uploading a deleted routine as a create would resurrect it. True — but
+        // excluding the row did not defer the deletion, it discarded it: the row
+        // stayed PENDING forever and the backend never learned of it (M11
+        // Phase 1, defect D-1, observed in real data). The engine now dispatches
+        // on isDeleted and sends a DELETE, so the row must be visible here.
+        val deleted = UUID.randomUUID()
+        database.routineDao().upsert(
+            SyncEntityFixtures.routine(id = deleted, isDeleted = true),
+        )
+
+        assertEquals(listOf(deleted), routineRepository.getPendingRoutines().map { it.id })
+    }
+
+    @Test
+    fun `soft-deleted routine exercises are included in pending work`() = runTest {
+        val routineId = UUID.randomUUID()
+        database.routineDao().upsert(SyncEntityFixtures.routine(id = routineId))
+        val deleted = UUID.randomUUID()
+        database.routineExerciseDao().upsert(
+            SyncEntityFixtures.routineExercise(
+                id = deleted,
+                routineId = routineId,
+                exerciseId = exerciseId,
+            ).copy(isDeleted = true),
+        )
+
+        assertEquals(
+            listOf(deleted),
+            routineRepository.getPendingRoutineExercises().map { it.id },
+        )
+    }
+
+    @Test
+    fun `a soft-deleted row that is already SYNCED is not re-uploaded`() = runTest {
+        // Once its DELETE has been accepted the row keeps isDeleted = true but
+        // becomes SYNCED, and must not come back on the next pass.
+        database.routineDao().upsert(
+            SyncEntityFixtures.routine(isDeleted = true, syncStatus = SyncStatus.SYNCED),
+        )
 
         assertTrue(routineRepository.getPendingRoutines().isEmpty())
     }

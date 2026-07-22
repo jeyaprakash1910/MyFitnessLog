@@ -107,13 +107,35 @@ class SyncEngineImpl @Inject constructor(
 
         /** Roots whose upload failed, so their descendants must not be attempted. */
         private val blockedRoutines = mutableSetOf<UUID>()
+
+        /** Routines deleted on the backend this pass; they accept no new children. */
+        private val deletedRoutines = mutableSetOf<UUID>()
         private val blockedSessions = mutableSetOf<UUID>()
         private val blockedWorkoutExercises = mutableSetOf<UUID>()
 
+        /**
+         * Uploads pending routines — creates *and* deletions.
+         *
+         * A soft-deleted routine is not a create with a flag set; it is a
+         * DELETE. Dispatching here, on the row the repository already marked
+         * PENDING, is what makes deletion propagation work without a second
+         * mechanism (M11 Phase 2; see ADR-0007 §Amendment).
+         */
         suspend fun syncRoutines() {
             routineSource.getPendingRoutines().forEach { routine ->
                 routineSource.setRoutineSyncStatus(routine.id, SyncStatus.SYNCING)
-                val result = attempt { routineApi.createRoutine(routine.toCreateRequest()) }
+                val result = if (routine.isDeleted) {
+                    attemptDelete { routineApi.deleteRoutine(routine.id.toString()) }
+                } else {
+                    attempt { routineApi.createRoutine(routine.toCreateRequest()) }
+                }
+                if (routine.isDeleted && result is UploadResult.Success) {
+                    // The backend soft-deletes the routine, after which it
+                    // rejects additions to it (getRoutine resolves active rows
+                    // only). Any still-pending child create would therefore 404
+                    // on every pass forever, so the set phase skips them.
+                    deletedRoutines += routine.id
+                }
                 finish(
                     result = result,
                     entityType = SyncEntityType.ROUTINE,
@@ -124,25 +146,42 @@ class SyncEngineImpl @Inject constructor(
             }
         }
 
+        /**
+         * Uploads pending routine exercises — creates *and* deletions.
+         *
+         * A deletion is sent even when its parent routine was just deleted: the
+         * endpoint removes by id and no-ops on an unknown one, so it converges
+         * either way. A *create* under a deleted routine is skipped instead,
+         * because the backend would reject it permanently.
+         */
         suspend fun syncRoutineExercises() {
             routineExerciseSource.getPendingRoutineExercises().forEach { routineExercise ->
-                if (routineExercise.routineId in blockedRoutines) {
-                    skip(
-                        SyncEntityType.ROUTINE_EXERCISE,
-                        routineExercise.id,
-                        routineExercise.routineId,
-                    )
+                val blocker = when {
+                    routineExercise.routineId in blockedRoutines -> routineExercise.routineId
+                    !routineExercise.isDeleted &&
+                        routineExercise.routineId in deletedRoutines -> routineExercise.routineId
+
+                    else -> null
+                }
+                if (blocker != null) {
+                    skip(SyncEntityType.ROUTINE_EXERCISE, routineExercise.id, blocker)
                     return@forEach
                 }
                 routineExerciseSource.setRoutineExerciseSyncStatus(
                     routineExercise.id,
                     SyncStatus.SYNCING,
                 )
-                val result = attempt {
-                    routineApi.addRoutineExercise(
-                        routineId = routineExercise.routineId.toString(),
-                        request = routineExercise.toAddRequest(),
-                    )
+                val result = if (routineExercise.isDeleted) {
+                    attemptDelete {
+                        routineApi.deleteRoutineExercise(routineExercise.id.toString())
+                    }
+                } else {
+                    attempt {
+                        routineApi.addRoutineExercise(
+                            routineId = routineExercise.routineId.toString(),
+                            request = routineExercise.toAddRequest(),
+                        )
+                    }
                 }
                 finish(
                     result = result,
@@ -376,7 +415,13 @@ class SyncEngineImpl @Inject constructor(
     /** The outcome of a single HTTP call, with transport errors already tamed. */
     private sealed interface UploadResult {
         data object Success : UploadResult
-        data class Failed(val reason: SyncFailureReason, val message: String) : UploadResult
+
+        /** [status] is null when the request never produced a response. */
+        data class Failed(
+            val reason: SyncFailureReason,
+            val message: String,
+            val status: Int? = null,
+        ) : UploadResult
     }
 
     /**
@@ -409,6 +454,7 @@ class SyncEngineImpl @Inject constructor(
                 UploadResult.Failed(
                     reason = reasonForStatus(response.code()),
                     message = "HTTP ${response.code()}",
+                    status = response.code(),
                 )
             }
         } catch (e: IOException) {
@@ -421,6 +467,28 @@ class SyncEngineImpl @Inject constructor(
                 reason = SyncFailureReason.SERVER_ERROR,
                 message = "Unreadable response: ${e.message ?: e::class.java.simpleName}",
             )
+        }
+
+    /**
+     * Runs a DELETE, treating **404 as success**.
+     *
+     * DELETE is idempotent and its goal state is "this row is not on the
+     * backend". A 404 means the row is already absent, which is that goal — so
+     * reporting failure would be wrong, and worse, the row would stay
+     * PENDING/FAILED and be retried on every pass forever. This is reachable in
+     * normal use: a routine created and deleted while offline is never uploaded
+     * at all, so the DELETE that follows refers to an id the backend has never
+     * seen.
+     *
+     * The routine-exercise endpoint already no-ops on an unknown id (204), so
+     * this mainly matters for routines, which 404.
+     */
+    private suspend fun attemptDelete(call: suspend () -> Response<*>): UploadResult =
+        when (val result = attempt(call)) {
+            is UploadResult.Failed ->
+                if (result.status == 404) UploadResult.Success else result
+
+            UploadResult.Success -> UploadResult.Success
         }
 
     private fun reasonForStatus(code: Int): SyncFailureReason = when {

@@ -39,16 +39,24 @@ interface RoutineDao {
      * SYNCING rows are excluded — SYNCING means another pass is mid-flight, and
      * claiming it again would double-upload.
      *
-     * Soft-deleted routines are excluded: propagating deletions is deferred to a
-     * later phase, and uploading a deleted routine as a create would resurrect it
-     * on the backend.
+     * Soft-deleted routines are **included**. They are how a deletion travels to
+     * the backend: the engine inspects `isDeleted` and sends a DELETE instead of
+     * a create, so the row that records the deletion is exactly the row that
+     * uploads it.
+     *
+     * This query previously filtered `isDeleted = 0`, on the reasoning that
+     * uploading a deleted routine as a create would resurrect it. That is true,
+     * but excluding the row did not defer the deletion — it discarded it. The
+     * row stayed PENDING forever and the backend never learned of it (M11
+     * Phase 1, defect D-1). The fix is to dispatch on `isDeleted`, not to hide
+     * the row from the uploader.
      *
      * Ordered by createdAt so parents are uploaded before anything created after
      * them; `id` breaks ties so the order is total and tests are deterministic.
      */
     @Query(
-        "SELECT * FROM routine WHERE isDeleted = 0 " +
-            "AND syncStatus IN ('PENDING', 'FAILED') ORDER BY createdAt ASC, id ASC",
+        "SELECT * FROM routine " +
+            "WHERE syncStatus IN ('PENDING', 'FAILED') ORDER BY createdAt ASC, id ASC",
     )
     suspend fun getPendingSync(): List<RoutineEntity>
 

@@ -60,15 +60,16 @@ interface RoutineExerciseDao {
     suspend fun upsertAll(routineExercises: List<RoutineExerciseEntity>)
     /**
      * Routine exercises awaiting upload, oldest first. Same PENDING/FAILED rule
-     * and soft-delete exclusion as [RoutineDao.getPendingSync].
+     * as [RoutineDao.getPendingSync], and — as there — soft-deleted rows are
+     * **included** so their deletion can be uploaded (M11 Phase 1, defect D-1).
      *
      * The parent routine is not joined here: the engine uploads routines in an
-     * earlier phase and already knows which of them failed, so it can skip the
-     * children of a failed parent without a second query.
+     * earlier phase and already knows which of them failed or were deleted, so it
+     * can skip the children of such a parent without a second query.
      */
     @Query(
-        "SELECT * FROM routine_exercise WHERE isDeleted = 0 " +
-            "AND syncStatus IN ('PENDING', 'FAILED') ORDER BY createdAt ASC, id ASC",
+        "SELECT * FROM routine_exercise " +
+            "WHERE syncStatus IN ('PENDING', 'FAILED') ORDER BY createdAt ASC, id ASC",
     )
     suspend fun getPendingSync(): List<RoutineExerciseEntity>
 

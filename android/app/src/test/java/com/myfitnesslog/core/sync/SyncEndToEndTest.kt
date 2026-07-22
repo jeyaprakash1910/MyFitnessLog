@@ -169,6 +169,73 @@ class SyncEndToEndTest {
      * The user journey the whole milestone exists to support: build a routine,
      * train it, finish. Returns the ids involved.
      */
+    // ---- Deletions (the gap that let M11 defect D-1 survive) --------------
+
+    @Test
+    fun `removing an exercise from a routine uploads the deletion`() = runTest {
+        // This scenario did not exist before M11 Phase 3. The end-to-end
+        // walkthrough covered eleven cases and not one of them deleted anything,
+        // which is how a broken deletion path stayed green for two milestones.
+        val ids = performFullWorkout()
+        engine.sync()
+        requestedPaths.clear()
+
+        routineRepository.removeExercise(ids.routineExerciseId)
+        val result = engine.sync()
+
+        assertEquals(
+            listOf("DELETE /api/v1/routine-exercises/${ids.routineExerciseId}"),
+            requestedPaths,
+        )
+        assertTrue(result.toString(), result is SyncResult.Success)
+        // The row stays soft-deleted but leaves the queue.
+        val row = database.routineExerciseDao().getById(ids.routineExerciseId)!!
+        assertTrue(row.isDeleted)
+        assertEquals(SyncStatus.SYNCED, row.syncStatus)
+    }
+
+    @Test
+    fun `deleting a routine uploads the deletion and does not re-create it`() = runTest {
+        val ids = performFullWorkout()
+        engine.sync()
+        requestedPaths.clear()
+
+        routineRepository.deleteRoutine(ids.routineId)
+        val result = engine.sync()
+
+        assertTrue(
+            requestedPaths.toString(),
+            requestedPaths.contains("DELETE /api/v1/routines/${ids.routineId}"),
+        )
+        // The crucial negative: no create may be replayed for a deleted routine.
+        assertTrue(requestedPaths.none { it == "POST /api/v1/routines" })
+        assertTrue(result.toString(), result is SyncResult.Success)
+    }
+
+    @Test
+    fun `a routine created and deleted entirely offline settles without retrying forever`() =
+        runTest {
+            // The backend has never seen this id, so the DELETE 404s. Treating
+            // that as failure would leave the row queued on every future pass.
+            val routineId = routineRepository.createRoutine("Never Synced")
+            routineRepository.deleteRoutine(routineId)
+            overrides["/routines/$routineId"] =
+                MockResponse().setResponseCode(404).setBody("""{"message":"Routine not found."}""")
+
+            val first = engine.sync()
+            // Prove the 404 path was actually exercised: without this the stub
+            // could silently miss and the assertions below would pass on a 2xx.
+            assertEquals(listOf("DELETE /api/v1/routines/$routineId"), requestedPaths)
+            requestedPaths.clear()
+            val second = engine.sync()
+
+            assertTrue(first.toString(), first is SyncResult.Success)
+            assertEquals(SyncStatus.SYNCED, database.routineDao().getById(routineId)!!.syncStatus)
+            // Nothing left to do: the queue is genuinely empty, not merely quiet.
+            assertEquals(SyncResult.NothingToSync, second)
+            assertEquals(emptyList<String>(), requestedPaths)
+        }
+
     private suspend fun performFullWorkout(): Ids {
         val routineId = routineRepository.createRoutine("Push Day")
         val routineExerciseId = routineRepository.addExercise(

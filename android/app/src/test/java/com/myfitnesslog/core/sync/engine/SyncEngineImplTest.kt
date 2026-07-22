@@ -538,6 +538,115 @@ class SyncEngineImplTest {
         assertTrue(result is SyncResult.Partial)
     }
 
+    // ---- Routine and routine-exercise deletions (M11 Phase 2, D-1) --------
+
+    @Test
+    fun `a soft-deleted routine is sent as a DELETE, not re-created`() = runTest {
+        val routineId = UUID.randomUUID()
+        routineSource.pending = listOf(
+            SyncEntityFixtures.routine(id = routineId, isDeleted = true),
+        )
+
+        val result = engine.sync()
+
+        assertEquals(listOf("DELETE /api/v1/routines/$routineId"), requestedPaths)
+        assertEquals(listOf(SyncStatus.SYNCING, SyncStatus.SYNCED), routineSource.statusesFor(routineId))
+        assertTrue(result.toString(), result is SyncResult.Success)
+    }
+
+    @Test
+    fun `a soft-deleted routine exercise is sent as a DELETE`() = runTest {
+        val routineId = UUID.randomUUID()
+        val exerciseId = UUID.randomUUID()
+        routineSource.pending = listOf(SyncEntityFixtures.routine(id = routineId))
+        routineExerciseSource.pending = listOf(
+            SyncEntityFixtures.routineExercise(id = exerciseId, routineId = routineId)
+                .copy(isDeleted = true),
+        )
+
+        engine.sync()
+
+        assertTrue(
+            requestedPaths.toString(),
+            requestedPaths.contains("DELETE /api/v1/routine-exercises/$exerciseId"),
+        )
+        assertTrue(requestedPaths.none { it.contains("/routines/$routineId/exercises") })
+    }
+
+    @Test
+    fun `deleting something the backend never received counts as success`() = runTest {
+        // A routine created and deleted while offline is never uploaded, so the
+        // DELETE names an id the backend has never seen. Treating that 404 as a
+        // failure would leave the row pending and retry it on every pass forever.
+        val routineId = UUID.randomUUID()
+        routineSource.pending = listOf(
+            SyncEntityFixtures.routine(id = routineId, isDeleted = true),
+        )
+        fail("/routines/$routineId", 404)
+
+        val result = engine.sync()
+
+        assertEquals(listOf(SyncStatus.SYNCING, SyncStatus.SYNCED), routineSource.statusesFor(routineId))
+        assertEquals(0, result.summary.failed)
+        assertTrue(result is SyncResult.Success)
+    }
+
+    @Test
+    fun `a genuinely failed deletion is retried, not swallowed`() = runTest {
+        val routineId = UUID.randomUUID()
+        routineSource.pending = listOf(
+            SyncEntityFixtures.routine(id = routineId, isDeleted = true),
+        )
+        fail("/routines/$routineId", 503)
+
+        val result = engine.sync()
+
+        assertEquals(listOf(SyncStatus.SYNCING, SyncStatus.FAILED), routineSource.statusesFor(routineId))
+        assertEquals(SyncFailureReason.SERVER_ERROR, result.summary.failures.single().reason)
+    }
+
+    @Test
+    fun `a pending child create is skipped once its routine is deleted`() = runTest {
+        // The backend resolves a routine's active row before adding to it, so a
+        // create under a deleted routine would 404 on every pass forever.
+        val routineId = UUID.randomUUID()
+        val childId = UUID.randomUUID()
+        routineSource.pending = listOf(
+            SyncEntityFixtures.routine(id = routineId, isDeleted = true),
+        )
+        routineExerciseSource.pending = listOf(
+            SyncEntityFixtures.routineExercise(id = childId, routineId = routineId),
+        )
+
+        val result = engine.sync()
+
+        assertTrue(requestedPaths.none { it.contains("/exercises") })
+        val skip = result.summary.skips.single { it.entityType == SyncEntityType.ROUTINE_EXERCISE }
+        assertEquals(childId, skip.id)
+    }
+
+    @Test
+    fun `a child deletion still uploads even when its routine was deleted`() = runTest {
+        // Deleting by id converges regardless of the parent, and the endpoint
+        // no-ops on an unknown id.
+        val routineId = UUID.randomUUID()
+        val childId = UUID.randomUUID()
+        routineSource.pending = listOf(
+            SyncEntityFixtures.routine(id = routineId, isDeleted = true),
+        )
+        routineExerciseSource.pending = listOf(
+            SyncEntityFixtures.routineExercise(id = childId, routineId = routineId)
+                .copy(isDeleted = true),
+        )
+
+        engine.sync()
+
+        assertTrue(
+            requestedPaths.toString(),
+            requestedPaths.contains("DELETE /api/v1/routine-exercises/$childId"),
+        )
+    }
+
     // ---- Set deletions (ADR-0007) ----------------------------------------
 
     @Test

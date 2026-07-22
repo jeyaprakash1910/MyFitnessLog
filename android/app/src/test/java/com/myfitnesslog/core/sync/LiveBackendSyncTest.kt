@@ -191,6 +191,60 @@ class LiveBackendSyncTest {
     }
 
     @Test
+    fun `removing an exercise from a routine reaches the real backend`() = runTest {
+        // The regression test for M11 Phase 1 defect D-1, verified against a real
+        // backend rather than a fake: the deletion was previously filtered out of
+        // the pending query and never uploaded, leaving the backend permanently
+        // ahead of the phone.
+        val routineId = routineRepository.createRoutine("Live Delete ${UUID.randomUUID()}")
+        val exerciseId = routineRepository.addExercise(
+            routineId = routineId,
+            exerciseId = SEEDED_EXERCISE_ID,
+            targetSets = 3,
+            minTargetReps = 8,
+            maxTargetReps = 12,
+            targetRestSeconds = 90,
+            notes = null,
+        )
+        assertTrue(engine.sync() is SyncResult.Success)
+
+        routineRepository.removeExercise(exerciseId)
+        val result = engine.sync()
+
+        // The API exposes no read endpoint for routine exercises, so the
+        // backend-side effect is confirmed directly in PostgreSQL by the phase
+        // verification; what this asserts is that the client actually issued the
+        // deletion and accepted the response, which is precisely what D-1 broke.
+        assertTrue("Deletion sync failed: ${result.summary.failures}", result is SyncResult.Success)
+        assertEquals(
+            SyncStatus.SYNCED,
+            database.routineExerciseDao().getById(exerciseId)!!.syncStatus,
+        )
+        println("LIVE_DELETE routineExercise=$exerciseId removed from backend")
+    }
+
+    @Test
+    fun `deleting a routine reaches the real backend`() = runTest {
+        val routineId = routineRepository.createRoutine("Live Routine Delete ${UUID.randomUUID()}")
+        assertTrue(engine.sync() is SyncResult.Success)
+
+        routineRepository.deleteRoutine(routineId)
+        val result = engine.sync()
+
+        assertTrue("Routine delete failed: ${result.summary.failures}", result is SyncResult.Success)
+
+        // The backend soft-deletes, so the routine disappears from the list.
+        val listBody = OkHttpClient().newCall(
+            Request.Builder().url("${BASE_URL}routines").build(),
+        ).execute().use { it.body!!.string() }
+        assertTrue(
+            "Deleted routine still present in GET /routines",
+            !listBody.contains(routineId.toString()),
+        )
+        println("LIVE_DELETE routine=$routineId soft-deleted on backend")
+    }
+
+    @Test
     fun `replaying the same pass against the real backend is idempotent`() = runTest {
         val routineId = routineRepository.createRoutine("Live Replay ${UUID.randomUUID()}")
         val sessionId = startWorkout(routineId)
