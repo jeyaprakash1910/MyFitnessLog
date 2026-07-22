@@ -485,6 +485,20 @@ These include:
 
 Workout history is considered immutable once completed.
 
+### Consequence: deleting a set while a workout is in progress
+
+Because `WorkoutSet` is never soft-deleted, removing a set during an in-progress
+workout is a genuine `DELETE`, and nothing remains for the synchronization engine
+to upload. Android therefore records the deletion in a separate outbox table,
+`workout_set_tombstone` (Room v4), and clears the row once the backend has been
+told (ADR-0007).
+
+That table is local to Android and is deliberately *not* part of the history
+schema: it has no foreign key into the workout graph, and no history query reads
+it. The alternative — an `isDeleted` flag on `WorkoutSet` — was rejected because
+it would put a filter into every history read path permanently, which is exactly
+the immutability/simplicity property this section protects.
+
 ---
 
 ## Database Philosophy Summary

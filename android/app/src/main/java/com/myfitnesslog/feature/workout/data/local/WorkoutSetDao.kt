@@ -2,14 +2,20 @@ package com.myfitnesslog.feature.workout.data.local
 
 import androidx.room.Dao
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Upsert
 import com.myfitnesslog.core.data.local.SyncStatus
 import kotlinx.coroutines.flow.Flow
 import java.util.UUID
 
 /**
- * DAO for [WorkoutSetEntity]. Reads are ordered by setNumber. `deleteById`
- * supports the "delete set" action during an in-progress workout.
+ * DAO for [WorkoutSetEntity]. Reads are ordered by setNumber.
+ *
+ * Also owns [WorkoutSetTombstoneEntity], because a tombstone exists only as the
+ * shadow of a set deletion: keeping both here lets [deleteAndRecord] remove the
+ * row and queue the deletion in one Room transaction, so the two can never
+ * diverge. Splitting them across DAOs would need the database handle injected
+ * into the repository purely to regain that atomicity.
  */
 @Dao
 interface WorkoutSetDao {
@@ -31,6 +37,31 @@ interface WorkoutSetDao {
 
     @Query("DELETE FROM workout_set WHERE id = :id")
     suspend fun deleteById(id: UUID)
+
+    @Upsert
+    suspend fun upsertTombstone(tombstone: WorkoutSetTombstoneEntity)
+
+    /**
+     * Deletes a set and queues the deletion for upload, atomically.
+     *
+     * Both halves must land together. A tombstone without the delete would ask
+     * the backend to remove a set the phone still shows; a delete without the
+     * tombstone is exactly the bug this table exists to fix.
+     */
+    @Transaction
+    suspend fun deleteAndRecord(tombstone: WorkoutSetTombstoneEntity) {
+        deleteById(tombstone.workoutSetId)
+        upsertTombstone(tombstone)
+    }
+
+    /** Queued deletions, oldest first. Their existence *is* the pending state. */
+    @Query("SELECT * FROM workout_set_tombstone ORDER BY deletedAt ASC, workoutSetId ASC")
+    suspend fun getPendingTombstones(): List<WorkoutSetTombstoneEntity>
+
+    /** Clears a tombstone once the backend has accepted (or settled) the deletion. */
+    @Query("DELETE FROM workout_set_tombstone WHERE workoutSetId = :workoutSetId")
+    suspend fun deleteTombstone(workoutSetId: UUID)
+
     /**
      * Sets awaiting upload, joined to their grandparent session id.
      *

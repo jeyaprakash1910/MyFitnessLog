@@ -91,12 +91,38 @@ class WorkoutRepositoryImplTest {
     }
 
     @Test
-    fun deleteSetRemovesIt() = runBlocking {
+    fun deleteSetRemovesItAndQueuesTheDeletionForUpload() = runBlocking {
         val setId = addWorkingSet()
 
         repository.deleteSet(setId)
 
         assertTrue(repository.observeSets(workoutExerciseId).first().isEmpty())
+        // A set is hard-deleted, so without a tombstone the backend would never
+        // learn of the deletion and would keep showing the set (ADR-0007).
+        val tombstone = repository.getPendingWorkoutSetDeletions().single()
+        assertEquals(setId, tombstone.workoutSetId)
+        assertEquals(workoutExerciseId, tombstone.workoutExerciseId)
+        assertEquals(sessionId, tombstone.workoutSessionId)
+    }
+
+    @Test
+    fun clearingADeletionEmptiesTheQueue() = runBlocking {
+        val setId = addWorkingSet()
+        repository.deleteSet(setId)
+
+        repository.clearWorkoutSetDeletion(setId)
+
+        assertTrue(repository.getPendingWorkoutSetDeletions().isEmpty())
+    }
+
+    @Test
+    fun deletingTheSameSetTwiceQueuesOneDeletion() = runBlocking {
+        val setId = addWorkingSet()
+
+        repository.deleteSet(setId)
+        repository.deleteSet(setId) // the row is already gone — a no-op
+
+        assertEquals(1, repository.getPendingWorkoutSetDeletions().size)
     }
 
     @Test

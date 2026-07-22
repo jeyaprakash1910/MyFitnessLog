@@ -141,6 +141,7 @@ class LiveBackendSyncTest {
             sessionSource = workoutRepository,
             workoutExerciseSource = workoutRepository,
             setSource = workoutRepository,
+            deletionSource = workoutRepository,
             routineApi = retrofit.create(RoutineApi::class.java),
             sessionApi = retrofit.create(WorkoutSessionApi::class.java),
             logApi = retrofit.create(WorkoutLogApi::class.java),
@@ -206,5 +207,53 @@ class LiveBackendSyncTest {
 
         assertTrue("Replay failed: ${replay.summary.failures}", replay is SyncResult.Success)
         println("LIVE_REPLAY routine=$routineId session=$sessionId")
+    }
+
+    @Test
+    fun `a set deleted after it was uploaded is removed from the real backend`() = runTest {
+        // The failure ADR-0007 exists to prevent: the set survives on the
+        // backend and the web client shows a set the phone does not.
+        val routineId = routineRepository.createRoutine("Live Delete ${UUID.randomUUID()}")
+        val sessionId = startWorkout(routineId)
+        val workoutExerciseId =
+            workoutRepository.addExercise(sessionId, SEEDED_EXERCISE_ID, "Barbell Back Squat")
+        val keptSetId = workoutRepository.addSet(
+            workoutExerciseId = workoutExerciseId,
+            weight = BigDecimal("100.00"),
+            repetitions = 5,
+            setCategory = SetCategory.WORKING,
+            rpe = null,
+            rir = null,
+        )
+        val doomedSetId = workoutRepository.addSet(
+            workoutExerciseId = workoutExerciseId,
+            weight = BigDecimal("60.00"),
+            repetitions = 12,
+            setCategory = SetCategory.WORKING,
+            rpe = null,
+            rir = null,
+        )
+
+        // Upload both sets first, so the deletion has something real to remove.
+        assertTrue(engine.sync() is SyncResult.Success)
+
+        workoutRepository.deleteSet(doomedSetId)
+        workoutRepository.completeWorkout(sessionId)
+        val result = engine.sync()
+
+        assertTrue("Deletion sync failed: ${result.summary.failures}", result is SyncResult.Success)
+        assertTrue(
+            "The tombstone should be cleared once the backend accepted the delete.",
+            workoutRepository.getPendingWorkoutSetDeletions().isEmpty(),
+        )
+
+        // Read the backend's own snapshot back: it is the assertion that matters.
+        val detail = OkHttpClient().newCall(
+            Request.Builder().url("${BASE_URL}workout-sessions/$sessionId").build(),
+        ).execute().use { it.body!!.string() }
+        assertTrue("Deleted set still present on the backend: $detail", !detail.contains("$doomedSetId"))
+        assertTrue("Kept set missing from the backend: $detail", detail.contains("$keptSetId"))
+
+        println("LIVE_DELETE session=$sessionId kept=$keptSetId deleted=$doomedSetId")
     }
 }

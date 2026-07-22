@@ -99,9 +99,16 @@ Feature packages lift cleanly into Gradle modules later if needed.
 - Enums (WorkoutStatus, SetCategory) are stored by name. Money/precision values
   (weight, RPE, RIR) use BigDecimal stored as a plain string — see section 16.
 
-Current schema: database version 3, exportSchema on (schemas v1/v2/v3 committed).
+Current schema: database version 4, exportSchema on (schemas v1–v4 committed).
 Entities: ExerciseCategory, Exercise (reference); Routine, RoutineExercise
-(templates); WorkoutSession, WorkoutExercise, WorkoutSet (history).
+(templates); WorkoutSession, WorkoutExercise, WorkoutSet (history);
+WorkoutSetTombstone (sync outbox — see below).
+
+`workout_set_tombstone` (v4) is not part of the workout snapshot. It records that
+a set was hard-deleted so the synchronization engine can tell the backend, and
+the row is removed once it has (ADR-0007). It is deliberately outside the history
+graph — no foreign key, no `syncStatus` — so a cascade cannot discard a pending
+deletion and no history read path has to filter it out.
 
 Migration policy: `fallbackToDestructiveMigration()` has been **removed**. It was
 acceptable only while the database held nothing a user would miss; once real
@@ -109,7 +116,8 @@ training history is being logged, a destructive upgrade would silently delete
 data that exists nowhere else (anything not yet synchronized). A version bump
 without a matching migration now fails loudly at startup instead.
 
-v3 is the baseline for real use. Versions 1–2 existed only during M3–M6 on
+v3 is the baseline for real use; `MIGRATION_3_4` is the first real migration
+(purely additive — one new table). Versions 1–2 existed only during M3–M6 on
 developer machines that were being destructively upgraded anyway, so no migration
 path into them is provided. Every schema change from here ships with a `Migration`
 in `core/data/local/Migrations.kt` **and** a data-preservation case in
@@ -284,8 +292,10 @@ model is genuinely needed.
 - A LocalDataSource wrapper around DAOs.
 - Any sync engine, WorkManager jobs, or network calls before their milestone
   (delivered in Milestone 9).
-- Bidirectional sync, multi-device conflict resolution, deletion propagation for
-  hard-deleted rows, and user-visible sync indicators (SYNC.md §19).
+- Bidirectional sync, multi-device conflict resolution, and user-visible sync
+  indicators (SYNC.md §19). Deletion propagation for hard-deleted workout sets
+  *is* built, via tombstones (ADR-0007); WorkoutExercise deletions are not,
+  because nothing in the UI deletes one.
 - Foreground services, notifications, or alarms for timers (timers are in-VM only).
 
 ⸻

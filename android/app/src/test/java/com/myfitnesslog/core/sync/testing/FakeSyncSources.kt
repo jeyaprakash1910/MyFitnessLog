@@ -5,12 +5,14 @@ import com.myfitnesslog.core.sync.source.RoutineExerciseSyncSource
 import com.myfitnesslog.core.sync.source.RoutineSyncSource
 import com.myfitnesslog.core.sync.source.WorkoutExerciseSyncSource
 import com.myfitnesslog.core.sync.source.WorkoutSessionSyncSource
+import com.myfitnesslog.core.sync.source.WorkoutSetDeletionSyncSource
 import com.myfitnesslog.core.sync.source.WorkoutSetSyncSource
 import com.myfitnesslog.feature.routine.data.local.RoutineEntity
 import com.myfitnesslog.feature.routine.data.local.RoutineExerciseEntity
 import com.myfitnesslog.feature.workout.data.local.PendingWorkoutSet
 import com.myfitnesslog.feature.workout.data.local.WorkoutExerciseEntity
 import com.myfitnesslog.feature.workout.data.local.WorkoutSessionEntity
+import com.myfitnesslog.feature.workout.data.local.WorkoutSetTombstoneEntity
 import java.util.UUID
 
 /**
@@ -114,4 +116,21 @@ class FakeWorkoutSetSyncSource(
     override suspend fun setWorkoutSetSyncStatus(id: UUID, status: SyncStatus) = record(id, status)
 
     override suspend fun recoverStaleSyncing(): Int = recover()
+}
+
+/**
+ * Tombstones have no status column, so this fake records which ones were
+ * *cleared* instead of a transition history — clearing is the only terminal
+ * state a deletion has.
+ */
+class FakeWorkoutSetDeletionSyncSource(
+    var pending: List<WorkoutSetTombstoneEntity> = emptyList(),
+) : WorkoutSetDeletionSyncSource {
+    val cleared = mutableListOf<UUID>()
+
+    override suspend fun getPendingWorkoutSetDeletions(): List<WorkoutSetTombstoneEntity> = pending
+
+    override suspend fun clearWorkoutSetDeletion(workoutSetId: UUID) {
+        cleared += workoutSetId
+    }
 }

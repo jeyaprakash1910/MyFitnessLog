@@ -6,6 +6,7 @@ import com.myfitnesslog.feature.routine.data.local.RoutineExerciseEntity
 import com.myfitnesslog.feature.workout.data.local.PendingWorkoutSet
 import com.myfitnesslog.feature.workout.data.local.WorkoutExerciseEntity
 import com.myfitnesslog.feature.workout.data.local.WorkoutSessionEntity
+import com.myfitnesslog.feature.workout.data.local.WorkoutSetTombstoneEntity
 import java.util.UUID
 
 /**
@@ -70,4 +71,20 @@ interface WorkoutSetSyncSource {
 
     /** Releases rows stranded in SYNCING back to PENDING; returns the count. */
     suspend fun recoverStaleSyncing(): Int
+}
+
+/**
+ * Deletions of workout sets awaiting upload (ADR-0007).
+ *
+ * Separate from [WorkoutSetSyncSource] because the two have opposite shapes: a
+ * pending *set* is a live row whose status column moves, while a pending
+ * *deletion* is a row that exists only until the backend agrees, and is then
+ * removed. There is no status to set — [clearWorkoutSetDeletion] is the only
+ * terminal state.
+ */
+interface WorkoutSetDeletionSyncSource {
+    suspend fun getPendingWorkoutSetDeletions(): List<WorkoutSetTombstoneEntity>
+
+    /** Drops a tombstone once its deletion has been settled with the backend. */
+    suspend fun clearWorkoutSetDeletion(workoutSetId: UUID)
 }

@@ -232,10 +232,10 @@ class SyncTriggerIntegrationTest {
     }
 
     @Test
-    fun `deleting a set requests nothing while deletion propagation is deferred`() = runTest {
-        // Documents current, deliberate behaviour rather than endorsing it: a
-        // hard-deleted set leaves no record for a pass to upload. Revisit when
-        // deletion propagation lands.
+    fun `deleting a set requests a sync so the tombstone is uploaded`() = runTest {
+        // A hard-deleted set leaves no row to upload, so the deletion is carried
+        // by a tombstone (ADR-0007) — which is pending work like any other write
+        // and must therefore trigger a pass.
         val sessionId = startWorkout(null)
         val workoutExerciseId = workoutRepository.addExercise(sessionId, exerciseId, "Bench Press")
         val setId = workoutRepository.addSet(
@@ -247,7 +247,7 @@ class SyncTriggerIntegrationTest {
             rir = null,
         )
 
-        assertEquals(0, requestsFrom { workoutRepository.deleteSet(setId) })
+        assertEquals(1, requestsFrom { workoutRepository.deleteSet(setId) })
     }
 
     @Test

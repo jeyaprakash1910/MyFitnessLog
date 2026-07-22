@@ -10,6 +10,7 @@ import com.myfitnesslog.core.sync.testing.FakeRoutineExerciseSyncSource
 import com.myfitnesslog.core.sync.testing.FakeRoutineSyncSource
 import com.myfitnesslog.core.sync.testing.FakeWorkoutExerciseSyncSource
 import com.myfitnesslog.core.sync.testing.FakeWorkoutSessionSyncSource
+import com.myfitnesslog.core.sync.testing.FakeWorkoutSetDeletionSyncSource
 import com.myfitnesslog.core.sync.testing.FakeWorkoutSetSyncSource
 import com.myfitnesslog.core.sync.testing.SyncEntityFixtures
 import com.myfitnesslog.feature.routine.data.remote.RoutineApi
@@ -50,6 +51,7 @@ class SyncEngineImplTest {
     private val sessionSource = FakeWorkoutSessionSyncSource()
     private val workoutExerciseSource = FakeWorkoutExerciseSyncSource()
     private val setSource = FakeWorkoutSetSyncSource()
+    private val deletionSource = FakeWorkoutSetDeletionSyncSource()
 
     /** Every path that was requested, in order — the ordering contract. */
     private val requestedPaths = mutableListOf<String>()
@@ -106,6 +108,7 @@ class SyncEngineImplTest {
             sessionSource = sessionSource,
             workoutExerciseSource = workoutExerciseSource,
             setSource = setSource,
+            deletionSource = deletionSource,
             routineApi = server.createApi<RoutineApi>(),
             sessionApi = server.createApi<WorkoutSessionApi>(),
             logApi = server.createApi<WorkoutLogApi>(),
@@ -533,5 +536,116 @@ class SyncEngineImplTest {
         // The unrelated workout still synced.
         assertTrue(requestedPaths.contains("POST /api/v1/workout-sessions"))
         assertTrue(result is SyncResult.Partial)
+    }
+
+    // ---- Set deletions (ADR-0007) ----------------------------------------
+
+    @Test
+    fun `a deletion is sent after the set uploads and before the session is sealed`() = runTest {
+        // Ordering is the correctness property: after the creates, so a set
+        // created and deleted offline is not resurrected; before the transition,
+        // because the backend refuses writes to a sealed session.
+        val sessionId = UUID.randomUUID()
+        val workoutExerciseId = UUID.randomUUID()
+        val keptSetId = UUID.randomUUID()
+        val deletedSetId = UUID.randomUUID()
+
+        sessionSource.pending = listOf(SyncEntityFixtures.session(id = sessionId, routineId = null))
+        workoutExerciseSource.pending =
+            listOf(SyncEntityFixtures.workoutExercise(id = workoutExerciseId, sessionId = sessionId))
+        setSource.pending = listOf(
+            SyncEntityFixtures.pendingSet(
+                id = keptSetId,
+                workoutExerciseId = workoutExerciseId,
+                sessionId = sessionId,
+            ),
+        )
+        deletionSource.pending = listOf(
+            SyncEntityFixtures.setTombstone(
+                workoutSetId = deletedSetId,
+                workoutExerciseId = workoutExerciseId,
+                sessionId = sessionId,
+            ),
+        )
+
+        val result = engine.sync()
+
+        assertEquals(
+            listOf(
+                "POST /api/v1/workout-sessions",
+                "POST /api/v1/workout-sessions/$sessionId/exercises",
+                "POST /api/v1/workout-exercises/$workoutExerciseId/sets",
+                "DELETE /api/v1/workout-sets/$deletedSetId",
+                "PUT /api/v1/workout-sessions/$sessionId/complete",
+            ),
+            requestedPaths,
+        )
+        assertEquals(listOf(deletedSetId), deletionSource.cleared)
+        assertTrue(result.toString(), result is SyncResult.Success)
+    }
+
+    @Test
+    fun `a retryable deletion failure keeps the tombstone and blocks the transition`() = runTest {
+        // A workout must never be sealed while one of its sets is still pending
+        // removal — sealing it would lock the deletion out permanently.
+        val sessionId = UUID.randomUUID()
+        val deletedSetId = UUID.randomUUID()
+        sessionSource.pending = listOf(SyncEntityFixtures.session(id = sessionId, routineId = null))
+        deletionSource.pending = listOf(
+            SyncEntityFixtures.setTombstone(workoutSetId = deletedSetId, sessionId = sessionId),
+        )
+        fail("/workout-sets/$deletedSetId", 503)
+
+        val result = engine.sync()
+
+        assertTrue(deletionSource.cleared.isEmpty())
+        assertTrue(requestedPaths.toString(), requestedPaths.none { it.contains("/complete") })
+        val failure = result.summary.failures.single()
+        assertEquals(SyncEntityType.WORKOUT_SET_DELETION, failure.entityType)
+        assertEquals(SyncFailureReason.SERVER_ERROR, failure.reason)
+    }
+
+    @Test
+    fun `a rejected deletion drops the tombstone instead of retrying forever`() = runTest {
+        // An unchanged request rejected with 4xx will fail identically on every
+        // future pass; keeping the row would poison the queue permanently.
+        val sessionId = UUID.randomUUID()
+        val deletedSetId = UUID.randomUUID()
+        sessionSource.pending = listOf(SyncEntityFixtures.session(id = sessionId, routineId = null))
+        deletionSource.pending = listOf(
+            SyncEntityFixtures.setTombstone(workoutSetId = deletedSetId, sessionId = sessionId),
+        )
+        fail("/workout-sets/$deletedSetId", 409)
+
+        val result = engine.sync()
+
+        assertEquals(listOf(deletedSetId), deletionSource.cleared)
+        assertEquals(
+            SyncFailureReason.REJECTED,
+            result.summary.failures.single().reason,
+        )
+        // The session is not blocked: nothing is left pending for it.
+        assertTrue(requestedPaths.contains("PUT /api/v1/workout-sessions/$sessionId/complete"))
+    }
+
+    @Test
+    fun `a deletion whose session failed to upload is skipped, not attempted`() = runTest {
+        val sessionId = UUID.randomUUID()
+        val deletedSetId = UUID.randomUUID()
+        sessionSource.pending = listOf(SyncEntityFixtures.session(id = sessionId, routineId = null))
+        deletionSource.pending = listOf(
+            SyncEntityFixtures.setTombstone(workoutSetId = deletedSetId, sessionId = sessionId),
+        )
+        fail("/workout-sessions", 500)
+
+        val result = engine.sync()
+
+        assertTrue(requestedPaths.none { it.startsWith("DELETE") })
+        assertTrue(deletionSource.cleared.isEmpty())
+        // The session's own transition is skipped too, hence the filter.
+        val skip = result.summary.skips
+            .single { it.entityType == SyncEntityType.WORKOUT_SET_DELETION }
+        assertEquals(deletedSetId, skip.id)
+        assertEquals(sessionId, skip.blockedBy)
     }
 }

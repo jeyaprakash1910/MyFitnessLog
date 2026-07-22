@@ -154,10 +154,71 @@ class MigrationTest {
     }
 
     /**
+     * v3 → v4 (adds `workout_set_tombstone`, ADR-0007) preserves a logged
+     * workout.
+     *
+     * The seeded rows are a real session → exercise → set chain rather than a
+     * token row, because that chain is the data a user would actually lose. The
+     * assertion is that it survived, not merely that the migration executed.
+     */
+    @Test
+    fun migration3To4PreservesLoggedWorkouts() {
+        val sessionId = "20000000-0000-0000-0000-000000000002"
+        val exerciseId = "20000000-0000-0000-0000-000000000003"
+        val catalogueExerciseId = "20000000-0000-0000-0000-000000000004"
+        val categoryId = "20000000-0000-0000-0000-000000000005"
+        val setId = "20000000-0000-0000-0000-000000000006"
+
+        helper.createDatabase(TEST_DB, 3).use { db ->
+            db.execSQL(
+                "INSERT INTO exercise_category (id, name) VALUES (?, ?)",
+                arrayOf(categoryId, "Chest"),
+            )
+            db.execSQL(
+                "INSERT INTO exercise (id, categoryId, name) VALUES (?, ?, ?)",
+                arrayOf(catalogueExerciseId, categoryId, "Bench Press"),
+            )
+            db.execSQL(
+                "INSERT INTO workout_session " +
+                    "(id, routineId, status, startedAt, endedAt, notes, createdAt, updatedAt, syncStatus) " +
+                    "VALUES (?, NULL, 'COMPLETED', 1000, 2000, NULL, 1000, 2000, 'PENDING')",
+                arrayOf(sessionId),
+            )
+            db.execSQL(
+                "INSERT INTO workout_exercise " +
+                    "(id, workoutSessionId, exerciseId, exerciseName, exerciseOrder, targetSets, " +
+                    "minTargetReps, maxTargetReps, targetRestSeconds, notes, createdAt, updatedAt, syncStatus) " +
+                    "VALUES (?, ?, ?, 'Bench Press', 0, 3, 8, 12, 90, NULL, 1000, 1000, 'PENDING')",
+                arrayOf(exerciseId, sessionId, catalogueExerciseId),
+            )
+            db.execSQL(
+                "INSERT INTO workout_set " +
+                    "(id, workoutExerciseId, setNumber, weight, repetitions, setCategory, " +
+                    "startedAt, finishedAt, rpe, rir, isCompleted, createdAt, updatedAt, syncStatus) " +
+                    "VALUES (?, ?, 1, '80.00', 8, 'WORKING', 1000, 1100, NULL, NULL, 1, 1000, 1000, 'PENDING')",
+                arrayOf(setId, exerciseId),
+            )
+        }
+
+        // runMigrationsAndValidate also proves the hand-written DDL matches the
+        // schema Room expects — a mismatch here is what crashes on a real device.
+        helper.runMigrationsAndValidate(TEST_DB, 4, true, MIGRATION_3_4).use { db ->
+            db.query("SELECT weight, repetitions FROM workout_set WHERE id = '$setId'").use { c ->
+                assertTrue("The logged set did not survive the migration.", c.moveToFirst())
+                assertEquals("80.00", c.getString(0))
+                assertEquals(8, c.getInt(1))
+            }
+            db.query("SELECT COUNT(*) FROM workout_set_tombstone").use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals("The new table should start empty.", 0, c.getInt(0))
+            }
+        }
+    }
+
+    /**
      * Every schema version between the baseline and the current one must have a
-     * migration path. Today the two are the same, so this is trivially true —
-     * but the moment the version is bumped without adding a `Migration`, this
-     * fails, which is exactly the point.
+     * migration path. The moment the version is bumped without adding a
+     * `Migration`, this fails, which is exactly the point.
      */
     @Test
     fun everyVersionAboveTheBaselineHasAMigration() {

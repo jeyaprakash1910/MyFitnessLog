@@ -11,6 +11,7 @@ import com.myfitnesslog.core.sync.source.RoutineExerciseSyncSource
 import com.myfitnesslog.core.sync.source.RoutineSyncSource
 import com.myfitnesslog.core.sync.source.WorkoutExerciseSyncSource
 import com.myfitnesslog.core.sync.source.WorkoutSessionSyncSource
+import com.myfitnesslog.core.sync.source.WorkoutSetDeletionSyncSource
 import com.myfitnesslog.core.sync.source.WorkoutSetSyncSource
 import com.myfitnesslog.feature.routine.data.RoutineRepositoryImpl
 import com.myfitnesslog.feature.workout.data.WorkoutRepositoryImpl
@@ -75,4 +76,9 @@ abstract class SyncModule {
 
     @Binds
     abstract fun bindWorkoutSetSyncSource(impl: WorkoutRepositoryImpl): WorkoutSetSyncSource
+
+    @Binds
+    abstract fun bindWorkoutSetDeletionSyncSource(
+        impl: WorkoutRepositoryImpl,
+    ): WorkoutSetDeletionSyncSource
 }

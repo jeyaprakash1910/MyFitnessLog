@@ -12,6 +12,7 @@ import com.myfitnesslog.core.sync.source.RoutineExerciseSyncSource
 import com.myfitnesslog.core.sync.source.RoutineSyncSource
 import com.myfitnesslog.core.sync.source.WorkoutExerciseSyncSource
 import com.myfitnesslog.core.sync.source.WorkoutSessionSyncSource
+import com.myfitnesslog.core.sync.source.WorkoutSetDeletionSyncSource
 import com.myfitnesslog.core.sync.source.WorkoutSetSyncSource
 import com.myfitnesslog.core.util.IoDispatcher
 import com.myfitnesslog.feature.routine.data.remote.RoutineApi
@@ -36,11 +37,12 @@ import javax.inject.Inject
  *
  * ## Ordering
  *
- * One pass runs six phases in exactly the sequence SYNC.md §8 defines:
+ * One pass runs seven phases in exactly the sequence SYNC.md §8 defines:
  *
  * ```
  * Routine → RoutineExercise → WorkoutSession(start)
- *         → WorkoutExercise → WorkoutSet → WorkoutSession(complete/discard)
+ *         → WorkoutExercise → WorkoutSet → WorkoutSet(deletions)
+ *         → WorkoutSession(complete/discard)
  * ```
  *
  * The order is a correctness requirement, not an optimization: every phase but
@@ -69,6 +71,7 @@ class SyncEngineImpl @Inject constructor(
     private val sessionSource: WorkoutSessionSyncSource,
     private val workoutExerciseSource: WorkoutExerciseSyncSource,
     private val setSource: WorkoutSetSyncSource,
+    private val deletionSource: WorkoutSetDeletionSyncSource,
     private val routineApi: RoutineApi,
     private val sessionApi: WorkoutSessionApi,
     private val logApi: WorkoutLogApi,
@@ -83,6 +86,7 @@ class SyncEngineImpl @Inject constructor(
         pass.syncWorkoutSessionStarts()
         pass.syncWorkoutExercises()
         pass.syncWorkoutSets()
+        pass.syncWorkoutSetDeletions()
         pass.syncWorkoutSessionTransitions()
 
         pass.toResult()
@@ -239,6 +243,55 @@ class SyncEngineImpl @Inject constructor(
                     setStatus = setSource::setWorkoutSetSyncStatus,
                     onFailure = { blockedSessions += pending.workoutSessionId },
                 )
+            }
+        }
+
+        /**
+         * Removes sets the user deleted locally (ADR-0007).
+         *
+         * Position in the pass is a correctness requirement, not tidiness. It
+         * must run *after* the set uploads, so a set created and deleted in the
+         * same offline stretch is not resurrected by a later create; and
+         * *before* the terminal transition, because the backend refuses every
+         * write — deletions included — to a session it has already sealed.
+         *
+         * A tombstone has no status column: success drops the row, and failure
+         * leaves it for the next pass. The one exception is a rejection. A 4xx
+         * means an unchanged retry fails identically, so keeping the tombstone
+         * would retry it on every pass forever; it is dropped and reported
+         * instead. The backend's DELETE is a no-op when the id is unknown, so
+         * the common "never uploaded in the first place" case succeeds rather
+         * than 404ing.
+         */
+        suspend fun syncWorkoutSetDeletions() {
+            deletionSource.getPendingWorkoutSetDeletions().forEach { tombstone ->
+                if (tombstone.workoutSessionId in blockedSessions) {
+                    skip(
+                        SyncEntityType.WORKOUT_SET_DELETION,
+                        tombstone.workoutSetId,
+                        tombstone.workoutSessionId,
+                    )
+                    return@forEach
+                }
+                when (val result = attempt {
+                    logApi.deleteWorkoutSet(tombstone.workoutSetId.toString())
+                }) {
+                    is UploadResult.Success -> {
+                        uploaded++
+                        deletionSource.clearWorkoutSetDeletion(tombstone.workoutSetId)
+                    }
+
+                    is UploadResult.Failed -> {
+                        fail(SyncEntityType.WORKOUT_SET_DELETION, tombstone.workoutSetId, result)
+                        if (result.reason == SyncFailureReason.REJECTED) {
+                            deletionSource.clearWorkoutSetDeletion(tombstone.workoutSetId)
+                        } else {
+                            // Retryable: the session must not be sealed while one
+                            // of its sets is still pending removal.
+                            blockedSessions += tombstone.workoutSessionId
+                        }
+                    }
+                }
             }
         }
 

@@ -6,6 +6,7 @@ import com.myfitnesslog.core.data.local.WorkoutStatus
 import com.myfitnesslog.core.sync.SyncTrigger
 import com.myfitnesslog.core.sync.source.WorkoutExerciseSyncSource
 import com.myfitnesslog.core.sync.source.WorkoutSessionSyncSource
+import com.myfitnesslog.core.sync.source.WorkoutSetDeletionSyncSource
 import com.myfitnesslog.core.sync.source.WorkoutSetSyncSource
 import com.myfitnesslog.core.util.IoDispatcher
 import com.myfitnesslog.feature.workout.data.local.PendingWorkoutSet
@@ -15,6 +16,7 @@ import com.myfitnesslog.feature.workout.data.local.WorkoutSessionDao
 import com.myfitnesslog.feature.workout.data.local.WorkoutSessionEntity
 import com.myfitnesslog.feature.workout.data.local.WorkoutSetDao
 import com.myfitnesslog.feature.workout.data.local.WorkoutSetEntity
+import com.myfitnesslog.feature.workout.data.local.WorkoutSetTombstoneEntity
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
@@ -40,7 +42,8 @@ class WorkoutRepositoryImpl @Inject constructor(
 ) : WorkoutRepository,
     WorkoutSessionSyncSource,
     WorkoutExerciseSyncSource,
-    WorkoutSetSyncSource {
+    WorkoutSetSyncSource,
+    WorkoutSetDeletionSyncSource {
 
     override fun observeActiveSession(): Flow<WorkoutSessionEntity?> = sessionDao.observeActive()
 
@@ -150,11 +153,19 @@ class WorkoutRepositoryImpl @Inject constructor(
 
     override suspend fun deleteSet(setId: UUID) = withContext(ioDispatcher) {
         val existing = setDao.getById(setId) ?: return@withContext
-        requireInProgressForSet(existing.workoutExerciseId)
-        setDao.deleteById(setId)
-        // Deliberately no sync trigger: deletion propagation is not implemented
-        // (Milestone 9 deferred item), so there is nothing for a pass to upload.
-        // The row is simply gone locally.
+        val session = requireInProgressForSet(existing.workoutExerciseId)
+        // A set is hard-deleted, so nothing would be left to upload. The
+        // tombstone is what the backend is told about (ADR-0007); it is written
+        // in the same transaction as the delete so the two cannot diverge.
+        setDao.deleteAndRecord(
+            WorkoutSetTombstoneEntity(
+                workoutSetId = setId,
+                workoutExerciseId = existing.workoutExerciseId,
+                workoutSessionId = session.id,
+                deletedAt = clock.instant(),
+            ),
+        )
+        syncTrigger.requestSync()
     }
 
     override suspend fun completeWorkout(sessionId: UUID) =
@@ -180,10 +191,10 @@ class WorkoutRepositoryImpl @Inject constructor(
             syncTrigger.requestSync()
         }
 
-    private suspend fun requireInProgressForSet(workoutExerciseId: UUID) {
+    private suspend fun requireInProgressForSet(workoutExerciseId: UUID): WorkoutSessionEntity {
         val exercise = exerciseDao.getById(workoutExerciseId)
             ?: error("Workout exercise $workoutExerciseId not found")
-        requireInProgress(exercise.workoutSessionId)
+        return requireInProgress(exercise.workoutSessionId)
     }
 
     /** Returns the session iff it is IN_PROGRESS; otherwise rejects the mutation. */
@@ -230,6 +241,12 @@ class WorkoutRepositoryImpl @Inject constructor(
 
     override suspend fun setWorkoutSetSyncStatus(id: UUID, status: SyncStatus) =
         withContext(ioDispatcher) { setDao.updateSyncStatus(id, status) }
+
+    override suspend fun getPendingWorkoutSetDeletions(): List<WorkoutSetTombstoneEntity> =
+        withContext(ioDispatcher) { setDao.getPendingTombstones() }
+
+    override suspend fun clearWorkoutSetDeletion(workoutSetId: UUID) =
+        withContext(ioDispatcher) { setDao.deleteTombstone(workoutSetId) }
 
     /** Recovers all three workout tables. See RoutineRepositoryImpl for why one
      * override covers every workout SyncSource this class implements. */

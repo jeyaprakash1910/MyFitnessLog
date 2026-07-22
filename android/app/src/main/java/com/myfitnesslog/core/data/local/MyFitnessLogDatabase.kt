@@ -23,6 +23,7 @@ import com.myfitnesslog.feature.workout.data.local.WorkoutSessionDao
 import com.myfitnesslog.feature.workout.data.local.WorkoutSessionEntity
 import com.myfitnesslog.feature.workout.data.local.WorkoutSetDao
 import com.myfitnesslog.feature.workout.data.local.WorkoutSetEntity
+import com.myfitnesslog.feature.workout.data.local.WorkoutSetTombstoneEntity
 
 /**
  * The application's Room database — the single source of truth on Android
@@ -41,8 +42,11 @@ import com.myfitnesslog.feature.workout.data.local.WorkoutSetEntity
  *  - v2: routine templates (Routine, RoutineExercise) added in Milestone 5.
  *  - v3: workout history (WorkoutSession, WorkoutExercise, WorkoutSet) added in
  *        Milestone 6.
- * Pre-release the app uses destructive migration (see DatabaseModule), so no
- * hand-written Migration is required yet; real migrations begin once shipped.
+ *  - v4: workout_set_tombstone, so hard-deleted sets can be propagated to the
+ *        backend (ADR-0007), added ahead of Milestone 10.
+ *
+ * There is no destructive fallback. Every version bump ships with a `Migration`
+ * in [MIGRATIONS] and a data-preservation case in `MigrationTest`.
  */
 @Database(
     entities = [
@@ -53,8 +57,9 @@ import com.myfitnesslog.feature.workout.data.local.WorkoutSetEntity
         WorkoutSessionEntity::class,
         WorkoutExerciseEntity::class,
         WorkoutSetEntity::class,
+        WorkoutSetTombstoneEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 @TypeConverters(

@@ -112,4 +112,16 @@ object SyncEntityFixtures {
         ),
         workoutSessionId = sessionId,
     )
+
+    fun setTombstone(
+        workoutSetId: UUID = UUID.randomUUID(),
+        workoutExerciseId: UUID = UUID.randomUUID(),
+        sessionId: UUID,
+        deletedAt: Instant = TIME,
+    ) = com.myfitnesslog.feature.workout.data.local.WorkoutSetTombstoneEntity(
+        workoutSetId = workoutSetId,
+        workoutExerciseId = workoutExerciseId,
+        workoutSessionId = sessionId,
+        deletedAt = deletedAt,
+    )
 }

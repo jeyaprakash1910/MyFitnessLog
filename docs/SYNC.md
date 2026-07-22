@@ -160,6 +160,9 @@ Entities synchronized include:
 * WorkoutSession
 * WorkoutExercise
 * WorkoutSet
+* WorkoutSet deletions, carried by `workout_set_tombstone` rows (ADR-0007).
+  Every other entity is soft-deleted, so its deletion travels on the row itself;
+  a workout set is hard-deleted and needs a record of its own.
 
 Reference data such as Exercise and ExerciseCategory is seeded by the backend and downloaded to Android.
 
@@ -203,6 +206,9 @@ uploaded in two stages, and its terminal transition is sent last.
       WorkoutSet  (POST /workout-exercises/{id}/sets)
            │
            ▼
+  WorkoutSet — deletions  (DELETE /workout-sets/{id})
+           │
+           ▼
    WorkoutSession — complete / discard
         (PUT /workout-sessions/{id}/complete | /discard)
 ```
@@ -210,6 +216,13 @@ uploaded in two stages, and its terminal transition is sent last.
 The terminal transition must come last because the backend permits adding or
 modifying a session's exercises and sets only while that session is IN_PROGRESS.
 Uploading the transition early would make the remaining children unwritable.
+
+The deletion phase sits between the two for the same reason from both sides. It
+runs *after* the set creates so a set that was created and deleted within one
+offline stretch is not resurrected by a create later in the same pass, and
+*before* the transition because a sealed session rejects deletions too. See
+ADR-0007 for the tombstone mechanism that makes a hard-deleted set visible to a
+pass at all.
 
 Sending the session start immediately (rather than deferring the whole workout
 until it ends) preserves the session UUID on the backend from the first moment,
@@ -379,6 +392,10 @@ Full database uploads are not performed.
 Future versions may introduce:
 
 * Bidirectional synchronization.
+* Reconciling a deletion the backend rejects. Today a 4xx drops the tombstone
+  and reports the failure, because one-way sync has nothing to reconcile
+  against (ADR-0007).
+* Deletion propagation for WorkoutExercise, if the UI ever gains that action.
 * Multiple Android devices.
 * Web editing.
 * Conflict resolution.
