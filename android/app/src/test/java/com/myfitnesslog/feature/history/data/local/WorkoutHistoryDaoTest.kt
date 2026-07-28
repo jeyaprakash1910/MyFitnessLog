@@ -82,6 +82,69 @@ class WorkoutHistoryDaoTest {
             ),
         )
 
+    private suspend fun insertSet(workoutExerciseId: UUID, number: Int, weight: String, reps: Int, rpe: String? = null) =
+        database.workoutSetDao().upsert(
+            WorkoutSetEntity(
+                id = UUID.randomUUID(), workoutExerciseId = workoutExerciseId, setNumber = number,
+                weight = BigDecimal(weight), repetitions = reps, rpe = rpe?.let(::BigDecimal),
+                setCategory = SetCategory.WORKING, createdAt = now, updatedAt = now,
+            ),
+        )
+
+    // --- getPreviousSets (V2 Milestone E) -----------------------------------
+
+    @Test
+    fun getPreviousSetsReturnsSetsOfTheExerciseFromACompletedWorkout() = runTest {
+        val s = session(status = WorkoutStatus.COMPLETED)
+        insertSession(s)
+        val ex = insertExercise(s.id, order = 0)
+        insertSet(ex, 1, "40", 10, "7")
+        insertSet(ex, 2, "42.5", 8, "9.5")
+
+        val previous = historyDao.getPreviousSets(benchId)
+        assertEquals(listOf(1, 2), previous.map { it.setNumber })
+        assertEquals(BigDecimal("40"), previous[0].weight)
+        assertEquals(10, previous[0].repetitions)
+        assertEquals(BigDecimal("7"), previous[0].rpe)
+        assertEquals(BigDecimal("42.5"), previous[1].weight)
+    }
+
+    @Test
+    fun getPreviousSetsUsesTheMostRecentCompletedWorkout() = runTest {
+        val older = session(status = WorkoutStatus.COMPLETED, startedAt = now)
+        val newer = session(status = WorkoutStatus.COMPLETED, startedAt = now.plusSeconds(86_400))
+        insertSession(older)
+        insertSession(newer)
+        insertSet(insertExercise(older.id, 0), 1, "60", 5)
+        insertSet(insertExercise(newer.id, 0), 1, "80", 8)
+
+        val previous = historyDao.getPreviousSets(benchId)
+        // Must come from the NEWER workout, not the older one.
+        assertEquals(1, previous.size)
+        assertEquals(BigDecimal("80"), previous[0].weight)
+    }
+
+    @Test
+    fun getPreviousSetsIgnoresInProgressAndDiscardedWorkouts() = runTest {
+        val discarded = session(status = WorkoutStatus.DISCARDED, startedAt = now.plusSeconds(200_000))
+        val inProgress = session(status = WorkoutStatus.IN_PROGRESS, startedAt = now.plusSeconds(100_000))
+        val completed = session(status = WorkoutStatus.COMPLETED, startedAt = now)
+        insertSession(discarded); insertSession(inProgress); insertSession(completed)
+        insertSet(insertExercise(discarded.id, 0), 1, "999", 1)
+        insertSet(insertExercise(inProgress.id, 0), 1, "888", 1)
+        insertSet(insertExercise(completed.id, 0), 1, "70", 6)
+
+        val previous = historyDao.getPreviousSets(benchId)
+        // Only the completed workout counts, even though the others are newer.
+        assertEquals(1, previous.size)
+        assertEquals(BigDecimal("70"), previous[0].weight)
+    }
+
+    @Test
+    fun getPreviousSetsIsEmptyWhenNoCompletedHistory() = runTest {
+        assertEquals(emptyList<PreviousSetPerformance>(), historyDao.getPreviousSets(benchId))
+    }
+
     @Test
     fun observeCompletedSessionsExcludesInProgressAndDiscarded() = runTest {
         insertSession(session(status = WorkoutStatus.COMPLETED))

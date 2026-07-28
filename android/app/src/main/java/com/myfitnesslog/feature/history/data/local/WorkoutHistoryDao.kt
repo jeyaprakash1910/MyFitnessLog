@@ -79,4 +79,29 @@ interface WorkoutHistoryDao {
         """,
     )
     fun observeSetsForSession(sessionId: UUID): Flow<List<WorkoutSetEntity>>
+
+    /**
+     * The sets performed for [exerciseId] in the **most recent COMPLETED** workout
+     * that contained it (regardless of routine) — the "previous performance" read
+     * (V2 Milestone E, spec §6). Read-only; IN_PROGRESS/DISCARDED sessions are
+     * excluded, so today's session never matches itself. Returns an empty list when
+     * the exercise has no completed history. Ordered by set number.
+     */
+    @Query(
+        """
+        SELECT s.setNumber AS setNumber, s.weight AS weight, s.repetitions AS repetitions, s.rpe AS rpe
+        FROM workout_set AS s
+        INNER JOIN workout_exercise AS e ON s.workoutExerciseId = e.id
+        WHERE e.exerciseId = :exerciseId
+          AND e.workoutSessionId = (
+            SELECT ss.id FROM workout_session AS ss
+            INNER JOIN workout_exercise AS ee ON ee.workoutSessionId = ss.id
+            WHERE ee.exerciseId = :exerciseId AND ss.status = 'COMPLETED'
+            ORDER BY ss.startedAt DESC
+            LIMIT 1
+          )
+        ORDER BY s.setNumber ASC
+        """,
+    )
+    suspend fun getPreviousSets(exerciseId: UUID): List<PreviousSetPerformance>
 }

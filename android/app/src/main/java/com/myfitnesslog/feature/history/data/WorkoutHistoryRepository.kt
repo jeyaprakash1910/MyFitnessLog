@@ -1,6 +1,7 @@
 package com.myfitnesslog.feature.history.data
 
 import com.myfitnesslog.feature.history.data.local.CompletedWorkoutSummary
+import com.myfitnesslog.feature.history.data.local.PreviousSetPerformance
 import com.myfitnesslog.feature.workout.data.local.WorkoutExerciseEntity
 import com.myfitnesslog.feature.workout.data.local.WorkoutSessionEntity
 import com.myfitnesslog.feature.workout.data.local.WorkoutSetEntity
@@ -36,4 +37,11 @@ interface WorkoutHistoryRepository {
 
     /** Every set performed in a workout, ordered by exercise then set number. */
     fun observeSets(sessionId: UUID): Flow<List<WorkoutSetEntity>>
+
+    /**
+     * The previous performance for an exercise: the sets from the most recent
+     * COMPLETED workout containing it (cross-routine), for the PREVIOUS column
+     * (V2 Milestone E). Read-only projection; empty when there is no history.
+     */
+    suspend fun getPreviousSets(exerciseId: UUID): List<PreviousSetPerformance>
 }
