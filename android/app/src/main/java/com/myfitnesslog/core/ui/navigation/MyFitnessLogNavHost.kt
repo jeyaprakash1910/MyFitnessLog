@@ -1,5 +1,6 @@
 package com.myfitnesslog.core.ui.navigation
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -40,6 +41,7 @@ import com.myfitnesslog.feature.routine.ui.picker.ExercisePickerScreen
 import com.myfitnesslog.feature.workout.ui.WorkoutRoutes
 import com.myfitnesslog.feature.workout.ui.WorkoutScreen
 import com.myfitnesslog.feature.workout.ui.WorkoutViewModel
+import com.myfitnesslog.feature.workout.ui.indicator.WorkoutIndicator
 
 /**
  * Root navigation graph.
@@ -80,8 +82,21 @@ fun MyFitnessLogNavHost() {
         },
         bottomBar = {
             if (isTopLevel) {
-                NavigationBar {
-                    TopLevelDestination.entries.forEach { destination ->
+                Column {
+                    // Persistent workout indicator: shown on top-level screens other
+                    // than the Workout screen itself; tapping resumes the workout.
+                    if (currentRoute.base() != TopLevelDestination.WORKOUT.route) {
+                        WorkoutIndicator(
+                            onClick = {
+                                navController.navigate(TopLevelDestination.WORKOUT.route) {
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            },
+                        )
+                    }
+                    NavigationBar {
+                        TopLevelDestination.entries.forEach { destination ->
                         val selected = currentDestination
                             ?.hierarchy?.any { it.route.base() == destination.route } == true
                         NavigationBarItem(
@@ -98,6 +113,7 @@ fun MyFitnessLogNavHost() {
                             icon = { Icon(destination.icon(), contentDescription = destination.label) },
                             label = { Text(destination.label) },
                         )
+                        }
                     }
                 }
             }
