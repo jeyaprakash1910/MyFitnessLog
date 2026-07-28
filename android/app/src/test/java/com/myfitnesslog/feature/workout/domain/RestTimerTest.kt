@@ -59,4 +59,36 @@ class RestTimerTest {
         timer.start(0)
         assertEquals(RestTimerState.Idle, timer.state.value)
     }
+
+    @Test
+    fun adjustAddsToRemainingAndKeepsCountingDown() = runTest {
+        val timer = RestTimer(backgroundScope, tickMillis = 1_000)
+        timer.start(30)
+
+        timer.adjust(15)
+        assertEquals(RestTimerState.Running(45, 45), timer.state.value)
+
+        advanceTimeBy(1_000); runCurrent()
+        assertEquals(RestTimerState.Running(44, 45), timer.state.value)
+    }
+
+    @Test
+    fun adjustSubtractsAndClampsAtZeroToFinished() = runTest {
+        val timer = RestTimer(backgroundScope, tickMillis = 1_000)
+        timer.start(10)
+
+        timer.adjust(-5)
+        assertEquals(RestTimerState.Running(5, 10), timer.state.value)
+
+        // Dropping below zero clamps and finishes the rest.
+        timer.adjust(-100)
+        assertEquals(RestTimerState.Finished, timer.state.value)
+    }
+
+    @Test
+    fun adjustWhenNotRunningIsNoOp() = runTest {
+        val timer = RestTimer(backgroundScope)
+        timer.adjust(15)
+        assertEquals(RestTimerState.Idle, timer.state.value)
+    }
 }
