@@ -10,6 +10,7 @@ import com.myfitnesslog.feature.routine.data.RoutineRepositoryImpl
 import com.myfitnesslog.feature.routine.newInMemoryDatabase
 import com.myfitnesslog.feature.routine.newRepository
 import com.myfitnesslog.feature.routine.seedExercises
+import com.myfitnesslog.feature.history.data.WorkoutHistoryRepositoryImpl
 import com.myfitnesslog.feature.workout.data.WorkoutRepositoryImpl
 import com.myfitnesslog.feature.workout.domain.StartWorkoutUseCase
 import java.math.BigDecimal
@@ -28,6 +29,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -39,6 +41,7 @@ class WorkoutViewModelTest {
 
     private lateinit var database: MyFitnessLogDatabase
     private lateinit var workoutRepository: WorkoutRepositoryImpl
+    private lateinit var historyRepository: WorkoutHistoryRepositoryImpl
     private lateinit var startWorkout: StartWorkoutUseCase
     private var routineId: UUID = UUID.randomUUID()
     private val clock = MutableClock(Instant.ofEpochMilli(1_700_000_000_000L))
@@ -57,6 +60,7 @@ class WorkoutViewModelTest {
             ioDispatcher = UnconfinedTestDispatcher(),
             clock = RoutineTestData.clock,
         )
+        historyRepository = WorkoutHistoryRepositoryImpl(database.workoutHistoryDao())
         startWorkout = StartWorkoutUseCase(
             syncTrigger = RecordingSyncTrigger(),
             database = database,
@@ -77,13 +81,22 @@ class WorkoutViewModelTest {
         database.close()
     }
 
-    private fun viewModel(startFrom: UUID? = routineId) = WorkoutViewModel(
+    private fun newRestTimer() = com.myfitnesslog.feature.workout.domain.RestTimer(
+        kotlinx.coroutines.CoroutineScope(UnconfinedTestDispatcher()),
+    )
+
+    private fun viewModel(
+        startFrom: UUID? = routineId,
+        restTimer: com.myfitnesslog.feature.workout.domain.RestTimer = newRestTimer(),
+    ) = WorkoutViewModel(
         savedStateHandle = SavedStateHandle(
             if (startFrom != null) mapOf(WorkoutRoutes.ARG_ROUTINE_ID to startFrom.toString()) else emptyMap(),
         ),
         repository = workoutRepository,
+        historyRepository = historyRepository,
         startWorkout = startWorkout,
         clock = clock,
+        restTimerController = restTimer,
     )
 
     private suspend fun WorkoutViewModel.awaitActive(predicate: (WorkoutUiState.Active) -> Boolean = { true }) =
@@ -108,42 +121,181 @@ class WorkoutViewModelTest {
         assertEquals(listOf("Squat"), state.exercises.map { it.exerciseName })
     }
 
-    @Test
-    fun addSetAppearsInState() = runBlocking {
-        val vm = viewModel()
-        val exerciseId = vm.awaitActive { it.exercises.isNotEmpty() }.exercises.first().id
-
-        vm.addSet(exerciseId, BigDecimal("80"), 8, SetCategory.WORKING, null)
-
-        val sets = vm.awaitActive { it.exercises.first().sets.isNotEmpty() }.exercises.first().sets
-        assertEquals(1, sets.size)
-        assertEquals(BigDecimal("80"), sets.single().weight)
+    /** Completes the first still-planned row of the first exercise with the given values. */
+    private suspend fun WorkoutViewModel.completeFirstPlanned(weight: String, reps: String): UUID {
+        val ex = awaitActive { it.exercises.firstOrNull()?.rows?.any { r -> !r.isCompleted } == true }.exercises.first()
+        val plannedKey = ex.rows.first { !it.isCompleted }.rowKey
+        onToggleComplete(ex.id, plannedKey, weight, reps)
+        awaitActive { it.exercises.first().rows.any { r -> r.isCompleted } }
+        return ex.id
     }
 
     @Test
-    fun deleteSetRemovesIt() = runBlocking {
+    fun plannedRowsAreGeneratedFromTargetSets() = runBlocking {
         val vm = viewModel()
-        val exerciseId = vm.awaitActive { it.exercises.isNotEmpty() }.exercises.first().id
-        vm.addSet(exerciseId, BigDecimal("80"), 8, SetCategory.WORKING, null)
-        val setId = vm.awaitActive { it.exercises.first().sets.isNotEmpty() }.exercises.first().sets.single().id
-
-        vm.deleteSet(setId)
-
-        assertTrue(vm.awaitActive { it.exercises.first().sets.isEmpty() }.exercises.first().sets.isEmpty())
+        // Routine target is 3 sets → 3 transient planned rows, none completed.
+        val ex = vm.awaitActive { it.exercises.firstOrNull()?.rows?.size == 3 }.exercises.first()
+        assertEquals(3, ex.rows.size)
+        assertTrue(ex.rows.none { it.isCompleted })
     }
 
     @Test
-    fun toggleCompletionFlipsFlag() = runBlocking {
+    fun completingAPlannedRowPersistsItAsGreen() = runBlocking {
         val vm = viewModel()
-        val exerciseId = vm.awaitActive { it.exercises.isNotEmpty() }.exercises.first().id
-        vm.addSet(exerciseId, BigDecimal("80"), 8, SetCategory.WORKING, null)
-        val set = vm.awaitActive { it.exercises.first().sets.isNotEmpty() }.exercises.first().sets.single()
-        assertTrue(set.isCompleted)
+        val exerciseId = vm.completeFirstPlanned("80", "8")
 
-        vm.toggleCompletion(set.id)
+        val row = vm.awaitActive { it.exercises.first().rows.any { r -> r.isCompleted } }
+            .exercises.first().rows.first { it.isCompleted }
+        assertEquals(BigDecimal("80"), row.weight)
+        assertEquals(8, row.repetitions)
+        assertEquals(1, database.workoutSetDao().getByExercise(exerciseId).size)
+    }
 
-        val toggled = vm.awaitActive { it.exercises.first().sets.firstOrNull()?.isCompleted == false }
-        assertFalse(toggled.exercises.first().sets.single().isCompleted)
+    @Test
+    fun addSetAppendsATransientPlannedRowWithoutPersisting() = runBlocking {
+        val vm = viewModel()
+        val ex = vm.awaitActive { it.exercises.firstOrNull()?.rows?.size == 3 }.exercises.first()
+
+        vm.onAddSet(ex.id)
+
+        vm.awaitActive { it.exercises.first().rows.size == 4 }
+        // Nothing persisted — a planned row is transient.
+        assertTrue(database.workoutSetDao().getByExercise(ex.id).isEmpty())
+    }
+
+    @Test
+    fun deletingAPlannedRowPersistsNothing() = runBlocking {
+        val vm = viewModel()
+        val ex = vm.awaitActive { it.exercises.firstOrNull()?.rows?.size == 3 }.exercises.first()
+        val plannedKey = ex.rows.first().rowKey
+
+        vm.onDeleteRow(ex.id, plannedKey)
+
+        vm.awaitActive { it.exercises.first().rows.size == 2 }
+        assertTrue(database.workoutSetDao().getByExercise(ex.id).isEmpty())
+    }
+
+    @Test
+    fun deletingACompletedRowTombstonesIt() = runBlocking {
+        val vm = viewModel()
+        val exerciseId = vm.completeFirstPlanned("80", "8")
+        val setKey = vm.awaitActive { it.exercises.first().rows.any { r -> r.isCompleted } }
+            .exercises.first().rows.first { it.isCompleted }.rowKey
+
+        vm.onDeleteRow(exerciseId, setKey)
+
+        vm.awaitActive { it.exercises.first().rows.none { r -> r.isCompleted } }
+        assertTrue(database.workoutSetDao().getByExercise(exerciseId).isEmpty())
+    }
+
+    @Test
+    fun undoingACompletedRowRevertsToPlannedAndRemovesTheSet() = runBlocking {
+        val vm = viewModel()
+        val exerciseId = vm.completeFirstPlanned("80", "8")
+        val setKey = vm.awaitActive { it.exercises.first().rows.any { r -> r.isCompleted } }
+            .exercises.first().rows.first { it.isCompleted }.rowKey
+
+        vm.onToggleComplete(exerciseId, setKey, "", "")
+
+        // Set removed (tombstoned) and no completed rows remain.
+        vm.awaitActive { it.exercises.first().rows.none { r -> r.isCompleted } }
+        assertTrue(database.workoutSetDao().getByExercise(exerciseId).isEmpty())
+    }
+
+    @Test
+    fun undoingAMiddleSetKeepsItInPlaceRatherThanMovingItLast() = runBlocking {
+        val vm = viewModel()
+        // Complete all three planned sets top-to-bottom.
+        vm.completeFirstPlanned("60", "8")
+        vm.awaitActive { it.exercises.first().rows.count { r -> r.isCompleted } == 1 }
+        vm.completeFirstPlanned("70", "6")
+        vm.awaitActive { it.exercises.first().rows.count { r -> r.isCompleted } == 2 }
+        val exerciseId = vm.completeFirstPlanned("80", "4")
+        val allDone = vm.awaitActive { it.exercises.first().rows.count { r -> r.isCompleted } == 3 }
+
+        // Undo the middle set (position 2).
+        val middle = allDone.exercises.first().rows[1]
+        vm.onToggleComplete(exerciseId, middle.rowKey, "", "")
+
+        // Wait for the settled state: 3 rows again (2 completed + the restored planned one),
+        // not the transient post-delete state (2 completed rows, before the draft is restored).
+        val rows = vm.awaitActive {
+            val r = it.exercises.first().rows
+            r.size == 3 && r.count { row -> row.isCompleted } == 2
+        }.exercises.first().rows
+        assertEquals(3, rows.size)
+        assertEquals(listOf(1, 2, 3), rows.map { it.setNumber })
+        assertTrue(rows[0].isCompleted)
+        assertFalse(rows[1].isCompleted) // reverted set stays in position 2, not last
+        assertTrue(rows[2].isCompleted)
+        // Its typed values survive the undo (revert-to-planned, not discard).
+        assertEquals(BigDecimal("70"), rows[1].weight)
+    }
+
+    @Test
+    fun settingExerciseRestPersistsTheNewDuration() = runBlocking {
+        val vm = viewModel()
+        val ex = vm.awaitActive { it.exercises.isNotEmpty() }.exercises.first()
+        assertEquals(90, ex.restSeconds) // routine default
+
+        vm.onSetExerciseRest(ex.id, 150)
+
+        val updated = vm.awaitActive { it.exercises.firstOrNull()?.restSeconds == 150 }
+        assertEquals(150, updated.exercises.first().restSeconds)
+    }
+
+    @Test
+    fun rpeSelectionCompletesAPlannedRowWithThatRpe() = runBlocking {
+        val vm = viewModel()
+        val ex = vm.awaitActive { it.exercises.firstOrNull()?.rows?.any { r -> !r.isCompleted } == true }.exercises.first()
+        val plannedKey = ex.rows.first { !it.isCompleted }.rowKey
+        // Commit weight/reps first (as tapping the RPE cell does in the UI).
+        vm.onCommitRow(ex.id, plannedKey, "80", "8")
+
+        vm.onRpeSelected(ex.id, plannedKey, BigDecimal("8.5"))
+
+        val row = vm.awaitActive { it.exercises.first().rows.any { r -> r.isCompleted } }
+            .exercises.first().rows.first { it.isCompleted }
+        assertEquals(BigDecimal("8.5"), row.rpe)
+        assertEquals(BigDecimal("80"), row.weight)
+        assertEquals(1, database.workoutSetDao().getByExercise(ex.id).size)
+    }
+
+    @Test
+    fun rpeSelectionOnACompletedRowEditsItsRpe() = runBlocking {
+        val vm = viewModel()
+        val exerciseId = vm.completeFirstPlanned("80", "8")
+        val setKey = vm.awaitActive { it.exercises.first().rows.any { r -> r.isCompleted } }
+            .exercises.first().rows.first { it.isCompleted }.rowKey
+
+        vm.onRpeSelected(exerciseId, setKey, BigDecimal("9"))
+
+        val row = vm.awaitActive { it.exercises.first().rows.firstOrNull { r -> r.isCompleted }?.rpe != null }
+            .exercises.first().rows.first { it.isCompleted }
+        assertTrue(row.isCompleted) // still completed (edit-after-completion)
+        assertEquals(BigDecimal("9"), row.rpe)
+        assertEquals(1, database.workoutSetDao().getByExercise(exerciseId).size)
+    }
+
+    @Test
+    fun completingViaToggleLeavesRpeNull() = runBlocking {
+        val vm = viewModel()
+        val exerciseId = vm.completeFirstPlanned("80", "8")
+        val row = vm.awaitActive { it.exercises.first().rows.any { r -> r.isCompleted } }
+            .exercises.first().rows.first { it.isCompleted }
+        assertNull(row.rpe)
+    }
+
+    @Test
+    fun completingAnEmptyPlannedRowPersistsNothing() = runBlocking {
+        val vm = viewModel()
+        val ex = vm.awaitActive { it.exercises.firstOrNull()?.rows?.any { r -> !r.isCompleted } == true }.exercises.first()
+        val plannedKey = ex.rows.first { !it.isCompleted }.rowKey
+
+        vm.onToggleComplete(ex.id, plannedKey, "", "")
+
+        // Give any (incorrect) write a chance, then assert nothing was persisted.
+        assertTrue(database.workoutSetDao().getByExercise(ex.id).isEmpty())
     }
 
     @Test
@@ -168,8 +320,9 @@ class WorkoutViewModelTest {
         vm.completeWorkout()
         vm.awaitActive { it.isReadOnly }
 
-        // Attempting to add a set is swallowed (repository rejects; VM catches).
-        vm.addSet(exerciseId, BigDecimal("80"), 8, SetCategory.WORKING, null)
+        // Attempting to complete a (now-hidden) planned row is swallowed: the repository
+        // rejects a write to a terminal session and the VM catches it.
+        vm.onToggleComplete(exerciseId, "draft:${UUID.randomUUID()}", "80", "8")
 
         assertTrue(database.workoutSetDao().getByExercise(exerciseId).isEmpty())
     }
@@ -226,6 +379,128 @@ class WorkoutViewModelTest {
 
         vm.cancelRest()
         assertEquals(com.myfitnesslog.feature.workout.domain.RestTimerState.Idle, vm.restTimer.value)
+    }
+
+    // --- Milestone E: PREVIOUS column (read-only projection) ---
+
+    @Test
+    fun noPreviousShownWhenExerciseHasNoCompletedHistory() = runBlocking {
+        val vm = viewModel()
+        val ex = vm.awaitActive { it.exercises.firstOrNull()?.rows?.size == 3 }.exercises.first()
+        assertTrue(ex.rows.all { it.previous == null })
+    }
+
+    @Test
+    fun previousReflectsThePriorCompletedWorkout() = runBlocking {
+        // Workout 1: complete one squat set at 100 × 5, then finish.
+        val vm1 = viewModel()
+        vm1.completeFirstPlanned("100", "5")
+        vm1.completeWorkout()
+        vm1.awaitActive { it.isReadOnly }
+
+        // Workout 2 (new session, same routine): PREVIOUS shows last time's set 1.
+        val vm2 = viewModel()
+        val row1 = vm2.awaitActive { it.exercises.firstOrNull()?.rows?.firstOrNull()?.previous != null }
+            .exercises.first().rows.first()
+        assertEquals("100kg × 5", row1.previous)
+        // Set 2 had no prior performance → shown as null (rendered "-").
+        assertNull(vm2.uiStateActive().exercises.first().rows[1].previous)
+    }
+
+    private fun WorkoutViewModel.uiStateActive() = uiState.value as WorkoutUiState.Active
+
+    // --- Milestone F: exercise management ---
+
+    @Test
+    fun removingAnExerciseRemovesItFromState() = runBlocking {
+        val vm = viewModel()
+        val ex = vm.awaitActive { it.exercises.isNotEmpty() }.exercises.first()
+
+        vm.onRemoveExercise(ex.id)
+
+        assertTrue(vm.awaitActive { it.exercises.isEmpty() }.exercises.isEmpty())
+    }
+
+    @Test
+    fun movingAnExerciseReordersState() = runBlocking {
+        val vm = viewModel()
+        val active = vm.awaitActive { it.exercises.isNotEmpty() }
+        val first = active.exercises.first()
+        // Add a second exercise so there is something to reorder.
+        workoutRepository.addExercise(active.sessionId, RoutineTestData.benchId, "Bench Press")
+        vm.awaitActive { it.exercises.size == 2 }
+
+        vm.onMoveExerciseDown(first.id)
+
+        val reordered = vm.awaitActive { it.exercises.size == 2 && it.exercises.first().id != first.id }
+        assertEquals(first.id, reordered.exercises[1].id) // moved from position 0 to 1
+    }
+
+    // --- Milestone D: RestEffect consumption ---
+
+    @Test
+    fun completingASetStartsTheRestTimerWithExerciseDuration() = runBlocking {
+        val vm = viewModel()
+        vm.completeFirstPlanned("80", "8")
+
+        val state = vm.restTimer.value
+        assertTrue(state is com.myfitnesslog.feature.workout.domain.RestTimerState.Running)
+        // Routine target rest is 90s.
+        assertEquals(90, (state as com.myfitnesslog.feature.workout.domain.RestTimerState.Running).totalSeconds)
+    }
+
+    @Test
+    fun undoingACompletionStopsTheRestTimer() = runBlocking {
+        val vm = viewModel()
+        val exerciseId = vm.completeFirstPlanned("80", "8")
+        assertTrue(vm.restTimer.value is com.myfitnesslog.feature.workout.domain.RestTimerState.Running)
+        val setKey = vm.awaitActive { it.exercises.first().rows.any { r -> r.isCompleted } }
+            .exercises.first().rows.first { it.isCompleted }.rowKey
+
+        vm.onToggleComplete(exerciseId, setKey, "", "")
+
+        assertEquals(com.myfitnesslog.feature.workout.domain.RestTimerState.Idle, vm.restTimer.value)
+    }
+
+    @Test
+    fun editingACompletedSetDoesNotChangeTheRestTimer() = runBlocking {
+        val vm = viewModel()
+        val exerciseId = vm.completeFirstPlanned("80", "8")
+        val running = vm.restTimer.value
+        assertTrue(running is com.myfitnesslog.feature.workout.domain.RestTimerState.Running)
+        val setKey = vm.awaitActive { it.exercises.first().rows.any { r -> r.isCompleted } }
+            .exercises.first().rows.first { it.isCompleted }.rowKey
+
+        vm.onCommitRow(exerciseId, setKey, "85", "8")
+
+        assertEquals(running, vm.restTimer.value) // unchanged — edit is not a rest event
+    }
+
+    @Test
+    fun completingViaRpeStartsTheRestTimer() = runBlocking {
+        val vm = viewModel()
+        val ex = vm.awaitActive { it.exercises.firstOrNull()?.rows?.any { r -> !r.isCompleted } == true }.exercises.first()
+        val plannedKey = ex.rows.first { !it.isCompleted }.rowKey
+        vm.onCommitRow(ex.id, plannedKey, "80", "8")
+
+        vm.onRpeSelected(ex.id, plannedKey, BigDecimal("8"))
+
+        assertTrue(vm.restTimer.value is com.myfitnesslog.feature.workout.domain.RestTimerState.Running)
+    }
+
+    @Test
+    fun restTimerSurvivesViewModelRecreation() = runBlocking {
+        // The rest countdown is app-scoped, so leaving the workout screen (which
+        // destroys the ViewModel) and returning to a fresh ViewModel still shows it.
+        val sharedTimer = newRestTimer()
+        val vm1 = viewModel(restTimer = sharedTimer)
+        vm1.awaitActive { it.exercises.isNotEmpty() }
+        vm1.startRest(60)
+        assertTrue(vm1.restTimer.value is com.myfitnesslog.feature.workout.domain.RestTimerState.Running)
+
+        // A brand-new ViewModel over the same app-scoped timer (as on navigation return).
+        val vm2 = viewModel(startFrom = null, restTimer = sharedTimer)
+        assertTrue(vm2.restTimer.value is com.myfitnesslog.feature.workout.domain.RestTimerState.Running)
     }
 
     @Test
