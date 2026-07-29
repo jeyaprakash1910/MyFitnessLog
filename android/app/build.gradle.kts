@@ -366,7 +366,7 @@ dependencies {
     implementation(libs.androidx.hilt.work)
     ksp(libs.androidx.hilt.compiler)
 
-    // Room (infrastructure only in Phase 1; entities/DAOs arrive in Phase 2)
+    // Room (local persistence: entities, DAOs, and migrations)
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
@@ -374,7 +374,7 @@ dependencies {
     // DataStore (app settings)
     implementation(libs.androidx.datastore.preferences)
 
-    // Networking (configured; no API interfaces or calls in Phase 1)
+    // Networking (Retrofit + OkHttp for backend synchronization)
     implementation(libs.retrofit)
     implementation(libs.retrofit.kotlinx.serialization)
     implementation(libs.okhttp)
