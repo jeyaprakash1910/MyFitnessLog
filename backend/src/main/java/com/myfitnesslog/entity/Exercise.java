@@ -12,34 +12,34 @@ import java.util.UUID;
 
 /**
  * Master data entity representing a reusable exercise in the library.
- * Maps to the "Exercise" table defined in V1__Initial_schema.sql.
+ * Maps to the exercise table defined in V1__Initial_schema.sql.
  * Audit timestamps are inherited from AbstractAuditableEntity (see ADR-0006).
  */
 @Entity
-@Table(name = "\"Exercise\"")
+@Table(name = "exercise")
 public class Exercise extends AbstractAuditableEntity {
 
     @Id
-    @Column(name = "\"id\"", nullable = false, updatable = false)
+    @Column(name = "id", nullable = false, updatable = false)
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "\"categoryId\"", nullable = false)
+    @JoinColumn(name = "category_id", nullable = false)
     private ExerciseCategory category;
 
-    @Column(name = "\"name\"", nullable = false, length = 150)
+    @Column(name = "name", nullable = false, length = 150)
     private String name;
 
-    @Column(name = "\"description\"")
+    @Column(name = "description")
     private String description;
 
-    @Column(name = "\"instructions\"")
+    @Column(name = "instructions")
     private String instructions;
 
-    @Column(name = "\"equipment\"", length = 100)
+    @Column(name = "equipment", length = 100)
     private String equipment;
 
-    @Column(name = "\"isDeleted\"", nullable = false)
+    @Column(name = "is_deleted", nullable = false)
     private boolean isDeleted = false;
 
     public UUID getId() {

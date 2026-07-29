@@ -4,7 +4,7 @@
 -- categoryId values reference the categories seeded in V2.
 -- Audit columns (createdAt, updatedAt) rely on the schema defaults.
 
-INSERT INTO "Exercise" ("id", "categoryId", "name", "description", "instructions", "equipment", "isDeleted") VALUES
+INSERT INTO exercise (id, category_id, name, description, instructions, equipment, is_deleted) VALUES
     -- Chest
     ('20000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'Barbell Bench Press', 'Compound chest press with a barbell.', 'Lie on a flat bench and press the barbell from your chest to full extension.', 'Barbell', false),
     ('20000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000001', 'Incline Dumbbell Press', 'Upper-chest press on an incline bench.', 'Press two dumbbells upward while seated on an inclined bench.', 'Dumbbell', false),

@@ -24,6 +24,9 @@ spring:
     locations: classpath:db/migration
 
 app:
+  # Shared secret for the X-API-Key auth boundary. Empty in dev/test disables
+  # authentication (see ApiKeyAuthFilter); production sets APP_API_KEY.
+  api-key: ${APP_API_KEY:}
   cors:
     # Browser origins permitted to read this API (GET only, no credentials).
     # Defaults to the Vite dev server; override per deployment. Empty disables CORS.

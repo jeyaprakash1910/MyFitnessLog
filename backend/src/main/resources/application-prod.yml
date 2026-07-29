@@ -1,0 +1,67 @@
+# Production profile — activated with SPRING_PROFILES_ACTIVE=prod.
+#
+# This file holds ONLY the settings that differ from application.yml. Everything
+# shared (naming strategy, ddl-auto: none, open-in-view: false, UTC time zone,
+# Flyway locations, the CORS key) is inherited from application.yml, which is
+# always loaded first.
+#
+# Nothing secret lives here. Every credential comes from an environment variable
+# set on Render. See .env.prod.example for the full list.
+#
+# Two distinct database connections (ADR: dual-pooler datasource):
+#   * The RUNTIME pool talks to Supabase's TRANSACTION pooler (Supavisor, :6543).
+#   * FLYWAY talks to the SESSION pooler (:5432), because migrations take an
+#     advisory lock that the transaction pooler does not preserve.
+
+spring:
+  datasource:
+    # Supabase transaction pooler URL, e.g.
+    #   jdbc:postgresql://<pooler-host>:6543/postgres?sslmode=require
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}   # e.g. postgres.<project-ref>
+    password: ${SPRING_DATASOURCE_PASSWORD}
+    hikari:
+      # Free Supabase has a small pooled-connection budget. Keep this tiny; a
+      # single-user backend does not need more, and over-provisioning here is the
+      # most common way to exhaust the free tier. Overridable if you ever scale.
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:3}
+      # Render idles the free instance; hold no idle connections open against
+      # Supabase when there is no traffic.
+      minimum-idle: 0
+      connection-timeout: 10000        # 10s — fail fast rather than hang a request
+      # Recycle connections before Supabase's idle cutoff closes them from under
+      # us, which would otherwise surface as an error on the first request after a
+      # quiet period.
+      max-lifetime: 1500000            # 25 min
+      keepalive-time: 300000           # 5 min
+      data-source-properties:
+        # REQUIRED under the transaction pooler. Without this, pgjdbc promotes
+        # queries to server-side prepared statements after 5 executions; the next
+        # execution can land on a different pooled connection that never saw the
+        # PREPARE, giving 'prepared statement "S_1" does not exist'. Enforced here
+        # so it cannot be forgotten in the URL.
+        prepareThreshold: 0
+
+  flyway:
+    # Session pooler (:5432) — separate connection from the runtime pool.
+    # Include ?sslmode=require in the URL itself.
+    url: ${FLYWAY_URL}
+    user: ${FLYWAY_USER}
+    password: ${FLYWAY_PASSWORD}
+
+# Do not expose the API schema / Swagger UI publicly in production. It adds
+# surface for no caller (Android and the web client are pre-built contracts).
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+server:
+  # Render terminates TLS and forwards over HTTP with X-Forwarded-* headers.
+  # Honour them so generated links (OpenAPI, redirects) use https, not http.
+  forward-headers-strategy: framework
+
+logging:
+  level:
+    root: INFO

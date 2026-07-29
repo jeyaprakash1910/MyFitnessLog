@@ -6,7 +6,7 @@
 -- the two blocks can never collide. Category IDs are those seeded in V2 and
 -- extended in V6. Audit columns rely on the schema defaults.
 
-INSERT INTO "Exercise" ("id", "categoryId", "name", "description", "instructions", "equipment", "isDeleted") VALUES
+INSERT INTO exercise (id, category_id, name, description, instructions, equipment, is_deleted) VALUES
     -- Chest
     ('20000000-0000-0000-0000-000000000101', '10000000-0000-0000-0000-000000000001', 'Flat Dumbbell Press', 'Flat-bench chest press with dumbbells.', 'Lie flat and press two dumbbells from chest level to full extension.', 'Dumbbell', false),
     ('20000000-0000-0000-0000-000000000102', '10000000-0000-0000-0000-000000000001', 'Decline Barbell Press', 'Lower-chest press on a decline bench.', 'Press the barbell upward from your lower chest on a declined bench.', 'Barbell', false),

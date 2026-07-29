@@ -3,7 +3,8 @@
 # Integration tests run against a real PostgreSQL instance (the same engine as
 # production) so Flyway migrations, quoted identifiers, CHECK constraints, enum
 # storage, and NUMERIC precision are all exercised faithfully — behaviour an
-# in-memory H2 database cannot reproduce.
+# in-memory H2 database cannot reproduce. Identifiers are unquoted snake_case
+# (ADR-0012), so case-folding behaviour matches production exactly.
 #
 # The datasource points at a dedicated "myfitnesslog_test" database. All values
 # are overridable by environment variables so the same tests run unchanged

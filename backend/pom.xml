@@ -73,6 +73,12 @@
             <version>${mapstruct.version}</version>
         </dependency>
 
+        <!-- Security: provides the filter chain for the X-API-Key auth boundary -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+
         <!-- Testing: bundles JUnit 5 + Mockito (version managed by Spring Boot BOM) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

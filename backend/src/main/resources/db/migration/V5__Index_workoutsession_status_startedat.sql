@@ -5,4 +5,4 @@
 -- composite in the query's own column order and direction serves the whole
 -- statement, and lets a future LIMIT stop scanning after the first page.
 CREATE INDEX idx_workoutsession_status_startedat
-    ON "WorkoutSession" ("status", "startedAt" DESC);
+    ON workout_session (status, started_at DESC);

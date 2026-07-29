@@ -21,47 +21,47 @@ import java.util.UUID;
  * match the NUMERIC columns exactly. setCategory is persisted by name.
  *
  * Value guards (weight >= 0, rpe 1..10, etc.) are enforced by the service layer
- * and the database CHECK constraints. Maps to the "WorkoutSet" table in
+ * and the database CHECK constraints. Maps to the workout_set table in
  * V1__Initial_schema.sql; audit timestamps inherited from AbstractAuditableEntity.
  */
 @Entity
-@Table(name = "\"WorkoutSet\"")
+@Table(name = "workout_set")
 public class WorkoutSet extends AbstractAuditableEntity {
 
     @Id
-    @Column(name = "\"id\"", nullable = false, updatable = false)
+    @Column(name = "id", nullable = false, updatable = false)
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "\"workoutExerciseId\"", nullable = false)
+    @JoinColumn(name = "workout_exercise_id", nullable = false)
     private WorkoutExercise workoutExercise;
 
-    @Column(name = "\"setNumber\"", nullable = false)
+    @Column(name = "set_number", nullable = false)
     private int setNumber;
 
-    @Column(name = "\"weight\"", nullable = false, precision = 6, scale = 2)
+    @Column(name = "weight", nullable = false, precision = 6, scale = 2)
     private BigDecimal weight;
 
-    @Column(name = "\"repetitions\"", nullable = false)
+    @Column(name = "repetitions", nullable = false)
     private int repetitions;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "\"setCategory\"", nullable = false, length = 20)
+    @Column(name = "set_category", nullable = false, length = 20)
     private SetCategory setCategory = SetCategory.WORKING;
 
-    @Column(name = "\"startedAt\"")
+    @Column(name = "started_at")
     private Instant startedAt;
 
-    @Column(name = "\"finishedAt\"")
+    @Column(name = "finished_at")
     private Instant finishedAt;
 
-    @Column(name = "\"rpe\"", precision = 3, scale = 1)
+    @Column(name = "rpe", precision = 3, scale = 1)
     private BigDecimal rpe;
 
-    @Column(name = "\"rir\"", precision = 3, scale = 1)
+    @Column(name = "rir", precision = 3, scale = 1)
     private BigDecimal rir;
 
-    @Column(name = "\"isCompleted\"", nullable = false)
+    @Column(name = "is_completed", nullable = false)
     private boolean isCompleted = true;
 
     public UUID getId() {

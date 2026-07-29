@@ -9,11 +9,11 @@
 -- still appear in the picker. Renaming keeps the existing foreign keys valid
 -- and avoids orphaning the seven exercises that already point at it.
 
-UPDATE "ExerciseCategory"
-   SET "name" = 'Quads', "displayOrder" = 6
- WHERE "id" = '10000000-0000-0000-0000-000000000006';
+UPDATE exercise_category
+   SET name = 'Quads', display_order = 6
+ WHERE id = '10000000-0000-0000-0000-000000000006';
 
-INSERT INTO "ExerciseCategory" ("id", "name", "displayOrder", "isDeleted") VALUES
+INSERT INTO exercise_category (id, name, display_order, is_deleted) VALUES
     ('10000000-0000-0000-0000-000000000009', 'Hamstrings', 7,  false),
     ('10000000-0000-0000-0000-00000000000a', 'Glutes',     8,  false),
     ('10000000-0000-0000-0000-00000000000b', 'Calves',     9,  false),
@@ -23,18 +23,18 @@ INSERT INTO "ExerciseCategory" ("id", "name", "displayOrder", "isDeleted") VALUE
 
 -- Core and Cardio keep their existing IDs; their display order is shifted to
 -- sit after the new lower-body categories.
-UPDATE "ExerciseCategory" SET "displayOrder" = 10 WHERE "id" = '10000000-0000-0000-0000-000000000007';
-UPDATE "ExerciseCategory" SET "displayOrder" = 13 WHERE "id" = '10000000-0000-0000-0000-000000000008';
+UPDATE exercise_category SET display_order = 10 WHERE id = '10000000-0000-0000-0000-000000000007';
+UPDATE exercise_category SET display_order = 13 WHERE id = '10000000-0000-0000-0000-000000000008';
 
 -- Reassign the exercises seeded under the old "Legs" category to the specific
 -- muscle groups they actually train. Barbell Back Squat (…0024) and Leg Press
 -- (…0025) stay under Quads, as does Leg Extension (…0027).
-UPDATE "Exercise" SET "categoryId" = '10000000-0000-0000-0000-000000000009'
- WHERE "id" IN ('20000000-0000-0000-0000-000000000026',   -- Romanian Deadlift
+UPDATE exercise SET category_id = '10000000-0000-0000-0000-000000000009'
+ WHERE id IN ('20000000-0000-0000-0000-000000000026',   -- Romanian Deadlift
                 '20000000-0000-0000-0000-000000000028');  -- Leg Curl
 
-UPDATE "Exercise" SET "categoryId" = '10000000-0000-0000-0000-00000000000a'
- WHERE "id" = '20000000-0000-0000-0000-000000000029';     -- Walking Lunge
+UPDATE exercise SET category_id = '10000000-0000-0000-0000-00000000000a'
+ WHERE id = '20000000-0000-0000-0000-000000000029';     -- Walking Lunge
 
-UPDATE "Exercise" SET "categoryId" = '10000000-0000-0000-0000-00000000000b'
- WHERE "id" = '20000000-0000-0000-0000-000000000030';     -- Standing Calf Raise
+UPDATE exercise SET category_id = '10000000-0000-0000-0000-00000000000b'
+ WHERE id = '20000000-0000-0000-0000-000000000030';     -- Standing Calf Raise

@@ -16,44 +16,44 @@ import java.util.UUID;
  * so history stays accurate if the routine/exercise later changes. Belongs to a
  * session (FK cascades) and references a master Exercise (RESTRICT).
  *
- * Maps to the "WorkoutExercise" table in V1__Initial_schema.sql; audit timestamps
+ * Maps to the workout_exercise table in V1__Initial_schema.sql; audit timestamps
  * inherited from AbstractAuditableEntity.
  */
 @Entity
-@Table(name = "\"WorkoutExercise\"")
+@Table(name = "workout_exercise")
 public class WorkoutExercise extends AbstractAuditableEntity {
 
     @Id
-    @Column(name = "\"id\"", nullable = false, updatable = false)
+    @Column(name = "id", nullable = false, updatable = false)
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "\"workoutSessionId\"", nullable = false)
+    @JoinColumn(name = "workout_session_id", nullable = false)
     private WorkoutSession workoutSession;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "\"exerciseId\"", nullable = false)
+    @JoinColumn(name = "exercise_id", nullable = false)
     private Exercise exercise;
 
-    @Column(name = "\"exerciseName\"", nullable = false, length = 150)
+    @Column(name = "exercise_name", nullable = false, length = 150)
     private String exerciseName;
 
-    @Column(name = "\"exerciseOrder\"", nullable = false)
+    @Column(name = "exercise_order", nullable = false)
     private int exerciseOrder;
 
-    @Column(name = "\"targetSets\"", nullable = false)
+    @Column(name = "target_sets", nullable = false)
     private int targetSets;
 
-    @Column(name = "\"minTargetReps\"", nullable = false)
+    @Column(name = "min_target_reps", nullable = false)
     private int minTargetReps;
 
-    @Column(name = "\"maxTargetReps\"", nullable = false)
+    @Column(name = "max_target_reps", nullable = false)
     private int maxTargetReps;
 
-    @Column(name = "\"targetRestSeconds\"")
+    @Column(name = "target_rest_seconds")
     private Integer targetRestSeconds;
 
-    @Column(name = "\"notes\"")
+    @Column(name = "notes")
     private String notes;
 
     public UUID getId() {

@@ -13,18 +13,18 @@ import java.util.UUID;
  * V1 (see PRD/DATABASE.md); this entity exists so Routine and WorkoutSession can
  * carry the required owner FK.
  *
- * Maps to the "User" table defined in V1__Initial_schema.sql. Audit timestamps
+ * Maps to the app_user table defined in V1__Initial_schema.sql. Audit timestamps
  * are inherited from AbstractAuditableEntity (ADR-0006).
  */
 @Entity
-@Table(name = "\"User\"")
+@Table(name = "app_user")
 public class User extends AbstractAuditableEntity {
 
     @Id
-    @Column(name = "\"id\"", nullable = false, updatable = false)
+    @Column(name = "id", nullable = false, updatable = false)
     private UUID id;
 
-    @Column(name = "\"isDeleted\"", nullable = false)
+    @Column(name = "is_deleted", nullable = false)
     private boolean isDeleted = false;
 
     public UUID getId() {

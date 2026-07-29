@@ -12,7 +12,7 @@ import java.util.UUID;
 
 /**
  * A reusable workout template owned by a user (DATABASE.md). Soft-deleted via
- * isDeleted. Maps to the "Routine" table in V1__Initial_schema.sql; audit
+ * isDeleted. Maps to the routine table in V1__Initial_schema.sql; audit
  * timestamps inherited from AbstractAuditableEntity (ADR-0006).
  *
  * The owner is mapped as a LAZY ManyToOne, mirroring the Exercise → category
@@ -20,27 +20,27 @@ import java.util.UUID;
  * and Android does not send a userId — the backend attaches it).
  */
 @Entity
-@Table(name = "\"Routine\"")
+@Table(name = "routine")
 public class Routine extends AbstractAuditableEntity {
 
     @Id
-    @Column(name = "\"id\"", nullable = false, updatable = false)
+    @Column(name = "id", nullable = false, updatable = false)
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "\"userId\"", nullable = false)
+    @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @Column(name = "\"name\"", nullable = false, length = 150)
+    @Column(name = "name", nullable = false, length = 150)
     private String name;
 
-    @Column(name = "\"description\"")
+    @Column(name = "description")
     private String description;
 
-    @Column(name = "\"displayOrder\"", nullable = false)
+    @Column(name = "display_order", nullable = false)
     private int displayOrder = 0;
 
-    @Column(name = "\"isDeleted\"", nullable = false)
+    @Column(name = "is_deleted", nullable = false)
     private boolean isDeleted = false;
 
     public UUID getId() {

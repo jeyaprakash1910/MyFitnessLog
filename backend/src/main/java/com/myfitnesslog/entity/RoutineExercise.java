@@ -16,41 +16,41 @@ import java.util.UUID;
  * references a master Exercise (RESTRICT). No soft-delete column: it is a
  * template child removed with its routine or by explicit request.
  *
- * Maps to the "RoutineExercise" table in V1__Initial_schema.sql; audit
+ * Maps to the routine_exercise table in V1__Initial_schema.sql; audit
  * timestamps inherited from AbstractAuditableEntity.
  */
 @Entity
-@Table(name = "\"RoutineExercise\"")
+@Table(name = "routine_exercise")
 public class RoutineExercise extends AbstractAuditableEntity {
 
     @Id
-    @Column(name = "\"id\"", nullable = false, updatable = false)
+    @Column(name = "id", nullable = false, updatable = false)
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "\"routineId\"", nullable = false)
+    @JoinColumn(name = "routine_id", nullable = false)
     private Routine routine;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "\"exerciseId\"", nullable = false)
+    @JoinColumn(name = "exercise_id", nullable = false)
     private Exercise exercise;
 
-    @Column(name = "\"exerciseOrder\"", nullable = false)
+    @Column(name = "exercise_order", nullable = false)
     private int exerciseOrder;
 
-    @Column(name = "\"targetSets\"", nullable = false)
+    @Column(name = "target_sets", nullable = false)
     private int targetSets;
 
-    @Column(name = "\"minTargetReps\"", nullable = false)
+    @Column(name = "min_target_reps", nullable = false)
     private int minTargetReps;
 
-    @Column(name = "\"maxTargetReps\"", nullable = false)
+    @Column(name = "max_target_reps", nullable = false)
     private int maxTargetReps;
 
-    @Column(name = "\"targetRestSeconds\"")
+    @Column(name = "target_rest_seconds")
     private Integer targetRestSeconds;
 
-    @Column(name = "\"notes\"")
+    @Column(name = "notes")
     private String notes;
 
     public UUID getId() {
