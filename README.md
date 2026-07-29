@@ -84,16 +84,22 @@ debt register.
 
 ## Documentation (read these first)
 
+For the full, categorized index see **[docs/README.md](docs/README.md)**. The essentials:
+
 | Doc | Purpose |
 | --- | --- |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | **Start here** — current status, milestones, phase-by-phase progress |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System-wide architecture (all three apps) |
 | [docs/ANDROID_ARCHITECTURE.md](docs/ANDROID_ARCHITECTURE.md) | Android architecture, conventions, and the *why* behind decisions |
+| [docs/architecture/WORKOUT_LOGGING.md](docs/architecture/WORKOUT_LOGGING.md) | Workout-logging architecture — session lifecycle, set state machine, rest/previous/ordering/indicator, invariants |
 | [docs/ANDROID_FLOW.md](docs/ANDROID_FLOW.md) | Screen-by-screen app flow + implementation status |
 | [docs/DATABASE.md](docs/DATABASE.md) | Canonical relational data model |
 | [docs/API_SPECIFICATION.md](docs/API_SPECIFICATION.md) | REST API contract (frozen) |
 | [docs/SYNC.md](docs/SYNC.md) | Synchronization strategy and the implemented upload contract |
 | [docs/CODING_STANDARDS.md](docs/CODING_STANDARDS.md) | Coding conventions |
+| [docs/development/TESTING.md](docs/development/TESTING.md) | Testing guide — layers, how to run each suite, disposable-backend and device-guard rules |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute — philosophy, workflow, review, testing & docs expectations |
+| [CHANGELOG.md](CHANGELOG.md) | Notable changes per version (Keep a Changelog) |
 | [docs/ADR/](docs/ADR/) | Architecture Decision Records |
 
 ## Development philosophy
