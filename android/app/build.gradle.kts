@@ -27,6 +27,27 @@ fun resolveApiBaseUrl(): String {
 }
 
 /**
+ * The API key sent as `X-API-Key` on every backend request (ADR-0013).
+ *
+ * Resolved like the signing config — from `apiKey` in `local.properties` or the
+ * `MFL_API_KEY` environment variable — so it is configurable per machine and in CI
+ * without ever being hardcoded. Empty when unset: local development against a
+ * backend with authentication disabled needs no key, and the interceptor simply
+ * omits the header. A release build that forgets it warns (below), because a
+ * secured production backend rejects unauthenticated requests with 401.
+ *
+ * The key is embedded in the APK, where it is extractable. That is the accepted
+ * limitation of app-level (not user-level) auth for V1; see ADR-0013.
+ */
+fun resolveApiKey(): String {
+    val localProperties = rootProject.file("local.properties").takeIf { it.exists() }
+        ?.let { file -> Properties().apply { file.inputStream().use(::load) } }
+    return (localProperties?.getProperty("apiKey") ?: System.getenv("MFL_API_KEY"))
+        ?.trim()?.takeIf { it.isNotEmpty() }
+        ?: ""
+}
+
+/**
  * Application version, read from the tracked `version.properties`.
  *
  * `versionName` is the only value anyone edits. `versionCode` is derived from
@@ -232,6 +253,7 @@ android {
             // Debug-only network logging is gated on this flag at runtime.
             buildConfigField("boolean", "ENABLE_NETWORK_LOGGING", "true")
             buildConfigField("String", "API_BASE_URL", "\"${resolveApiBaseUrl()}\"")
+            buildConfigField("String", "API_KEY", "\"${resolveApiKey()}\"")
         }
         release {
             signingConfig = signingConfigs.findByName("release")
@@ -255,6 +277,14 @@ android {
             // this deliberately, over HTTPS. Left as the emulator loopback it
             // would fail fast rather than silently talking to nothing.
             buildConfigField("String", "API_BASE_URL", "\"${resolveApiBaseUrl()}\"")
+            buildConfigField("String", "API_KEY", "\"${resolveApiKey()}\"")
+            if (resolveApiKey().isEmpty()) {
+                logger.warn(
+                    "\n[release] No apiKey configured — requests will OMIT X-API-Key, and a " +
+                        "secured backend rejects them with 401. Set apiKey in local.properties " +
+                        "or the MFL_API_KEY environment variable; see ADR-0013 / DEPLOYMENT.md.\n",
+                )
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

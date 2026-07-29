@@ -2,6 +2,7 @@ package com.myfitnesslog.core.di
 
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import com.myfitnesslog.BuildConfig
+import com.myfitnesslog.core.network.ApiKeyInterceptor
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -37,6 +38,9 @@ object NetworkModule {
     @Singleton
     fun provideOkHttpClient(): OkHttpClient {
         val builder = OkHttpClient.Builder()
+        // Authenticate every request first, so the X-API-Key header is present in
+        // the chain (and visible to the logging interceptor below when enabled).
+        builder.addInterceptor(ApiKeyInterceptor(BuildConfig.API_KEY))
         if (BuildConfig.ENABLE_NETWORK_LOGGING) {
             builder.addInterceptor(
                 HttpLoggingInterceptor().apply {
