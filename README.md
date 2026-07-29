@@ -16,9 +16,11 @@ fully offline.
 > web client renders synchronized history and workout detail in the browser.
 >
 > Version 1 is a **local production release**: a signed APK against a backend on
-> your own network, not a public deployment. There is no authentication — the
-> backend attaches a single default user — so the network boundary is the
-> security boundary. Multi-user support is Version 2.
+> your own network. As of 1.1.0 the backend enforces an app-level `X-API-Key`
+> authentication boundary (ADR-0013) so it can be exposed to the public internet,
+> and the client sends the key on every request; the backend still attaches a
+> single default user, so this is app-level, not per-user, auth. Per-user
+> (multi-user) authentication remains a future version.
 >
 > No prebuilt APK is distributed: each install needs its own backend URL compiled
 > in, so build it yourself (see [Building a release](#building-a-release)).
