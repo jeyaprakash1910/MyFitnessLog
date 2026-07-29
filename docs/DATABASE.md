@@ -4,6 +4,13 @@
 PostgreSQL, Room v1–v5 on Android. Both migration chains are verified from an
 empty database and from real data.
 
+> **Updated for 1.1.0 (ADR-0012):** the physical PostgreSQL identifiers are now
+> unquoted `snake_case` — `workout_set`, `workout_exercise_id`, `set_number`,
+> `started_at`, and so on (`"User"` became `app_user`). The column tables below
+> still list the original camelCase names; the **logical** model is unchanged —
+> same tables, columns, types, and constraints — only the physical identifier
+> casing differs. See ADR-0012 for the full mapping.
+
 ## Overview
 
 This document defines the complete relational database design for **MyFitnessLog Version 1**.
@@ -20,7 +27,7 @@ It serves as the single source of truth for the application's persistent data mo
 
 The database is designed to support an **offline-first workout tracking application** where all workout history is permanently stored and synchronized between Android devices and the backend server.
 
-Version 1 intentionally supports a **single-user application**. However, the database schema is designed to be **multi-user ready** by including a `User` entity from the beginning. Authentication is intentionally excluded from Version 1 and will be introduced in a future release without requiring structural database changes.
+Version 1 intentionally supports a **single-user application**. However, the database schema is designed to be **multi-user ready** by including a `User` entity from the beginning. Per-user authentication is intentionally excluded from Version 1 (the app-level API-key boundary added in 1.1.0 requires no schema change) and will be introduced in a future release without requiring structural database changes.
 
 The database stores only **historical facts** about completed workouts.
 

@@ -47,11 +47,15 @@ deployed as one.
 
 ### The network is the trust boundary
 
-**Current project scope.** There is no authentication. The backend attaches a single
-default user server-side, so anyone who can reach the backend can read and write the
-same workout history. Access control is therefore entirely a function of **who can
-reach the backend on the network**. Treat the network boundary as the security
-boundary: run the backend somewhere only trusted devices can reach it.
+**Current project scope.** The backend enforces an application-level API-key boundary
+(ADR-0013): when `APP_API_KEY` is set, every request must present it in an `X-API-Key`
+header and the API is default-deny, which makes it safe to expose beyond a trusted
+network. This is app-level, not per-user, auth — the backend still attaches a single
+default user server-side, so anyone holding the key can read and write the same workout
+history. When the key is left unset (local or trusted-network use) the check is
+disabled and access is entirely a function of **who can reach the backend on the
+network** — treat the network boundary as the security boundary and run the backend
+somewhere only trusted devices can reach it.
 
 **Production recommendation.** A public or multi-user deployment must add
 authentication and per-user authorization before exposing the backend beyond a trusted

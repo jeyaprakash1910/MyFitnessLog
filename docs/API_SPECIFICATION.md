@@ -64,11 +64,17 @@ Content-Type: application/json
 
 5. Authentication
 
-Version 1 intentionally has no authentication.
+The API enforces an application-level API-key boundary (ADR-0013). When the backend
+has `APP_API_KEY` configured, every request must present that value in an `X-API-Key`
+header; the API is otherwise default-deny and rejects unauthenticated requests with
+`401`. The health endpoint (`/api/v1/health`) is exempt. When `APP_API_KEY` is unset
+(local development), the check is disabled and all requests are allowed.
 
-All requests are treated as belonging to the single application user.
+This is app-level, not per-user, authentication: every authenticated request is still
+treated as belonging to the single application user.
 
-Authentication will be introduced in a future version without changing endpoint structures.
+Per-user authentication will be introduced in a future version without changing
+endpoint structures.
 
 ⸻
 
@@ -90,8 +96,9 @@ Applies to	`/api/**`
 
 Consequences worth stating: a preflight for any write verb is rejected with 403,
 as is a request from an unlisted origin. An empty origin list disables CORS
-entirely. Allowing credentials is deliberately off — V1 has no authentication and
-sends no cookies, and enabling it would forbid a wildcard origin later.
+entirely. Allowing credentials is deliberately off — the API authenticates with an
+`X-API-Key` header, not cookies, and enabling credentials would forbid a wildcard
+origin later.
 
 ⸻
 
