@@ -371,6 +371,9 @@ dependencies {
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
 
+    // DataStore (app settings)
+    implementation(libs.androidx.datastore.preferences)
+
     // Networking (configured; no API interfaces or calls in Phase 1)
     implementation(libs.retrofit)
     implementation(libs.retrofit.kotlinx.serialization)

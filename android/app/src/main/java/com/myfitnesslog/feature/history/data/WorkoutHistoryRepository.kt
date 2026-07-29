@@ -44,4 +44,15 @@ interface WorkoutHistoryRepository {
      * (V2 Milestone E). Read-only projection; empty when there is no history.
      */
     suspend fun getPreviousSets(exerciseId: UUID): List<PreviousSetPerformance>
+
+    /**
+     * The previous performance for an exercise **within a specific routine**: the
+     * sets from the most recent COMPLETED workout of [routineId] that logged the
+     * exercise (SAME_ROUTINE strategy). Empty when there is no such workout, or when
+     * [routineId] is null (a manual workout has no routine).
+     */
+    suspend fun getPreviousSetsInRoutine(
+        exerciseId: UUID,
+        routineId: UUID?,
+    ): List<PreviousSetPerformance>
 }

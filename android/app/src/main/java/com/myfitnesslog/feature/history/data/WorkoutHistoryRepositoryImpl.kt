@@ -38,4 +38,10 @@ class WorkoutHistoryRepositoryImpl @Inject constructor(
 
     override suspend fun getPreviousSets(exerciseId: UUID): List<PreviousSetPerformance> =
         historyDao.getPreviousSets(exerciseId)
+
+    override suspend fun getPreviousSetsInRoutine(
+        exerciseId: UUID,
+        routineId: UUID?,
+    ): List<PreviousSetPerformance> =
+        historyDao.getPreviousSetsInRoutine(exerciseId, routineId)
 }

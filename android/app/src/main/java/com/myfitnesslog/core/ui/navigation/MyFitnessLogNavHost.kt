@@ -38,6 +38,7 @@ import com.myfitnesslog.feature.routine.ui.detail.RoutineDetailScreen
 import com.myfitnesslog.feature.routine.ui.edit.RoutineEditScreen
 import com.myfitnesslog.feature.routine.ui.list.RoutineListScreen
 import com.myfitnesslog.feature.routine.ui.picker.ExercisePickerScreen
+import com.myfitnesslog.feature.settings.ui.SettingsScreen
 import com.myfitnesslog.feature.workout.ui.WorkoutRoutes
 import com.myfitnesslog.feature.workout.ui.WorkoutScreen
 import com.myfitnesslog.feature.workout.ui.WorkoutViewModel
@@ -181,7 +182,7 @@ fun MyFitnessLogNavHost() {
                 WorkoutDetailScreen()
             }
             composable(TopLevelDestination.SETTINGS.route) {
-                PlaceholderScreen(title = TopLevelDestination.SETTINGS.label)
+                SettingsScreen()
             }
 
             val routineIdArg = listOf(

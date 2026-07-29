@@ -11,6 +11,8 @@ import com.myfitnesslog.feature.routine.newInMemoryDatabase
 import com.myfitnesslog.feature.routine.newRepository
 import com.myfitnesslog.feature.routine.seedExercises
 import com.myfitnesslog.feature.history.data.WorkoutHistoryRepositoryImpl
+import com.myfitnesslog.feature.settings.data.SettingsRepository
+import com.myfitnesslog.feature.settings.domain.PreviousWorkoutValues
 import com.myfitnesslog.feature.workout.data.WorkoutRepositoryImpl
 import com.myfitnesslog.feature.workout.domain.StartWorkoutUseCase
 import java.math.BigDecimal
@@ -88,16 +90,25 @@ class WorkoutViewModelTest {
     private fun viewModel(
         startFrom: UUID? = routineId,
         restTimer: com.myfitnesslog.feature.workout.domain.RestTimer = newRestTimer(),
+        previousStrategy: PreviousWorkoutValues = PreviousWorkoutValues.ANY_WORKOUT,
     ) = WorkoutViewModel(
         savedStateHandle = SavedStateHandle(
             if (startFrom != null) mapOf(WorkoutRoutes.ARG_ROUTINE_ID to startFrom.toString()) else emptyMap(),
         ),
         repository = workoutRepository,
         historyRepository = historyRepository,
+        settingsRepository = FakeSettingsRepository(previousStrategy),
         startWorkout = startWorkout,
         clock = clock,
         restTimerController = restTimer,
     )
+
+    /** Minimal in-memory [SettingsRepository] for choosing the PREVIOUS strategy under test. */
+    private class FakeSettingsRepository(strategy: PreviousWorkoutValues) : SettingsRepository {
+        private val state = kotlinx.coroutines.flow.MutableStateFlow(strategy)
+        override val previousWorkoutValues = state
+        override suspend fun setPreviousWorkoutValues(value: PreviousWorkoutValues) { state.value = value }
+    }
 
     private suspend fun WorkoutViewModel.awaitActive(predicate: (WorkoutUiState.Active) -> Boolean = { true }) =
         uiState.awaitFirst { it is WorkoutUiState.Active && predicate(it) } as WorkoutUiState.Active
@@ -405,6 +416,21 @@ class WorkoutViewModelTest {
         assertEquals("100kg × 5", row1.previous)
         // Set 2 had no prior performance → shown as null (rendered "-").
         assertNull(vm2.uiStateActive().exercises.first().rows[1].previous)
+    }
+
+    @Test
+    fun sameRoutineStrategyShowsThePriorWorkoutOfThisRoutine() = runBlocking {
+        // Workout 1 in this routine: squat 90 × 6, finish.
+        val vm1 = viewModel(previousStrategy = PreviousWorkoutValues.SAME_ROUTINE)
+        vm1.completeFirstPlanned("90", "6")
+        vm1.completeWorkout()
+        vm1.awaitActive { it.isReadOnly }
+
+        // Workout 2, same routine, SAME_ROUTINE strategy: PREVIOUS shows last time's set 1.
+        val vm2 = viewModel(previousStrategy = PreviousWorkoutValues.SAME_ROUTINE)
+        val row1 = vm2.awaitActive { it.exercises.firstOrNull()?.rows?.firstOrNull()?.previous != null }
+            .exercises.first().rows.first()
+        assertEquals("90kg × 6", row1.previous)
     }
 
     private fun WorkoutViewModel.uiStateActive() = uiState.value as WorkoutUiState.Active

@@ -7,6 +7,8 @@ import com.myfitnesslog.core.data.local.SetCategory
 import com.myfitnesslog.core.data.local.WorkoutStatus
 import com.myfitnesslog.feature.history.data.WorkoutHistoryRepository
 import com.myfitnesslog.feature.history.data.local.PreviousSetPerformance
+import com.myfitnesslog.feature.settings.data.SettingsRepository
+import com.myfitnesslog.feature.settings.domain.PreviousWorkoutValues
 import com.myfitnesslog.feature.workout.data.WorkoutRepository
 import com.myfitnesslog.feature.workout.data.local.WorkoutExerciseEntity
 import com.myfitnesslog.feature.workout.data.local.WorkoutSessionEntity
@@ -60,6 +62,7 @@ class WorkoutViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val repository: WorkoutRepository,
     private val historyRepository: WorkoutHistoryRepository,
+    private val settingsRepository: SettingsRepository,
     private val startWorkout: StartWorkoutUseCase,
     private val clock: Clock,
     private val restTimerController: RestTimer,
@@ -154,6 +157,11 @@ class WorkoutViewModel @Inject constructor(
             resolution.flatMapLatest { r ->
                 if (r.resolved && r.sessionId != null) exercisesWithSets(r.sessionId) else flowOf(emptyList())
             }.collect { list ->
+                // The PREVIOUS lookup strategy and the current session's routine are
+                // resolved once per emission; both are needed to pick the read below.
+                val strategy = settingsRepository.previousWorkoutValues.first()
+                val currentRoutineId = resolution.value.sessionId
+                    ?.let { repository.observeSession(it).first()?.routineId }
                 list.forEach { (exercise, sets) ->
                     if (seeded.add(exercise.id)) {
                         val plannedCount = (exercise.targetSets - sets.size).coerceAtLeast(0)
@@ -165,8 +173,14 @@ class WorkoutViewModel @Inject constructor(
                         }
                         nextSlot[exercise.id] = startSlot + plannedCount
                         drafts.update { it + (exercise.id to rows) }
-                        // Read-only previous-performance projection for this exercise.
-                        val previous = historyRepository.getPreviousSets(exercise.exerciseId)
+                        // Read-only previous-performance projection for this exercise,
+                        // sourced per the user's "Previous Workout Values" setting.
+                        val previous = when (strategy) {
+                            PreviousWorkoutValues.ANY_WORKOUT ->
+                                historyRepository.getPreviousSets(exercise.exerciseId)
+                            PreviousWorkoutValues.SAME_ROUTINE ->
+                                historyRepository.getPreviousSetsInRoutine(exercise.exerciseId, currentRoutineId)
+                        }
                         previousByExercise.update { it + (exercise.exerciseId to previous) }
                     }
                 }

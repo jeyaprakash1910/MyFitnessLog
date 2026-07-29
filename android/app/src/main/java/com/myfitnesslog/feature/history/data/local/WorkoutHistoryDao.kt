@@ -81,11 +81,17 @@ interface WorkoutHistoryDao {
     fun observeSetsForSession(sessionId: UUID): Flow<List<WorkoutSetEntity>>
 
     /**
-     * The sets performed for [exerciseId] in the **most recent COMPLETED** workout
-     * that contained it (regardless of routine) — the "previous performance" read
-     * (V2 Milestone E, spec §6). Read-only; IN_PROGRESS/DISCARDED sessions are
+     * The sets performed for [exerciseId] in the **most recent COMPLETED** workout in
+     * which it was actually logged (regardless of routine) — the "previous performance"
+     * read (V2 Milestone E, spec §6). Read-only; IN_PROGRESS/DISCARDED sessions are
      * excluded, so today's session never matches itself. Returns an empty list when
      * the exercise has no completed history. Ordered by set number.
+     *
+     * A completed session may *contain* the exercise as a snapshot row without any
+     * logged sets (the routine listed it but the user skipped it). Such sessions are
+     * NOT "the last time you did it", so the subquery joins `workout_set` to consider
+     * only sessions where the exercise has at least one set — otherwise previous would
+     * resolve to a skipped session and wrongly show `-`.
      */
     @Query(
         """
@@ -96,6 +102,7 @@ interface WorkoutHistoryDao {
           AND e.workoutSessionId = (
             SELECT ss.id FROM workout_session AS ss
             INNER JOIN workout_exercise AS ee ON ee.workoutSessionId = ss.id
+            INNER JOIN workout_set AS sss ON sss.workoutExerciseId = ee.id
             WHERE ee.exerciseId = :exerciseId AND ss.status = 'COMPLETED'
             ORDER BY ss.startedAt DESC
             LIMIT 1
@@ -104,4 +111,36 @@ interface WorkoutHistoryDao {
         """,
     )
     suspend fun getPreviousSets(exerciseId: UUID): List<PreviousSetPerformance>
+
+    /**
+     * Same as [getPreviousSets] but restricted to workouts of a specific routine —
+     * the SAME_ROUTINE strategy (spec §Option 2). Finds the most recent COMPLETED
+     * session whose `routineId` matches [routineId] and in which [exerciseId] was
+     * actually logged, then returns that session's sets for the exercise.
+     *
+     * A manual workout has a null `routineId`; passing null matches no session
+     * (SQL `NULL = NULL` is never true), so the caller gets an empty list — there
+     * is no "same routine" for a manual workout. Same-session-safe (COMPLETED only)
+     * and same "must have logged sets" rule as the global read.
+     */
+    @Query(
+        """
+        SELECT s.setNumber AS setNumber, s.weight AS weight, s.repetitions AS repetitions, s.rpe AS rpe
+        FROM workout_set AS s
+        INNER JOIN workout_exercise AS e ON s.workoutExerciseId = e.id
+        WHERE e.exerciseId = :exerciseId
+          AND e.workoutSessionId = (
+            SELECT ss.id FROM workout_session AS ss
+            INNER JOIN workout_exercise AS ee ON ee.workoutSessionId = ss.id
+            INNER JOIN workout_set AS sss ON sss.workoutExerciseId = ee.id
+            WHERE ee.exerciseId = :exerciseId
+              AND ss.routineId = :routineId
+              AND ss.status = 'COMPLETED'
+            ORDER BY ss.startedAt DESC
+            LIMIT 1
+          )
+        ORDER BY s.setNumber ASC
+        """,
+    )
+    suspend fun getPreviousSetsInRoutine(exerciseId: UUID, routineId: UUID?): List<PreviousSetPerformance>
 }
