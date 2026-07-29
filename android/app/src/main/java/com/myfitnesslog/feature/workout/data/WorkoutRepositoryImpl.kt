@@ -168,6 +168,62 @@ class WorkoutRepositoryImpl @Inject constructor(
         syncTrigger.requestSync()
     }
 
+    override suspend fun updateExerciseRest(workoutExerciseId: UUID, restSeconds: Int) = withContext(ioDispatcher) {
+        require(restSeconds >= 0) { "restSeconds must be >= 0" }
+        val exercise = exerciseDao.getById(workoutExerciseId) ?: return@withContext
+        requireInProgress(exercise.workoutSessionId)
+        exerciseDao.upsert(
+            exercise.copy(
+                targetRestSeconds = restSeconds,
+                updatedAt = clock.instant(),
+                syncStatus = SyncStatus.PENDING,
+            ),
+        )
+        syncTrigger.requestSync()
+    }
+
+    override suspend fun moveExercise(workoutExerciseId: UUID, up: Boolean) = withContext(ioDispatcher) {
+        val exercise = exerciseDao.getById(workoutExerciseId) ?: return@withContext
+        val session = requireInProgress(exercise.workoutSessionId)
+        val ordered = exerciseDao.getBySession(session.id) // sorted by exerciseOrder ASC
+        val index = ordered.indexOfFirst { it.id == workoutExerciseId }
+        if (index < 0) return@withContext
+        val swapIndex = if (up) index - 1 else index + 1
+        if (swapIndex !in ordered.indices) return@withContext // boundary: no-op
+
+        val a = ordered[index]
+        val b = ordered[swapIndex]
+        val now = clock.instant()
+        // Swap the two rows' order values (session state only; routine untouched).
+        exerciseDao.upsertAll(
+            listOf(
+                a.copy(exerciseOrder = b.exerciseOrder, updatedAt = now, syncStatus = SyncStatus.PENDING),
+                b.copy(exerciseOrder = a.exerciseOrder, updatedAt = now, syncStatus = SyncStatus.PENDING),
+            ),
+        )
+        syncTrigger.requestSync()
+    }
+
+    override suspend fun removeExercise(workoutExerciseId: UUID) = withContext(ioDispatcher) {
+        val exercise = exerciseDao.getById(workoutExerciseId) ?: return@withContext
+        val session = requireInProgress(exercise.workoutSessionId)
+        val now = clock.instant()
+        // Tombstone each set (ADR-0007) so persisted deletions converge on the backend,
+        // then delete the exercise (its remaining rows cascade in Room).
+        setDao.getByExercise(workoutExerciseId).forEach { set ->
+            setDao.deleteAndRecord(
+                WorkoutSetTombstoneEntity(
+                    workoutSetId = set.id,
+                    workoutExerciseId = workoutExerciseId,
+                    workoutSessionId = session.id,
+                    deletedAt = now,
+                ),
+            )
+        }
+        exerciseDao.deleteById(workoutExerciseId)
+        syncTrigger.requestSync()
+    }
+
     override suspend fun completeWorkout(sessionId: UUID) =
         finishWorkout(sessionId, WorkoutStatus.COMPLETED)
 

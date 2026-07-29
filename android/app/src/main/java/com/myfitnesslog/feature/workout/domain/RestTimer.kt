@@ -37,11 +37,31 @@ class RestTimer(
 
     fun start(totalSeconds: Int) {
         if (totalSeconds <= 0) return
-        job?.cancel()
         lastTotalSeconds = totalSeconds
-        _state.value = RestTimerState.Running(totalSeconds, totalSeconds)
+        startCountdown(remainingStart = totalSeconds, totalSeconds = totalSeconds)
+    }
+
+    /**
+     * Adjusts the running countdown by [deltaSeconds] (e.g. +15 / -15). Clamps the
+     * remaining time to >= 0; reaching 0 finishes the rest. No-op if not running.
+     */
+    fun adjust(deltaSeconds: Int) {
+        val current = _state.value as? RestTimerState.Running ?: return
+        val newRemaining = (current.remainingSeconds + deltaSeconds).coerceAtLeast(0)
+        if (newRemaining == 0) {
+            job?.cancel()
+            _state.value = RestTimerState.Finished
+            return
+        }
+        val newTotal = maxOf(current.totalSeconds, newRemaining)
+        startCountdown(remainingStart = newRemaining, totalSeconds = newTotal)
+    }
+
+    private fun startCountdown(remainingStart: Int, totalSeconds: Int) {
+        job?.cancel()
+        _state.value = RestTimerState.Running(remainingStart, totalSeconds)
         job = scope.launch {
-            var remaining = totalSeconds
+            var remaining = remainingStart
             while (remaining > 0) {
                 delay(tickMillis)
                 remaining--

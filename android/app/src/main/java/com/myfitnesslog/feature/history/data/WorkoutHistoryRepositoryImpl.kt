@@ -1,6 +1,7 @@
 package com.myfitnesslog.feature.history.data
 
 import com.myfitnesslog.feature.history.data.local.CompletedWorkoutSummary
+import com.myfitnesslog.feature.history.data.local.PreviousSetPerformance
 import com.myfitnesslog.feature.history.data.local.WorkoutHistoryDao
 import com.myfitnesslog.feature.workout.data.local.WorkoutExerciseEntity
 import com.myfitnesslog.feature.workout.data.local.WorkoutSessionEntity
@@ -34,4 +35,13 @@ class WorkoutHistoryRepositoryImpl @Inject constructor(
 
     override fun observeSets(sessionId: UUID): Flow<List<WorkoutSetEntity>> =
         historyDao.observeSetsForSession(sessionId)
+
+    override suspend fun getPreviousSets(exerciseId: UUID): List<PreviousSetPerformance> =
+        historyDao.getPreviousSets(exerciseId)
+
+    override suspend fun getPreviousSetsInRoutine(
+        exerciseId: UUID,
+        routineId: UUID?,
+    ): List<PreviousSetPerformance> =
+        historyDao.getPreviousSetsInRoutine(exerciseId, routineId)
 }

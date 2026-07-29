@@ -32,6 +32,7 @@ class WorkoutRepositoryImplTest {
     private lateinit var repository: WorkoutRepositoryImpl
     private var sessionId: UUID = UUID.randomUUID()
     private var workoutExerciseId: UUID = UUID.randomUUID()
+    private var routineId: UUID = UUID.randomUUID()
 
     @Before
     fun setUp() = runBlocking {
@@ -47,7 +48,7 @@ class WorkoutRepositoryImplTest {
             clock = RoutineTestData.clock,
             ioDispatcher = UnconfinedTestDispatcher(),
         )
-        val routineId = routineRepository.createRoutine("Legs")
+        routineId = routineRepository.createRoutine("Legs")
         routineRepository.addExercise(routineId, RoutineTestData.squatId, 3, 8, 12, 90, null)
         sessionId = startWorkout(routineId)
         workoutExerciseId = database.workoutExerciseDao().getBySession(sessionId).single().id
@@ -67,6 +68,100 @@ class WorkoutRepositoryImplTest {
 
     private suspend fun addWorkingSet(weight: String = "80.00", reps: Int = 8) =
         repository.addSet(workoutExerciseId, BigDecimal(weight), reps)
+
+    /** Adds a second exercise to the session and returns its WorkoutExercise id. */
+    private suspend fun addSecondExercise(): UUID =
+        repository.addExercise(sessionId, RoutineTestData.benchId, "Bench Press")
+
+    // --- Milestone F: exercise management (session-scoped) ------------------
+
+    @Test
+    fun moveExerciseDownSwapsSessionOrder() = runBlocking {
+        val second = addSecondExercise()
+        // Initially: [squat, bench].
+        assertEquals(
+            listOf(workoutExerciseId, second),
+            database.workoutExerciseDao().getBySession(sessionId).map { it.id },
+        )
+
+        repository.moveExercise(workoutExerciseId, up = false)
+
+        assertEquals(
+            listOf(second, workoutExerciseId),
+            database.workoutExerciseDao().getBySession(sessionId).map { it.id },
+        )
+    }
+
+    @Test
+    fun moveExerciseUpAtTopIsANoOp() = runBlocking {
+        val second = addSecondExercise()
+        repository.moveExercise(workoutExerciseId, up = true) // already first
+
+        assertEquals(
+            listOf(workoutExerciseId, second),
+            database.workoutExerciseDao().getBySession(sessionId).map { it.id },
+        )
+    }
+
+    @Test
+    fun removeExerciseDeletesItAndTombstonesItsSets() = runBlocking {
+        val setId = addWorkingSet()
+
+        repository.removeExercise(workoutExerciseId)
+
+        assertNull(database.workoutExerciseDao().getById(workoutExerciseId))
+        assertTrue(database.workoutSetDao().getByExercise(workoutExerciseId).isEmpty())
+        assertEquals(listOf(setId), database.workoutSetDao().getPendingTombstones().map { it.workoutSetId })
+    }
+
+    @Test
+    fun updateExerciseRestPersistsTheNewDuration() = runBlocking {
+        // Routine seeded 90s; changing it is session-scoped.
+        assertEquals(90, database.workoutExerciseDao().getById(workoutExerciseId)?.targetRestSeconds)
+
+        repository.updateExerciseRest(workoutExerciseId, 150)
+
+        assertEquals(150, database.workoutExerciseDao().getById(workoutExerciseId)?.targetRestSeconds)
+        // The routine template itself is untouched.
+        assertEquals(
+            90,
+            database.routineExerciseDao().getByRoutine(routineId).single().targetRestSeconds,
+        )
+    }
+
+    @Test
+    fun updateExerciseRestRejectedOnCompletedWorkout() {
+        runBlocking { repository.completeWorkout(sessionId) }
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking { repository.updateExerciseRest(workoutExerciseId, 120) }
+        }
+    }
+
+    @Test
+    fun reorderingSessionExercisesDoesNotModifyTheRoutine() = runBlocking {
+        addSecondExercise()
+        val before = database.routineExerciseDao().getByRoutine(routineId)
+            .map { it.id to it.displayOrder }
+
+        repository.moveExercise(workoutExerciseId, up = false)
+
+        val after = database.routineExerciseDao().getByRoutine(routineId)
+            .map { it.id to it.displayOrder }
+        assertEquals(before, after) // routine template untouched (INV-8/9)
+    }
+
+    @Test
+    fun exerciseManagementRejectedOnCompletedWorkout() {
+        val second = runBlocking { addSecondExercise() }
+        runBlocking { repository.completeWorkout(sessionId) }
+
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking { repository.moveExercise(workoutExerciseId, up = false) }
+        }
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking { repository.removeExercise(second) }
+        }
+    }
 
     @Test
     fun addSetAppendsWithSequentialSetNumbers() = runBlocking {

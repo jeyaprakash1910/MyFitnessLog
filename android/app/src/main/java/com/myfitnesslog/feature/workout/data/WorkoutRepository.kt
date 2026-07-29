@@ -58,6 +58,27 @@ interface WorkoutRepository {
 
     suspend fun deleteSet(setId: UUID)
 
+    /**
+     * Sets the rest duration (seconds) applied when a set of this exercise is
+     * completed (spec §5). Session-scoped: the routine template is never modified.
+     * Rejected unless the owning session is IN_PROGRESS.
+     */
+    suspend fun updateExerciseRest(workoutExerciseId: UUID, restSeconds: Int)
+
+    /**
+     * Moves an exercise up or down within its (in-progress) session by swapping its
+     * `exerciseOrder` with the adjacent exercise. Session-scoped only — the routine
+     * template is never modified (V2 Exercise Ordering Contract). No-op at a boundary.
+     */
+    suspend fun moveExercise(workoutExerciseId: UUID, up: Boolean)
+
+    /**
+     * Removes an exercise from its (in-progress) session, deleting its sets. Completed
+     * sets are tombstoned (ADR-0007) so their deletions propagate. Session-scoped only;
+     * the routine is untouched.
+     */
+    suspend fun removeExercise(workoutExerciseId: UUID)
+
     suspend fun completeWorkout(sessionId: UUID)
 
     suspend fun discardWorkout(sessionId: UUID)
