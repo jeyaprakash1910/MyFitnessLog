@@ -58,7 +58,7 @@ class WorkoutSessionPersistenceTest {
         entityManager.flush();
 
         Object raw = entityManager.getEntityManager()
-                .createNativeQuery("SELECT \"status\" FROM \"WorkoutSession\" WHERE \"id\" = :id")
+                .createNativeQuery("SELECT status FROM workout_session WHERE id = :id")
                 .setParameter("id", saved.getId())
                 .getSingleResult();
         assertThat(raw).isEqualTo("COMPLETED");

@@ -1,0 +1,102 @@
+# Backup & Restore
+
+**Goal:** 10 years of workout history must always be recoverable. Nothing fancier.
+
+The database is the only irreplaceable asset in this system (code is in git, the app is
+rebuildable). This document is the durable record of how it is backed up and — the part
+that actually matters — how to get it back.
+
+## What backs up, where, how often
+
+- **What:** a full logical `pg_dump` of the Supabase database, gzipped.
+- **How:** the [`Database Backup`](../../.github/workflows/backup.yml) GitHub Actions
+  workflow. Daily at 02:17 UTC, plus a manual **Run workflow** button.
+- **Where:** committed to an **orphan `backups` branch of this same repository**, under
+  `dumps/myfitnesslog-<UTC-timestamp>.sql.gz`. The 60 most-recent dumps are kept in the
+  branch's working tree (older ones are pruned from the tree but remain in history).
+- **Why this storage:** durable for the life of the repo, versioned, free, no second
+  service, no third-party action, and it uses only the workflow's built-in token. Dumps
+  are tiny (KB–MB), so the branch stays small.
+
+## Secrets involved
+
+One repository secret (Settings → Secrets and variables → Actions):
+
+- **`SUPABASE_SESSION_URL`** — full connection string to the Supabase **session pooler**
+  (port 5432), including password and `?sslmode=require`. Session pooler, not the
+  transaction pooler (6543), because `pg_dump` needs a stable session.
+
+Keep a copy of this connection string in your password manager too — if GitHub is lost,
+you still need it to reach the database.
+
+## Restore procedure (verified 2026-07-29)
+
+The dump restores into a **fresh, empty** database. Roundtrip verified locally: a dump
+restored into a new database reproduced exact row counts and preserved Flyway history.
+
+1. Get the dump — from the `backups` branch:
+   ```bash
+   git clone --depth 1 --branch backups <repo-url> bk
+   ls bk/dumps/            # newest timestamp = latest backup
+   ```
+2. Create a fresh target database (local example; for Supabase, target a new project):
+   ```bash
+   createdb -O <owner> myfitnesslog_restore
+   ```
+3. Restore:
+   ```bash
+   gunzip -c bk/dumps/myfitnesslog-<timestamp>.sql.gz | psql -d myfitnesslog_restore
+   ```
+4. Sanity-check:
+   ```bash
+   psql -d myfitnesslog_restore -c "select count(*) from workout_set;"
+   psql -d myfitnesslog_restore -c "select count(*) from flyway_schema_history;"
+   ```
+
+The dump is taken with `--no-owner --no-privileges`, so it restores cleanly regardless of
+which role owns the target.
+
+## Disaster-recovery tiers & assumptions
+
+| Scenario | Recovery |
+|---|---|
+| Bad migration / accidental delete | Restore the latest daily dump into a fresh DB, point the backend at it. |
+| Supabase project **paused** (free-tier idle) | Un-pause in the Supabase dashboard — data is intact, no restore needed. |
+| Supabase project **deleted / lost** | Create a new Supabase project, restore the newest dump, update `SPRING_DATASOURCE_URL`/`FLYWAY_URL` on Render. |
+| **GitHub account lost** | See "off-GitHub copy" below — this is the one gap the workflow alone does not cover. |
+
+**Assumptions:** the backup and the primary data live in different services (Supabase vs
+GitHub), so a single provider outage does not lose both. RPO ≈ 24h (daily dump); RTO is
+minutes (restore is a single `psql`).
+
+## The one manual habit that closes the last gap
+
+The workflow protects against Supabase failure but **not against losing your GitHub
+account**. A few times a year, download one dump to durable personal storage (external
+drive / personal cloud):
+
+```bash
+git clone --depth 1 --branch backups <repo-url> bk && cp bk/dumps/$(ls bk/dumps | tail -1) ~/backups/
+```
+
+That is the difference between "GitHub has my backups" and "I have my backups." For a
+10-year horizon, do it.
+
+## Verification procedure (do this once, then yearly)
+
+1. Trigger the workflow manually (**Run workflow**); confirm a new file appears on the
+   `backups` branch.
+2. Restore that dump into a scratch database using the steps above.
+3. Confirm `workout_set` and `flyway_schema_history` counts look right.
+4. Drop the scratch database.
+
+An untested backup is a hope, not a backup. The restore path above was exercised on
+2026-07-29 with a real dump/restore roundtrip.
+
+## Future improvements (not needed now)
+
+- Bump `KEEP` or add weekly/monthly tiers if history ever grows large (it won't, for a
+  personal log).
+- If you outgrow the free tier, Supabase's own PITR/backups become available; this
+  workflow remains a good independent second copy.
+- Match `PG_IMAGE` in the workflow to your Supabase Postgres major version if it changes.

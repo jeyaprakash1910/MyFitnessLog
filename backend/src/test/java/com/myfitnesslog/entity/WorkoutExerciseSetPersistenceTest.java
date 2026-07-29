@@ -122,7 +122,7 @@ class WorkoutExerciseSetPersistenceTest {
         entityManager.clear();
 
         Number remaining = (Number) entityManager.getEntityManager()
-                .createNativeQuery("SELECT COUNT(*) FROM \"WorkoutSet\" WHERE \"id\" = :id")
+                .createNativeQuery("SELECT COUNT(*) FROM workout_set WHERE id = :id")
                 .setParameter("id", setId)
                 .getSingleResult();
         assertThat(remaining.longValue()).isZero();

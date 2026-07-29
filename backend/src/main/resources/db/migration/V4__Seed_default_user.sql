@@ -6,6 +6,6 @@
 -- match DefaultUserProvider.DEFAULT_USER_ID.
 -- ON CONFLICT keeps the statement itself idempotent if ever replayed.
 
-INSERT INTO "User" ("id", "createdAt", "updatedAt", "isDeleted")
+INSERT INTO app_user (id, created_at, updated_at, is_deleted)
 VALUES ('00000000-0000-0000-0000-000000000001', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, FALSE)
-ON CONFLICT ("id") DO NOTHING;
+ON CONFLICT (id) DO NOTHING;

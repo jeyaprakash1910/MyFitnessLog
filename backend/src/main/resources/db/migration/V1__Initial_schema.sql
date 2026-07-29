@@ -7,187 +7,187 @@
 -- =========================================================================
 -- 1. User
 -- =========================================================================
-CREATE TABLE "User" (
-    "id"        UUID                     NOT NULL,
-    "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "isDeleted" BOOLEAN                  NOT NULL DEFAULT FALSE,
-    CONSTRAINT pk_user PRIMARY KEY ("id")
+CREATE TABLE app_user (
+    id        UUID                     NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    is_deleted BOOLEAN                  NOT NULL DEFAULT FALSE,
+    CONSTRAINT pk_user PRIMARY KEY (id)
 );
 
 -- =========================================================================
 -- 2. ExerciseCategory
 -- =========================================================================
-CREATE TABLE "ExerciseCategory" (
-    "id"           UUID                     NOT NULL,
-    "name"         VARCHAR(100)             NOT NULL,
-    "displayOrder" INTEGER                  NOT NULL DEFAULT 0,
-    "createdAt"    TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt"    TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "isDeleted"    BOOLEAN                  NOT NULL DEFAULT FALSE,
-    CONSTRAINT pk_exercisecategory PRIMARY KEY ("id"),
-    CONSTRAINT uk_exercisecategory_name UNIQUE ("name")
+CREATE TABLE exercise_category (
+    id           UUID                     NOT NULL,
+    name         VARCHAR(100)             NOT NULL,
+    display_order INTEGER                  NOT NULL DEFAULT 0,
+    created_at    TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at    TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    is_deleted    BOOLEAN                  NOT NULL DEFAULT FALSE,
+    CONSTRAINT pk_exercisecategory PRIMARY KEY (id),
+    CONSTRAINT uk_exercisecategory_name UNIQUE (name)
 );
 
-CREATE INDEX idx_exercisecategory_displayorder ON "ExerciseCategory" ("displayOrder");
+CREATE INDEX idx_exercisecategory_displayorder ON exercise_category (display_order);
 
 -- =========================================================================
 -- 3. Exercise
 -- =========================================================================
-CREATE TABLE "Exercise" (
-    "id"           UUID                     NOT NULL,
-    "categoryId"   UUID                     NOT NULL,
-    "name"         VARCHAR(150)             NOT NULL,
-    "description"  TEXT,
-    "instructions" TEXT,
-    "equipment"    VARCHAR(100),
-    "createdAt"    TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt"    TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "isDeleted"    BOOLEAN                  NOT NULL DEFAULT FALSE,
-    CONSTRAINT pk_exercise PRIMARY KEY ("id"),
-    CONSTRAINT uk_exercise_name UNIQUE ("name"),
-    CONSTRAINT fk_exercise_exercisecategory FOREIGN KEY ("categoryId")
-        REFERENCES "ExerciseCategory" ("id") ON DELETE RESTRICT
+CREATE TABLE exercise (
+    id           UUID                     NOT NULL,
+    category_id   UUID                     NOT NULL,
+    name         VARCHAR(150)             NOT NULL,
+    description  TEXT,
+    instructions TEXT,
+    equipment    VARCHAR(100),
+    created_at    TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at    TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    is_deleted    BOOLEAN                  NOT NULL DEFAULT FALSE,
+    CONSTRAINT pk_exercise PRIMARY KEY (id),
+    CONSTRAINT uk_exercise_name UNIQUE (name),
+    CONSTRAINT fk_exercise_exercisecategory FOREIGN KEY (category_id)
+        REFERENCES exercise_category (id) ON DELETE RESTRICT
 );
 
-CREATE INDEX idx_exercise_categoryid ON "Exercise" ("categoryId");
+CREATE INDEX idx_exercise_categoryid ON exercise (category_id);
 
 -- =========================================================================
 -- 4. Routine
 -- =========================================================================
-CREATE TABLE "Routine" (
-    "id"           UUID                     NOT NULL,
-    "userId"       UUID                     NOT NULL,
-    "name"         VARCHAR(150)             NOT NULL,
-    "description"  TEXT,
-    "displayOrder" INTEGER                  NOT NULL DEFAULT 0,
-    "createdAt"    TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt"    TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "isDeleted"    BOOLEAN                  NOT NULL DEFAULT FALSE,
-    CONSTRAINT pk_routine PRIMARY KEY ("id"),
-    CONSTRAINT fk_routine_user FOREIGN KEY ("userId")
-        REFERENCES "User" ("id")
+CREATE TABLE routine (
+    id           UUID                     NOT NULL,
+    user_id       UUID                     NOT NULL,
+    name         VARCHAR(150)             NOT NULL,
+    description  TEXT,
+    display_order INTEGER                  NOT NULL DEFAULT 0,
+    created_at    TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at    TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    is_deleted    BOOLEAN                  NOT NULL DEFAULT FALSE,
+    CONSTRAINT pk_routine PRIMARY KEY (id),
+    CONSTRAINT fk_routine_user FOREIGN KEY (user_id)
+        REFERENCES app_user (id)
 );
 
-CREATE INDEX idx_routine_userid ON "Routine" ("userId");
-CREATE INDEX idx_routine_displayorder ON "Routine" ("displayOrder");
+CREATE INDEX idx_routine_userid ON routine (user_id);
+CREATE INDEX idx_routine_displayorder ON routine (display_order);
 
 -- =========================================================================
 -- 5. RoutineExercise
 -- =========================================================================
-CREATE TABLE "RoutineExercise" (
-    "id"                UUID                     NOT NULL,
-    "routineId"         UUID                     NOT NULL,
-    "exerciseId"        UUID                     NOT NULL,
-    "exerciseOrder"     INTEGER                  NOT NULL,
-    "targetSets"        INTEGER                  NOT NULL,
-    "minTargetReps"     INTEGER                  NOT NULL,
-    "maxTargetReps"     INTEGER                  NOT NULL,
-    "targetRestSeconds" INTEGER,
-    "notes"             TEXT,
-    "createdAt"         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt"         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT pk_routineexercise PRIMARY KEY ("id"),
-    CONSTRAINT fk_routineexercise_routine FOREIGN KEY ("routineId")
-        REFERENCES "Routine" ("id") ON DELETE CASCADE,
-    CONSTRAINT fk_routineexercise_exercise FOREIGN KEY ("exerciseId")
-        REFERENCES "Exercise" ("id") ON DELETE RESTRICT,
-    CONSTRAINT ck_routineexercise_targetsets CHECK ("targetSets" > 0),
-    CONSTRAINT ck_routineexercise_mintargetreps CHECK ("minTargetReps" > 0),
-    CONSTRAINT ck_routineexercise_maxtargetreps CHECK ("maxTargetReps" >= "minTargetReps")
+CREATE TABLE routine_exercise (
+    id                UUID                     NOT NULL,
+    routine_id         UUID                     NOT NULL,
+    exercise_id        UUID                     NOT NULL,
+    exercise_order     INTEGER                  NOT NULL,
+    target_sets        INTEGER                  NOT NULL,
+    min_target_reps     INTEGER                  NOT NULL,
+    max_target_reps     INTEGER                  NOT NULL,
+    target_rest_seconds INTEGER,
+    notes             TEXT,
+    created_at         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_routineexercise PRIMARY KEY (id),
+    CONSTRAINT fk_routineexercise_routine FOREIGN KEY (routine_id)
+        REFERENCES routine (id) ON DELETE CASCADE,
+    CONSTRAINT fk_routineexercise_exercise FOREIGN KEY (exercise_id)
+        REFERENCES exercise (id) ON DELETE RESTRICT,
+    CONSTRAINT ck_routineexercise_targetsets CHECK (target_sets > 0),
+    CONSTRAINT ck_routineexercise_mintargetreps CHECK (min_target_reps > 0),
+    CONSTRAINT ck_routineexercise_maxtargetreps CHECK (max_target_reps >= min_target_reps)
 );
 
-CREATE INDEX idx_routineexercise_routineid ON "RoutineExercise" ("routineId");
-CREATE INDEX idx_routineexercise_exerciseid ON "RoutineExercise" ("exerciseId");
+CREATE INDEX idx_routineexercise_routineid ON routine_exercise (routine_id);
+CREATE INDEX idx_routineexercise_exerciseid ON routine_exercise (exercise_id);
 CREATE INDEX idx_routineexercise_routineid_exerciseorder
-    ON "RoutineExercise" ("routineId", "exerciseOrder");
+    ON routine_exercise (routine_id, exercise_order);
 
 -- =========================================================================
 -- 6. WorkoutSession
 -- =========================================================================
-CREATE TABLE "WorkoutSession" (
-    "id"        UUID                     NOT NULL,
-    "userId"    UUID                     NOT NULL,
-    "routineId" UUID,
-    "status"    VARCHAR(20)              NOT NULL DEFAULT 'IN_PROGRESS',
-    "startedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "endedAt"   TIMESTAMP WITH TIME ZONE,
-    "notes"     TEXT,
-    "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT pk_workoutsession PRIMARY KEY ("id"),
-    CONSTRAINT fk_workoutsession_user FOREIGN KEY ("userId")
-        REFERENCES "User" ("id"),
-    CONSTRAINT fk_workoutsession_routine FOREIGN KEY ("routineId")
-        REFERENCES "Routine" ("id") ON DELETE SET NULL,
+CREATE TABLE workout_session (
+    id        UUID                     NOT NULL,
+    user_id    UUID                     NOT NULL,
+    routine_id UUID,
+    status    VARCHAR(20)              NOT NULL DEFAULT 'IN_PROGRESS',
+    started_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    ended_at   TIMESTAMP WITH TIME ZONE,
+    notes     TEXT,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_workoutsession PRIMARY KEY (id),
+    CONSTRAINT fk_workoutsession_user FOREIGN KEY (user_id)
+        REFERENCES app_user (id),
+    CONSTRAINT fk_workoutsession_routine FOREIGN KEY (routine_id)
+        REFERENCES routine (id) ON DELETE SET NULL,
     CONSTRAINT ck_workoutsession_status
-        CHECK ("status" IN ('IN_PROGRESS', 'COMPLETED', 'DISCARDED'))
+        CHECK (status IN ('IN_PROGRESS', 'COMPLETED', 'DISCARDED'))
 );
 
-CREATE INDEX idx_workoutsession_userid ON "WorkoutSession" ("userId");
-CREATE INDEX idx_workoutsession_routineid ON "WorkoutSession" ("routineId");
-CREATE INDEX idx_workoutsession_startedat ON "WorkoutSession" ("startedAt");
+CREATE INDEX idx_workoutsession_userid ON workout_session (user_id);
+CREATE INDEX idx_workoutsession_routineid ON workout_session (routine_id);
+CREATE INDEX idx_workoutsession_startedat ON workout_session (started_at);
 
 -- =========================================================================
 -- 7. WorkoutExercise
 -- =========================================================================
-CREATE TABLE "WorkoutExercise" (
-    "id"                UUID                     NOT NULL,
-    "workoutSessionId"  UUID                     NOT NULL,
-    "exerciseId"        UUID                     NOT NULL,
-    "exerciseName"      VARCHAR(150)             NOT NULL,
-    "exerciseOrder"     INTEGER                  NOT NULL,
-    "targetSets"        INTEGER                  NOT NULL,
-    "minTargetReps"     INTEGER                  NOT NULL,
-    "maxTargetReps"     INTEGER                  NOT NULL,
-    "targetRestSeconds" INTEGER,
-    "notes"             TEXT,
-    "createdAt"         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt"         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT pk_workoutexercise PRIMARY KEY ("id"),
-    CONSTRAINT fk_workoutexercise_workoutsession FOREIGN KEY ("workoutSessionId")
-        REFERENCES "WorkoutSession" ("id") ON DELETE CASCADE,
-    CONSTRAINT fk_workoutexercise_exercise FOREIGN KEY ("exerciseId")
-        REFERENCES "Exercise" ("id") ON DELETE RESTRICT,
-    CONSTRAINT ck_workoutexercise_targetsets CHECK ("targetSets" > 0),
-    CONSTRAINT ck_workoutexercise_mintargetreps CHECK ("minTargetReps" > 0),
-    CONSTRAINT ck_workoutexercise_maxtargetreps CHECK ("maxTargetReps" >= "minTargetReps")
+CREATE TABLE workout_exercise (
+    id                UUID                     NOT NULL,
+    workout_session_id  UUID                     NOT NULL,
+    exercise_id        UUID                     NOT NULL,
+    exercise_name      VARCHAR(150)             NOT NULL,
+    exercise_order     INTEGER                  NOT NULL,
+    target_sets        INTEGER                  NOT NULL,
+    min_target_reps     INTEGER                  NOT NULL,
+    max_target_reps     INTEGER                  NOT NULL,
+    target_rest_seconds INTEGER,
+    notes             TEXT,
+    created_at         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_workoutexercise PRIMARY KEY (id),
+    CONSTRAINT fk_workoutexercise_workoutsession FOREIGN KEY (workout_session_id)
+        REFERENCES workout_session (id) ON DELETE CASCADE,
+    CONSTRAINT fk_workoutexercise_exercise FOREIGN KEY (exercise_id)
+        REFERENCES exercise (id) ON DELETE RESTRICT,
+    CONSTRAINT ck_workoutexercise_targetsets CHECK (target_sets > 0),
+    CONSTRAINT ck_workoutexercise_mintargetreps CHECK (min_target_reps > 0),
+    CONSTRAINT ck_workoutexercise_maxtargetreps CHECK (max_target_reps >= min_target_reps)
 );
 
-CREATE INDEX idx_workoutexercise_workoutsessionid ON "WorkoutExercise" ("workoutSessionId");
-CREATE INDEX idx_workoutexercise_exerciseid ON "WorkoutExercise" ("exerciseId");
+CREATE INDEX idx_workoutexercise_workoutsessionid ON workout_exercise (workout_session_id);
+CREATE INDEX idx_workoutexercise_exerciseid ON workout_exercise (exercise_id);
 CREATE INDEX idx_workoutexercise_workoutsessionid_exerciseorder
-    ON "WorkoutExercise" ("workoutSessionId", "exerciseOrder");
+    ON workout_exercise (workout_session_id, exercise_order);
 
 -- =========================================================================
 -- 8. WorkoutSet
 -- =========================================================================
-CREATE TABLE "WorkoutSet" (
-    "id"                UUID                     NOT NULL,
-    "workoutExerciseId" UUID                     NOT NULL,
-    "setNumber"         INTEGER                  NOT NULL,
-    "weight"            NUMERIC(6, 2)            NOT NULL,
-    "repetitions"       INTEGER                  NOT NULL,
-    "setCategory"       VARCHAR(20)              NOT NULL DEFAULT 'WORKING',
-    "startedAt"         TIMESTAMP WITH TIME ZONE,
-    "finishedAt"        TIMESTAMP WITH TIME ZONE,
-    "rpe"               NUMERIC(3, 1),
-    "rir"               NUMERIC(3, 1),
-    "isCompleted"       BOOLEAN                  NOT NULL DEFAULT TRUE,
-    "createdAt"         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt"         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT pk_workoutset PRIMARY KEY ("id"),
-    CONSTRAINT fk_workoutset_workoutexercise FOREIGN KEY ("workoutExerciseId")
-        REFERENCES "WorkoutExercise" ("id") ON DELETE CASCADE,
-    CONSTRAINT ck_workoutset_setnumber CHECK ("setNumber" > 0),
-    CONSTRAINT ck_workoutset_repetitions CHECK ("repetitions" >= 0),
-    CONSTRAINT ck_workoutset_weight CHECK ("weight" >= 0),
-    CONSTRAINT ck_workoutset_rpe CHECK ("rpe" IS NULL OR ("rpe" BETWEEN 1 AND 10)),
-    CONSTRAINT ck_workoutset_rir CHECK ("rir" IS NULL OR "rir" >= 0),
+CREATE TABLE workout_set (
+    id                UUID                     NOT NULL,
+    workout_exercise_id UUID                     NOT NULL,
+    set_number         INTEGER                  NOT NULL,
+    weight            NUMERIC(6, 2)            NOT NULL,
+    repetitions       INTEGER                  NOT NULL,
+    set_category       VARCHAR(20)              NOT NULL DEFAULT 'WORKING',
+    started_at         TIMESTAMP WITH TIME ZONE,
+    finished_at        TIMESTAMP WITH TIME ZONE,
+    rpe               NUMERIC(3, 1),
+    rir               NUMERIC(3, 1),
+    is_completed       BOOLEAN                  NOT NULL DEFAULT TRUE,
+    created_at         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at         TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_workoutset PRIMARY KEY (id),
+    CONSTRAINT fk_workoutset_workoutexercise FOREIGN KEY (workout_exercise_id)
+        REFERENCES workout_exercise (id) ON DELETE CASCADE,
+    CONSTRAINT ck_workoutset_setnumber CHECK (set_number > 0),
+    CONSTRAINT ck_workoutset_repetitions CHECK (repetitions >= 0),
+    CONSTRAINT ck_workoutset_weight CHECK (weight >= 0),
+    CONSTRAINT ck_workoutset_rpe CHECK (rpe IS NULL OR (rpe BETWEEN 1 AND 10)),
+    CONSTRAINT ck_workoutset_rir CHECK (rir IS NULL OR rir >= 0),
     CONSTRAINT ck_workoutset_setcategory
-        CHECK ("setCategory" IN ('WARMUP', 'WORKING', 'TOP_SET', 'BACKOFF'))
+        CHECK (set_category IN ('WARMUP', 'WORKING', 'TOP_SET', 'BACKOFF'))
 );
 
-CREATE INDEX idx_workoutset_workoutexerciseid ON "WorkoutSet" ("workoutExerciseId");
+CREATE INDEX idx_workoutset_workoutexerciseid ON workout_set (workout_exercise_id);
 CREATE INDEX idx_workoutset_workoutexerciseid_setnumber
-    ON "WorkoutSet" ("workoutExerciseId", "setNumber");
+    ON workout_set (workout_exercise_id, set_number);

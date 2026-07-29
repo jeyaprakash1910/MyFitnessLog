@@ -9,24 +9,24 @@ import java.util.UUID;
 
 /**
  * Master data entity grouping exercises into categories.
- * Maps to the "ExerciseCategory" table defined in V1__Initial_schema.sql.
+ * Maps to the exercise_category table defined in V1__Initial_schema.sql.
  * Audit timestamps are inherited from AbstractAuditableEntity (see ADR-0006).
  */
 @Entity
-@Table(name = "\"ExerciseCategory\"")
+@Table(name = "exercise_category")
 public class ExerciseCategory extends AbstractAuditableEntity {
 
     @Id
-    @Column(name = "\"id\"", nullable = false, updatable = false)
+    @Column(name = "id", nullable = false, updatable = false)
     private UUID id;
 
-    @Column(name = "\"name\"", nullable = false, length = 100)
+    @Column(name = "name", nullable = false, length = 100)
     private String name;
 
-    @Column(name = "\"displayOrder\"", nullable = false)
+    @Column(name = "display_order", nullable = false)
     private int displayOrder = 0;
 
-    @Column(name = "\"isDeleted\"", nullable = false)
+    @Column(name = "is_deleted", nullable = false)
     private boolean isDeleted = false;
 
     public UUID getId() {

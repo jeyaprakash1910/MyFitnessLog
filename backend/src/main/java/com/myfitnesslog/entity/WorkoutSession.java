@@ -20,35 +20,35 @@ import java.util.UUID;
  *
  * Domain timestamps (startedAt, endedAt) are client-supplied and preserved
  * exactly; audit timestamps (createdAt, updatedAt) are backend metadata managed
- * by JPA auditing. Maps to the "WorkoutSession" table in V1__Initial_schema.sql.
+ * by JPA auditing. Maps to the workout_session table in V1__Initial_schema.sql.
  */
 @Entity
-@Table(name = "\"WorkoutSession\"")
+@Table(name = "workout_session")
 public class WorkoutSession extends AbstractAuditableEntity {
 
     @Id
-    @Column(name = "\"id\"", nullable = false, updatable = false)
+    @Column(name = "id", nullable = false, updatable = false)
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "\"userId\"", nullable = false)
+    @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "\"routineId\"")
+    @JoinColumn(name = "routine_id")
     private Routine routine;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "\"status\"", nullable = false, length = 20)
+    @Column(name = "status", nullable = false, length = 20)
     private WorkoutStatus status = WorkoutStatus.IN_PROGRESS;
 
-    @Column(name = "\"startedAt\"", nullable = false)
+    @Column(name = "started_at", nullable = false)
     private Instant startedAt;
 
-    @Column(name = "\"endedAt\"")
+    @Column(name = "ended_at")
     private Instant endedAt;
 
-    @Column(name = "\"notes\"")
+    @Column(name = "notes")
     private String notes;
 
     public UUID getId() {

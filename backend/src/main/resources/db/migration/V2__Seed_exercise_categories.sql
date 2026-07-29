@@ -3,7 +3,7 @@
 -- Fixed UUIDs ensure the seed data is deterministic across all installations.
 -- Audit columns (createdAt, updatedAt) rely on the schema defaults.
 
-INSERT INTO "ExerciseCategory" ("id", "name", "displayOrder", "isDeleted") VALUES
+INSERT INTO exercise_category (id, name, display_order, is_deleted) VALUES
     ('10000000-0000-0000-0000-000000000001', 'Chest',     1, false),
     ('10000000-0000-0000-0000-000000000002', 'Back',      2, false),
     ('10000000-0000-0000-0000-000000000003', 'Shoulders', 3, false),
