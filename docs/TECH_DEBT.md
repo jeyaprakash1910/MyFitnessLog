@@ -25,6 +25,7 @@ This register holds debt that outlives a single task. Short-lived working items 
 | TD-011 | Routine deletions never reached the backend | ✅ Resolved 2026-07-22 | — |
 | TD-012 | Reference data keeps referenced withdrawn rows | Open — note only | — |
 | TD-013 | Live sync tests write into the production database | ✅ Resolved 2026-07-22 (M12 Phase 3) | — |
+| TD-014 | WorkoutExercise removal during a workout is not propagated to the backend | Open — deferred | post-V1 |
 
 ---
 
@@ -627,3 +628,62 @@ Verified by running all three paths and checking row counts either side:
 Suites after the change: Android 336 passed / 5 skipped, backend 92 passed, web
 129 passed / 4 skipped. The skips are precisely the live tests that previously
 ran against production by default.
+
+
+---
+
+## TD-014 — WorkoutExercise removal during a workout is not propagated to the backend
+
+Status: Open — deferred
+
+Milestone identified: V2 workout logging, Milestone F (2026-07-27)
+Scheduled for: post-V1, alongside a `WorkoutExercise` deletion mechanism
+
+### Observation
+
+V2 workout logging lets a user remove an exercise from an **in-progress** session.
+The removal deletes the exercise's **sets** with tombstones (ADR-0007) and those
+set deletions propagate correctly. The `WorkoutExercise` **row itself** is removed
+locally but its deletion is **not** sent to the backend: there is no
+`WorkoutExercise`-level tombstone or soft-delete, and the sync engine has no delete
+phase for it. Because a session's exercises are uploaded early (a session is synced
+on start), an exercise that was added, synced, and then removed can remain on the
+backend.
+
+### Why this exists
+
+Milestone F was deliberately kept schema-free (no Room migration): adding a
+`WorkoutExercise` tombstone would have required a new table, a migration, and a new
+sync path. Instead the milestone reused the existing, tested **set** tombstone path
+for the exercise's sets and deferred the row-level propagation. This is recorded as
+DEC-14 in the V2 decision log.
+
+### User-visible impact
+
+None on Android — the phone reads its own local state, where the exercise is gone.
+The divergence is only observable by a second client that reads the session back
+from the backend (today, the read-only web client): it could show an empty exercise
+that the phone no longer lists, and only for a session that has not yet been
+completed.
+
+### Synchronization impact
+
+A bounded, one-directional divergence: the backend retains an already-synced
+`WorkoutExercise` row (now with no sets) that the phone has removed. It affects only
+the removed exercise on a still-`IN_PROGRESS` session; set-level deletions and
+exercise reordering both converge correctly.
+
+### Why data integrity is preserved
+
+Nothing is lost or corrupted. The lingering row is **empty** (its sets were
+tombstoned and removed), and immutable workout **history** is unaffected: history is
+built from completed sets (ADR-0001), and a removed exercise contributes none. The
+residue is a cosmetic, non-authoritative extra row on a not-yet-finished session,
+not a divergence in performed facts.
+
+### Expected future resolution
+
+Add a `WorkoutExercise` tombstone (or soft-delete) plus a sync delete phase,
+mirroring the `WorkoutSet` mechanism in **ADR-0007** — a self-contained additive
+change (Room migration + one sync phase). This also closes the matching stale note
+amended in ADR-0007. A future bidirectional/pull sync would subsume it.

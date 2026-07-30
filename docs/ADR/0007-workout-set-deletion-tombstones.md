@@ -106,8 +106,16 @@ Negative / accepted:
   pass. That is the intended behaviour, and the volume is bounded by how many
   sets a user deletes between syncs.
 
-Out of scope: deletion propagation for `WorkoutExercise` (nothing in the UI
-deletes one today) and bidirectional sync.
+Out of scope: deletion propagation for `WorkoutExercise` and bidirectional sync.
+
+> **Amendment — 2026-07-30.** The original text above read "deletion propagation
+> for `WorkoutExercise` (nothing in the UI deletes one today)". That is no longer
+> accurate: V2 workout logging lets a user remove an exercise from an in-progress
+> session. Removing an exercise tombstones its **sets** via this mechanism, but the
+> `WorkoutExercise` **row** deletion is still not propagated to the backend, so an
+> already-synced removed exercise can linger (empty) on a not-yet-completed
+> session. Propagation remains deferred; the limitation is tracked as **TD-014**
+> and its fix mirrors this ADR.
 
 
 ---
