@@ -104,6 +104,78 @@ it ever reaches Render.
    DB-dependent check).
 4. After deploy, repeat the `curl` checks against the Render HTTPS URL.
 
+**5c. What a successful first deploy looks like (Docker on Render).**
+
+*Recorded observation vs. expectation:* the log block below is a **verbatim record of
+the first production deploy (2026-07-30)** — specific values (startup ~100s, port
+`10000`, `7 migrations`) are what that deploy produced, not guarantees. Startup time
+depends on free-tier CPU load; the injected port and migration count can differ. What is
+*stable* across deploys is the **order** of the milestones.
+
+- **Expectation — build duration:** the *first* build should take several minutes
+  because Docker downloads the Maven dependencies inside the build stage; later builds
+  should be faster as Render reuses cached Docker layers (unless `pom.xml` changes). A
+  build still streaming `Downloading from central: ...` after a few minutes is normal,
+  not stalled.
+- **Observation — URL pattern:** Render appended a random suffix, producing
+  `https://myfitnesslog-kp5o.onrender.com`. Expect the general form
+  `https://<service-name>-<suffix>.onrender.com`, **not** a bare
+  `https://<service-name>.onrender.com`. Take the exact URL from the deploy log's
+  `Available at your primary URL ...` line and use it for Android's `apiBaseUrl`.
+- **Observation — startup log sequence from the 2026-07-30 deploy** (the *order* is what
+  to expect again; the timings/port are this run's values):
+  ```
+  ==> Deploying...
+  The following 1 profile is active: "prod"
+  ==> No open ports detected, continuing to scan...   # benign — app still booting
+  Successfully validated 7 migrations                 # Flyway on the :5432 session pooler
+  Schema "public" is up to date. No migration necessary.
+  HikariPool-1 - Start completed.
+  Tomcat started on port 10000 (http)                 # Render's injected $PORT (this run)
+  Started MyFitnessLogApplication in 101 seconds      # this run; free-tier CPU is slow
+  ==> Your service is live 🎉
+  ```
+  The `No open ports detected` line appears *before* Tomcat binds and resolves itself
+  once the port opens — it is not an error.
+- **Post-deployment verification checklist:**
+  - [ ] Deploy reached `==> Your service is live 🎉`.
+  - [ ] `GET /api/v1/health` → 200 (no key).
+  - [ ] Protected endpoint → 401 without a key, 200 with the correct key.
+  - [ ] `GET /api/v1/exercises` returns the seeded catalog (proves DB read path).
+  - [ ] Android points at the exact `-<suffix>.onrender.com` URL and syncs a workout.
+
+**5d. Android against the live backend.** Only `android/local.properties` changes
+(gitignored — not a repository change): set `apiBaseUrl` to the Render URL (with the
+`-<suffix>`) and `apiKey` to the same value as `APP_API_KEY`. No app code changes are
+required — the release network-security config auto-drops its cleartext exemption once
+`apiBaseUrl` is `https://`.
+
+*Verification performed (2026-07-30) and its scope:* the debug app was built, installed,
+and launched on an emulator against the live backend, and the sync path was exercised
+through the app's **production Retrofit/OkHttp stack** (its real API interfaces, DTOs,
+and the live URL + API key). Confirmed: the exercise catalog (313 exercises, 12
+categories) downloads, and a full create→complete workout round-trip (session → exercise
+→ set → complete) persisted to Supabase as a single `COMPLETED` session with no
+duplicates (the test row was then removed). **Scope limit:** the full Compose *UI*
+workflow (tapping through the workout screens) was **not** driven end-to-end because the
+available emulator's performance was too degraded to do so reliably; the network/data
+path it depends on was verified instead. A device-driven UI pass is still worth doing
+when convenient.
+
+**5e. Known operational characteristics (not defects).** Behaviours a future maintainer
+may notice and mistake for problems:
+
+- **Free-tier cold start.** Render spins the free instance down after inactivity, so the
+  first request after a quiet period cold-starts the container (order of ~1–2 min based
+  on the 2026-07-30 boot). Subsequent requests are fast. OkHttp's default 10s timeout can
+  trip on that first call; a retry succeeds once warm. Left unchanged deliberately — no
+  client timeout/retry change until real usage shows it is needed.
+- **First Docker build is slow.** The first build downloads all Maven dependencies;
+  later builds reuse Render's cached layers.
+- **Generated URL suffix.** The service URL carries a Render-generated suffix (e.g.
+  `-kp5o`). Read it from the deploy log; do not assume `https://<service-name>.onrender.com`
+  and do not hardcode the URL anywhere except the single `apiBaseUrl` config.
+
 ## 6. GitHub configuration (backups)
 
 1. Repo → Settings → Secrets and variables → Actions → add **`SUPABASE_SESSION_URL`**
