@@ -1,0 +1,13 @@
+# Keep the Docker build context minimal and free of local artifacts/secrets.
+# Everything here is either rebuilt inside the image or must never enter it.
+
+target/
+.env
+.env.*
+!.env.prod.example
+.git
+.gitignore
+.DS_Store
+*.iml
+.idea/
+.vscode/

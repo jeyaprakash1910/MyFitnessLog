@@ -78,10 +78,26 @@ curl -s -o /dev/null -w '%{http_code}\n' -H "X-API-Key: $APP_API_KEY" \
 Run a create + delete to exercise a write and a tombstone. Confirm **no**
 `prepared statement "S_1" does not exist` under repeated calls (proves `prepareThreshold=0`).
 
+**5a-bis. Docker smoke test (matches how Render runs it — ADR-0015):**
+```bash
+cd backend
+docker build -t mfl-backend:local .
+# Reuse the SAME env file that scripts/run-prod-local.sh sources — one local source
+# of truth for prod secrets, no duplicate copy in the repo. -e PORT=8080 simulates
+# Render's injected port. (docker --env-file needs plain KEY=value: no `export`, no
+# quotes, no $-expansion — which is exactly this file's format.)
+docker run --rm -p 8080:8080 -e PORT=8080 \
+  --env-file ~/.config/myfitnesslog/prod.env mfl-backend:local
+```
+Then re-run the §5a `curl` checks against `localhost:8080`. This proves the image before
+it ever reaches Render.
+
 **5b. Deploy to Render:**
 1. New **Web Service** from the GitHub repo. **Root directory = `backend/`** (mono-repo —
-   a wrong root is the most common first-deploy failure). Environment: Java 21; build with
-   Maven; start the **built jar** (not `spring-boot:run`); enable auto-deploy on `main`.
+   a wrong root is the most common first-deploy failure). Runtime = **Docker** (Render no
+   longer offers a native Java runtime — ADR-0015); Render builds from `backend/Dockerfile`,
+   so the build/start-command fields do not apply — the image's ENTRYPOINT starts the app.
+   Enable auto-deploy on `main`.
 2. Set env vars from `backend/.env.prod.example` (all of 5a, `SPRING_PROFILES_ACTIVE=prod`).
    **If `APP_API_KEY` is missing the app refuses to start — by design.**
 3. Set Render's **health check path** to `/api/v1/health` (liveness — do not use a
@@ -170,6 +186,7 @@ validate the API with `curl`/web first.
 - **Backups / restore / DR tiers:** [`BACKUP.md`](BACKUP.md)
 - **Secrets & keystore custody / new-machine recovery:** [`SECRETS.md`](SECRETS.md)
 - **Prod config rationale (pooling, health):** [`../internal/2026-07-29-production-configuration.md`](../internal/2026-07-29-production-configuration.md)
+- **Docker deployment rationale:** ADR-0015, `../../backend/Dockerfile`
 - **Auth boundary:** ADR-0013, [`../internal/2026-07-29-api-key-auth.md`](../internal/2026-07-29-api-key-auth.md)
 - **Schema convention:** ADR-0012
 - **Android release/signing:** [`../RELEASE_CHECKLIST.md`](../RELEASE_CHECKLIST.md)
