@@ -146,12 +146,10 @@ DB and record the exact commands. An untested backup does not count as done.
 
 ## Documentation to produce alongside
 
-- **ADR — schema identifier convention** (`snake_case`, why, and that it was done
-  pre-cutover while greenfield). This is the "boring expensive decision" that deserves
-  an ADR more than some existing ones.
-- **ADR — API-key as the V1 auth boundary** (why not JWT yet, the upgrade path).
-- **ADR — dual-pooler datasource** (transaction pooler runtime, session pooler Flyway;
-  load-bearing and easily "simplified" back into a bug).
+- ✅ **ADR — schema identifier convention** — done: ADR-0012.
+- ✅ **ADR — API-key as the V1 auth boundary** — done: ADR-0013.
+- ✅ **ADR — dual-pooler datasource** (transaction pooler runtime, session pooler Flyway;
+  load-bearing and easily "simplified" back into a bug) — done: ADR-0014.
 - **`docs/development/DEPLOYMENT.md`** — the Phase 0→6 cutover checklist.
 - **`docs/development/BACKUP.md`** — dump + tested restore + DR tiers.
 - Rename "event-driven" → "state machine" in ADR-0008/0009 headings/prose (docs-only,
