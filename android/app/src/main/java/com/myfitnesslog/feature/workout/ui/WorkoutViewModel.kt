@@ -340,6 +340,10 @@ class WorkoutViewModel @Inject constructor(
     fun onSetExerciseRest(exerciseId: UUID, restSeconds: Int) =
         launchCatching { repository.updateExerciseRest(exerciseId, restSeconds.coerceAtLeast(0)) }
 
+    /** Persist the free-text note for an exercise (blank is stored as no note). */
+    fun onSetExerciseNotes(exerciseId: UUID, notes: String) =
+        launchCatching { repository.updateExerciseNotes(exerciseId, notes) }
+
     fun onMoveExerciseUp(exerciseId: UUID) = launchCatching { repository.moveExercise(exerciseId, up = true) }
     fun onMoveExerciseDown(exerciseId: UUID) = launchCatching { repository.moveExercise(exerciseId, up = false) }
     fun onRemoveExercise(exerciseId: UUID) = launchCatching { repository.removeExercise(exerciseId) }
@@ -477,7 +481,7 @@ class WorkoutViewModel @Inject constructor(
                 previous = previousByNumber[r.setNumber]?.formatPrevious(),
             )
         }
-        return WorkoutExerciseUi(id, exerciseName, targetSummary(), targetRestSeconds ?: DEFAULT_REST_SECONDS, rows)
+        return WorkoutExerciseUi(id, exerciseName, targetSummary(), targetRestSeconds ?: DEFAULT_REST_SECONDS, rows, notes)
     }
 
     private fun WorkoutExerciseEntity.targetSummary(): String {

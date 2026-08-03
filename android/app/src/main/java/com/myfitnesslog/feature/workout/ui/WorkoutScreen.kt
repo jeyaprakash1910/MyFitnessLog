@@ -117,6 +117,7 @@ object WorkoutTestTags {
     fun moveDown(exerciseId: UUID) = "workout_move_down_$exerciseId"
     fun removeExercise(exerciseId: UUID) = "workout_remove_exercise_$exerciseId"
     fun exerciseRest(exerciseId: UUID) = "workout_exercise_rest_$exerciseId"
+    fun exerciseNotes(exerciseId: UUID) = "workout_exercise_notes_$exerciseId"
     const val REST_PICKER = "rest_picker"
     const val REST_PICKER_LIST = "rest_picker_list"
     const val REST_PICKER_DONE = "rest_picker_done"
@@ -167,6 +168,7 @@ fun WorkoutScreen(
         onMoveExerciseDown = viewModel::onMoveExerciseDown,
         onRemoveExercise = viewModel::onRemoveExercise,
         onSetExerciseRest = viewModel::onSetExerciseRest,
+        onSetExerciseNotes = viewModel::onSetExerciseNotes,
         onComplete = viewModel::completeWorkout,
         onDiscard = viewModel::discardWorkout,
         onAdjustRest = viewModel::adjustRest,
@@ -193,6 +195,7 @@ fun WorkoutContent(
     onMoveExerciseDown: (UUID) -> Unit,
     onRemoveExercise: (UUID) -> Unit,
     onSetExerciseRest: (UUID, Int) -> Unit,
+    onSetExerciseNotes: (UUID, String) -> Unit,
     onComplete: () -> Unit,
     onDiscard: () -> Unit,
     onAdjustRest: (Int) -> Unit,
@@ -233,6 +236,7 @@ fun WorkoutContent(
                                 onMoveDown = { onMoveExerciseDown(exercise.id) },
                                 onRemove = { onRemoveExercise(exercise.id) },
                                 onEditRest = { restPickerExerciseId = exercise.id.toString() },
+                                onNotesChange = { onSetExerciseNotes(exercise.id, it) },
                             )
                         }
                         item(key = "cols_${exercise.id}") { SetTableHeader() }
@@ -373,6 +377,7 @@ private fun ExerciseHeader(
     onMoveDown: () -> Unit,
     onRemove: () -> Unit,
     onEditRest: () -> Unit,
+    onNotesChange: (String) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -408,7 +413,12 @@ private fun ExerciseHeader(
             }
         }
         Spacer(Modifier.height(4.dp))
-        Text("Add notes here…", color = Muted, fontSize = 13.sp)
+        NotesField(
+            notes = exercise.notes,
+            readOnly = readOnly,
+            onCommit = onNotesChange,
+            modifier = Modifier.testTag(WorkoutTestTags.exerciseNotes(exercise.id)),
+        )
         Spacer(Modifier.height(6.dp))
         Text(
             "⏱  Rest Timer: ${formatRest(exercise.restSeconds)}",
@@ -419,6 +429,41 @@ private fun ExerciseHeader(
                 .testTag(WorkoutTestTags.exerciseRest(exercise.id)),
         )
     }
+}
+
+/**
+ * Editable free-text note for an exercise. Follows the table's commit-on-focus-loss
+ * convention (like the set number cells): edits are held locally and persisted via
+ * [onCommit] when focus leaves. On a read-only (completed) workout it renders the
+ * saved note as plain text, or nothing when there is none.
+ */
+@Composable
+private fun NotesField(
+    notes: String?,
+    readOnly: Boolean,
+    onCommit: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (readOnly) {
+        if (!notes.isNullOrBlank()) {
+            Text(notes, color = Muted, fontSize = 13.sp, modifier = modifier)
+        }
+        return
+    }
+    var text by rememberSaveable(notes) { mutableStateOf(notes.orEmpty()) }
+    BasicTextField(
+        value = text,
+        onValueChange = { text = it },
+        textStyle = TextStyle(color = Ink, fontSize = 13.sp),
+        cursorBrush = androidx.compose.ui.graphics.SolidColor(Accent),
+        modifier = modifier
+            .fillMaxWidth()
+            .onFocusChanged { if (!it.isFocused && text != notes.orEmpty()) onCommit(text) },
+        decorationBox = { inner ->
+            if (text.isEmpty()) Text("Add notes here…", color = Muted, fontSize = 13.sp)
+            inner()
+        },
+    )
 }
 
 /**
