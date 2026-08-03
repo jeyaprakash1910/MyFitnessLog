@@ -271,7 +271,15 @@ class WorkoutViewModel @Inject constructor(
     fun onToggleComplete(exerciseId: UUID, rowKey: String, weightText: String, repsText: String) {
         val draftKey = rowKey.draftKeyOrNull()
         if (draftKey != null) {
-            val input = SetInput(weightText.trim().toBigDecimalOrNull(), repsText.trim().toIntOrNull())
+            // Preserve the draft's already-entered RPE and set category; the checkbox
+            // only carries the inline weight/reps text, so rebuilding SetInput from
+            // those alone would drop an RPE the row already holds (e.g. one restored
+            // by a prior undo).
+            val existing = row(exerciseId, rowKey)?.toInput() ?: SetInput.EMPTY
+            val input = existing.copy(
+                weight = weightText.trim().toBigDecimalOrNull(),
+                repetitions = repsText.trim().toIntOrNull(),
+            )
             val result = SetTransitions.complete(LoggedSetRow(0, input, persistedId = null), input)
             dispatch(exerciseId, result.mutation, draftKey = draftKey)
             applyRest(result.rest, exerciseId)
