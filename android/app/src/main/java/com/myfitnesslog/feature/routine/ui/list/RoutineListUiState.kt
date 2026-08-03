@@ -6,6 +6,7 @@ import java.util.UUID
 data class RoutineListItem(
     val id: UUID,
     val name: String,
+    val exerciseCount: Int = 0,
 )
 
 /** Immutable state for the routine list (Home). Local-only, so no error state. */

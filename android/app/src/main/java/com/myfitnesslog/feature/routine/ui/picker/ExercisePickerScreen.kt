@@ -11,9 +11,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -78,6 +82,8 @@ fun ExercisePickerContent(
             value = uiState.query,
             onValueChange = onQueryChange,
             singleLine = true,
+            shape = RoundedCornerShape(28.dp),
+            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
             placeholder = { Text("Search exercises") },
             modifier = Modifier
                 .fillMaxWidth()

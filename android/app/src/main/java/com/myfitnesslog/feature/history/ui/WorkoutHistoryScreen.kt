@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -24,6 +26,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.myfitnesslog.core.ui.components.EmptyState
 import java.util.UUID
 
 object WorkoutHistoryTestTags {
@@ -55,14 +58,11 @@ fun WorkoutHistoryContent(
     Box(modifier = modifier.fillMaxSize()) {
         when (uiState) {
             WorkoutHistoryUiState.Loading -> Unit
-            WorkoutHistoryUiState.Empty -> Text(
-                text = "No completed workouts yet. Finish a workout to see it here.",
-                style = MaterialTheme.typography.bodyLarge,
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .padding(24.dp)
-                    .testTag(WorkoutHistoryTestTags.EMPTY),
+            WorkoutHistoryUiState.Empty -> EmptyState(
+                icon = Icons.Filled.DateRange,
+                title = "No completed workouts",
+                description = "Finish a workout and it will show up here so you can track your progress over time.",
+                modifier = Modifier.testTag(WorkoutHistoryTestTags.EMPTY),
             )
 
             is WorkoutHistoryUiState.Success -> LazyColumn(

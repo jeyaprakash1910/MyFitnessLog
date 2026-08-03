@@ -22,6 +22,19 @@ interface RoutineDao {
     @Query("SELECT * FROM routine WHERE isDeleted = 0 ORDER BY name ASC")
     fun observeAll(): Flow<List<RoutineEntity>>
 
+    /**
+     * Routine rows for the list screen, each with its live count of
+     * non-deleted exercises via a correlated subquery. Kept as a projection so
+     * the Home list can show "N exercises" without loading every exercise row.
+     */
+    @Query(
+        "SELECT r.id AS id, r.name AS name, " +
+            "(SELECT COUNT(*) FROM routine_exercise re " +
+            "WHERE re.routineId = r.id AND re.isDeleted = 0) AS exerciseCount " +
+            "FROM routine r WHERE r.isDeleted = 0 ORDER BY r.name ASC",
+    )
+    fun observeSummaries(): Flow<List<RoutineSummary>>
+
     @Query("SELECT * FROM routine WHERE id = :id AND isDeleted = 0")
     fun observeById(id: UUID): Flow<RoutineEntity?>
 

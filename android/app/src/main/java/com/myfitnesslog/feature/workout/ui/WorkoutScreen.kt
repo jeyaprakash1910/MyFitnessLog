@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
@@ -61,6 +62,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.LaunchedEffect
+import com.myfitnesslog.core.ui.components.EmptyState
 import com.myfitnesslog.feature.workout.domain.RestTimerState
 import java.math.BigDecimal
 import java.time.Duration
@@ -196,24 +198,21 @@ fun WorkoutContent(
     var rpeRowKey by rememberSaveable { mutableStateOf<String?>(null) }
     var restPickerExerciseId by rememberSaveable { mutableStateOf<String?>(null) }
 
-    Box(modifier = modifier.fillMaxSize().background(Color.White)) {
+    Box(modifier = modifier.fillMaxSize()) {
         when (uiState) {
             WorkoutUiState.Loading -> Unit
 
-            WorkoutUiState.NoActiveWorkout -> Column(
-                modifier = Modifier.align(Alignment.Center).padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Text("No active workout.", textAlign = TextAlign.Center, modifier = Modifier.testTag(WorkoutTestTags.EMPTY))
-                Button(
-                    onClick = onStartManual,
-                    colors = ButtonDefaults.buttonColors(containerColor = Blue),
-                    modifier = Modifier.testTag(WorkoutTestTags.START_MANUAL),
-                ) { Text("Start empty workout") }
-            }
+            WorkoutUiState.NoActiveWorkout -> EmptyState(
+                icon = Icons.Filled.PlayArrow,
+                title = "No active workout",
+                description = "Start a fresh session and log your sets as you train.",
+                actionLabel = "Start empty workout",
+                onAction = onStartManual,
+                actionTestTag = WorkoutTestTags.START_MANUAL,
+                modifier = Modifier.testTag(WorkoutTestTags.EMPTY),
+            )
 
-            is WorkoutUiState.Active -> Column(modifier = Modifier.fillMaxSize()) {
+            is WorkoutUiState.Active -> Column(modifier = Modifier.fillMaxSize().background(Color.White)) {
                 WorkoutTopBar(readOnly = uiState.isReadOnly, onFinish = onComplete)
                 StatsHeader(uiState, elapsed)
 
