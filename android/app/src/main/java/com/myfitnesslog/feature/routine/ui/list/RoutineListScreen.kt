@@ -9,7 +9,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
@@ -88,7 +88,7 @@ fun RoutineListContent(
         when (uiState) {
             RoutineListUiState.Loading -> Unit
             RoutineListUiState.Empty -> EmptyState(
-                icon = Icons.Filled.List,
+                icon = Icons.AutoMirrored.Filled.List,
                 title = "No routines yet",
                 description = "Create your first routine to start planning and tracking your workouts.",
                 actionLabel = "Create routine",
