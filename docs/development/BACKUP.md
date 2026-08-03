@@ -29,6 +29,11 @@ One repository secret (Settings → Secrets and variables → Actions):
 Keep a copy of this connection string in your password manager too — if GitHub is lost,
 you still need it to reach the database.
 
+**Verified working in production 2026-08-03:** the `SUPABASE_SESSION_URL` secret is
+configured and a manual `workflow_dispatch` run succeeded, producing the first real dump
+(`dumps/myfitnesslog-2026-08-03T06-48-09Z.sql.gz`) on the `backups` branch. Prior to this
+the secret was unset, so every scheduled run failed at the first step.
+
 ## Restore procedure (verified 2026-07-29)
 
 The dump restores into a **fresh, empty** database. Roundtrip verified locally: a dump
