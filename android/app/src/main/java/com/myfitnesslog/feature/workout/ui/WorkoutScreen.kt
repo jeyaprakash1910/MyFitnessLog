@@ -68,16 +68,23 @@ import java.math.BigDecimal
 import java.time.Duration
 import java.util.UUID
 
-// --- Reference-styled palette -------------------------------------------------
-private val Blue = Color(0xFF2E7DF6)
-private val Ink = Color(0xFF1B1F27)
-private val Muted = Color(0xFF9AA0A6)
-private val RowAlt = Color(0xFFF5F6F8)
-private val CompletedBg = Color(0xFFDDF3C9)
-private val CompletedPill = Color(0xFFB9E39A)
-private val GreenCheck = Color(0xFF52B043)
-private val PillGrey = Color(0xFFECEDEF)
-private val Danger = Color(0xFFE3524A)
+// --- Active-workout palette (dark brand theme) --------------------------------
+// The set-logging table renders its own surfaces, so it carries an explicit dark
+// palette that matches the app theme (green/teal, dark-first). Completed rows use
+// a deep desaturated green so they stay clearly distinct from the bright emerald
+// accent used for the checkmark, primary buttons, and exercise titles.
+private val Accent = Color(0xFF2DD4A7)        // emerald primary
+private val OnAccent = Color(0xFF00382A)      // text/icons on Accent
+private val Ink = Color(0xFFDDE5DE)           // primary text on dark
+private val Muted = Color(0xFF8B968D)         // secondary text / placeholders
+private val Surface = Color(0xFF0E1512)       // screen background
+private val Sheet = Color(0xFF1B231E)         // bottom sheets / docked bars
+private val RowAlt = Color(0xFF19211C)        // alternating rows, chips, add-set
+private val PillGrey = Color(0xFF232B26)      // rpe pill + unchecked checkbox
+private val CompletedBg = Color(0xFF0F3A2C)   // completed row (deep green tint)
+private val CompletedPill = Color(0xFF17493A) // completed rpe pill
+private val GreenCheck = Accent               // completed checkbox fill
+private val Danger = Color(0xFFFF8A80)         // destructive text on dark
 
 object WorkoutTestTags {
     const val LIST = "workout_list"
@@ -212,7 +219,7 @@ fun WorkoutContent(
                 modifier = Modifier.testTag(WorkoutTestTags.EMPTY),
             )
 
-            is WorkoutUiState.Active -> Column(modifier = Modifier.fillMaxSize().background(Color.White)) {
+            is WorkoutUiState.Active -> Column(modifier = Modifier.fillMaxSize().background(Surface)) {
                 WorkoutTopBar(readOnly = uiState.isReadOnly, onFinish = onComplete)
                 StatsHeader(uiState, elapsed)
 
@@ -320,7 +327,7 @@ private fun WorkoutTopBar(readOnly: Boolean, onFinish: () -> Unit) {
         if (!readOnly) {
             Button(
                 onClick = onFinish,
-                colors = ButtonDefaults.buttonColors(containerColor = Blue),
+                colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = OnAccent),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 20.dp, vertical = 6.dp),
                 modifier = Modifier.testTag(WorkoutTestTags.COMPLETE),
             ) { Text("Finish") }
@@ -338,7 +345,7 @@ private fun StatsHeader(state: WorkoutUiState.Active, elapsed: Duration) {
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(28.dp),
     ) {
-        StatCell("Duration", elapsed.human(), valueColor = Blue, tag = WorkoutTestTags.ELAPSED)
+        StatCell("Duration", elapsed.human(), valueColor = Accent, tag = WorkoutTestTags.ELAPSED)
         StatCell("Volume", "${volume.stripTrailingZeros().toPlainString()} kg")
         StatCell("Sets", "${completed.size}")
     }
@@ -371,7 +378,7 @@ private fun ExerciseHeader(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(modifier = Modifier.size(40.dp).clip(CircleShape).background(RowAlt))
             Spacer(Modifier.width(12.dp))
-            Text(exercise.exerciseName, color = Blue, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Text(exercise.exerciseName, color = Accent, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
             if (!readOnly) {
                 var menuOpen by remember { mutableStateOf(false) }
                 Box {
@@ -405,7 +412,7 @@ private fun ExerciseHeader(
         Spacer(Modifier.height(6.dp))
         Text(
             "⏱  Rest Timer: ${formatRest(exercise.restSeconds)}",
-            color = Blue,
+            color = Accent,
             fontSize = 13.sp,
             modifier = Modifier
                 .then(if (readOnly) Modifier else Modifier.clickable { onEditRest() })
@@ -469,7 +476,7 @@ private fun RestPickerSheet(
     }
 
     Surface(
-        color = Color.White,
+        color = Sheet,
         shadowElevation = 16.dp,
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
         modifier = modifier.fillMaxWidth().testTag(WorkoutTestTags.REST_PICKER),
@@ -522,10 +529,10 @@ private fun RestPickerSheet(
 
             Box(
                 modifier = Modifier.fillMaxWidth().height(48.dp).clip(RoundedCornerShape(12.dp))
-                    .background(Blue).clickable { onConfirm(RestOptions[selectedIndex]) }
+                    .background(Accent).clickable { onConfirm(RestOptions[selectedIndex]) }
                     .testTag(WorkoutTestTags.REST_PICKER_DONE),
                 contentAlignment = Alignment.Center,
-            ) { Text("Done", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium) }
+            ) { Text("Done", color = OnAccent, fontSize = 16.sp, fontWeight = FontWeight.Medium) }
             Box(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp).clickable { onDismiss() },
                 contentAlignment = Alignment.Center,
@@ -577,7 +584,7 @@ private fun SetRow(
     val bg = when {
         row.isCompleted -> CompletedBg
         index % 2 == 1 -> RowAlt
-        else -> Color.White
+        else -> Surface
     }
 
     Row(
@@ -697,7 +704,7 @@ private fun CompletionBox(checked: Boolean, enabled: Boolean, onToggle: () -> Un
         Icon(
             Icons.Filled.Check,
             contentDescription = if (checked) "Completed" else "Mark complete",
-            tint = if (checked) Color.White else Muted,
+            tint = if (checked) OnAccent else Muted,
             modifier = Modifier.size(18.dp),
         )
     }
@@ -718,7 +725,7 @@ private fun BottomActions(sessionId: UUID, onAddExercise: (UUID) -> Unit, onDisc
     Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Button(
             onClick = { onAddExercise(sessionId) },
-            colors = ButtonDefaults.buttonColors(containerColor = Blue),
+            colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = OnAccent),
             modifier = Modifier.fillMaxWidth().testTag(WorkoutTestTags.ADD_EXERCISE),
         ) { Text("+ Add Exercise") }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -754,7 +761,7 @@ private fun RestTimerBar(
 ) {
     if (restState is RestTimerState.Idle) return
 
-    Surface(color = Color.White, shadowElevation = 8.dp, modifier = modifier.fillMaxWidth()) {
+    Surface(color = Sheet, shadowElevation = 8.dp, modifier = modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -775,7 +782,7 @@ private fun RestTimerBar(
                     RestChip("+15", onClick = { onAdjustRest(15) }, tag = WorkoutTestTags.REST_PLUS)
                     Button(
                         onClick = onSkipRest,
-                        colors = ButtonDefaults.buttonColors(containerColor = Blue),
+                        colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = OnAccent),
                         modifier = Modifier.testTag(WorkoutTestTags.REST_SKIP),
                     ) { Text("Skip") }
                 }
@@ -810,7 +817,7 @@ private fun RpeSheet(
     val descriptor = selectedValue?.let(RpeScale::describe)
 
     Surface(
-        color = Color.White,
+        color = Sheet,
         shadowElevation = 16.dp,
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
         modifier = modifier.fillMaxWidth().testTag(WorkoutTestTags.RPE_SHEET),
@@ -840,12 +847,12 @@ private fun RpeSheet(
                         val isSel = selected == text
                         Box(
                             modifier = Modifier.weight(1f).clip(CircleShape)
-                                .background(if (isSel) Blue else Color.Transparent)
+                                .background(if (isSel) Accent else Color.Transparent)
                                 .clickable { selected = text }
                                 .padding(vertical = 8.dp)
                                 .testTag(WorkoutTestTags.rpeValue(text)),
                             contentAlignment = Alignment.Center,
-                        ) { Text(text, color = if (isSel) Color.White else Ink, fontWeight = FontWeight.Medium, fontSize = 12.sp) }
+                        ) { Text(text, color = if (isSel) OnAccent else Ink, fontWeight = FontWeight.Medium, fontSize = 12.sp) }
                     }
                 }
                 Box(
@@ -853,7 +860,7 @@ private fun RpeSheet(
                         .background(GreenCheck).clickable { onSelect(selected?.let(::BigDecimal)) }
                         .testTag(WorkoutTestTags.RPE_DONE),
                     contentAlignment = Alignment.Center,
-                ) { Text("Done ✓", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium) }
+                ) { Text("Done ✓", color = OnAccent, fontSize = 16.sp, fontWeight = FontWeight.Medium) }
                 Box(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).clickable { onDismiss() }
                         .testTag(WorkoutTestTags.RPE_CANCEL),
