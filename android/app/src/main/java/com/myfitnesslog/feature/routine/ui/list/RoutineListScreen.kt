@@ -6,8 +6,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
@@ -29,11 +31,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.LaunchedEffect
+import com.myfitnesslog.core.ui.components.EmptyState
 import java.util.UUID
 
 object RoutineListTestTags {
@@ -85,14 +87,13 @@ fun RoutineListContent(
     Box(modifier = modifier.fillMaxSize()) {
         when (uiState) {
             RoutineListUiState.Loading -> Unit
-            RoutineListUiState.Empty -> Text(
-                text = "No routines yet. Tap + to create one.",
-                style = MaterialTheme.typography.bodyLarge,
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .padding(24.dp)
-                    .testTag(RoutineListTestTags.EMPTY),
+            RoutineListUiState.Empty -> EmptyState(
+                icon = Icons.AutoMirrored.Filled.List,
+                title = "No routines yet",
+                description = "Create your first routine to start planning and tracking your workouts.",
+                actionLabel = "Create routine",
+                onAction = { showCreateDialog = true },
+                modifier = Modifier.testTag(RoutineListTestTags.EMPTY),
             )
 
             is RoutineListUiState.Success -> LazyColumn(
@@ -114,6 +115,9 @@ fun RoutineListContent(
 
         FloatingActionButton(
             onClick = { showCreateDialog = true },
+            shape = CircleShape,
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(16.dp)
@@ -144,6 +148,13 @@ private fun RoutineRow(
     var menuOpen by remember { mutableStateOf(false) }
     ListItem(
         headlineContent = { Text(routine.name) },
+        supportingContent = {
+            Text(
+                text = if (routine.exerciseCount == 1) "1 exercise" else "${routine.exerciseCount} exercises",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        },
         trailingContent = {
             Box {
                 IconButton(

@@ -138,6 +138,27 @@ class WorkoutRepositoryImplTest {
     }
 
     @Test
+    fun updateExerciseNotesPersistsTheNoteAndBlankClearsIt() = runBlocking {
+        assertEquals(null, database.workoutExerciseDao().getById(workoutExerciseId)?.notes)
+
+        repository.updateExerciseNotes(workoutExerciseId, "  felt strong  ")
+        // Stored trimmed.
+        assertEquals("felt strong", database.workoutExerciseDao().getById(workoutExerciseId)?.notes)
+
+        // Blank input clears the note back to null (not an empty string).
+        repository.updateExerciseNotes(workoutExerciseId, "   ")
+        assertEquals(null, database.workoutExerciseDao().getById(workoutExerciseId)?.notes)
+    }
+
+    @Test
+    fun updateExerciseNotesRejectedOnCompletedWorkout() {
+        runBlocking { repository.completeWorkout(sessionId) }
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking { repository.updateExerciseNotes(workoutExerciseId, "nope") }
+        }
+    }
+
+    @Test
     fun reorderingSessionExercisesDoesNotModifyTheRoutine() = runBlocking {
         addSecondExercise()
         val before = database.routineExerciseDao().getByRoutine(routineId)

@@ -34,12 +34,14 @@ class RoutineListViewModel @Inject constructor(
     val events = _events.asSharedFlow()
 
     val uiState: StateFlow<RoutineListUiState> =
-        repository.observeRoutines()
+        repository.observeRoutineSummaries()
             .map { routines ->
                 if (routines.isEmpty()) {
                     RoutineListUiState.Empty
                 } else {
-                    RoutineListUiState.Success(routines.map { RoutineListItem(it.id, it.name) })
+                    RoutineListUiState.Success(
+                        routines.map { RoutineListItem(it.id, it.name, it.exerciseCount) },
+                    )
                 }
             }
             .stateIn(

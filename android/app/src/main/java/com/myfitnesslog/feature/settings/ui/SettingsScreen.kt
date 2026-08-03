@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
@@ -59,23 +61,32 @@ private fun SettingsContent(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
         )
-        Column(Modifier.selectableGroup()) {
-            PreviousWorkoutValueOption(
-                title = "Any Workout",
-                subtitle = "Use the last time you did the exercise, in any routine.",
-                selected = uiState.previousWorkoutValues == PreviousWorkoutValues.ANY_WORKOUT,
-                onSelect = { onPreviousWorkoutValuesSelected(PreviousWorkoutValues.ANY_WORKOUT) },
-                testTag = SettingsTestTags.previousOption(PreviousWorkoutValues.ANY_WORKOUT),
-            )
-            PreviousWorkoutValueOption(
-                title = "Same Routine",
-                subtitle = "Use the last time you did the exercise in this routine.",
-                selected = uiState.previousWorkoutValues == PreviousWorkoutValues.SAME_ROUTINE,
-                onSelect = { onPreviousWorkoutValuesSelected(PreviousWorkoutValues.SAME_ROUTINE) },
-                testTag = SettingsTestTags.previousOption(PreviousWorkoutValues.SAME_ROUTINE),
-            )
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainer,
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+        ) {
+            Column(Modifier.selectableGroup()) {
+                PreviousWorkoutValueOption(
+                    title = "Any Workout",
+                    subtitle = "Use the last time you did the exercise, in any routine.",
+                    selected = uiState.previousWorkoutValues == PreviousWorkoutValues.ANY_WORKOUT,
+                    onSelect = { onPreviousWorkoutValuesSelected(PreviousWorkoutValues.ANY_WORKOUT) },
+                    testTag = SettingsTestTags.previousOption(PreviousWorkoutValues.ANY_WORKOUT),
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                PreviousWorkoutValueOption(
+                    title = "Same Routine",
+                    subtitle = "Use the last time you did the exercise in this routine.",
+                    selected = uiState.previousWorkoutValues == PreviousWorkoutValues.SAME_ROUTINE,
+                    onSelect = { onPreviousWorkoutValuesSelected(PreviousWorkoutValues.SAME_ROUTINE) },
+                    testTag = SettingsTestTags.previousOption(PreviousWorkoutValues.SAME_ROUTINE),
+                )
+            }
         }
-        HorizontalDivider()
     }
 }
 

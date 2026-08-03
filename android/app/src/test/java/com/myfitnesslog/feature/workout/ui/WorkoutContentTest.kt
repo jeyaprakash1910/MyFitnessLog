@@ -98,6 +98,7 @@ class WorkoutContentTest {
             onMoveExerciseDown = onMoveExerciseDown,
             onRemoveExercise = onRemoveExercise,
             onSetExerciseRest = onSetExerciseRest,
+            onSetExerciseNotes = { _, _ -> },
             onComplete = onComplete,
             onDiscard = onDiscard,
             onAdjustRest = onAdjustRest,

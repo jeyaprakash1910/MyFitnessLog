@@ -273,6 +273,32 @@ class WorkoutViewModelTest {
     }
 
     @Test
+    fun recompletingAnUndoneRowViaTheCheckboxKeepsItsRpe() = runBlocking {
+        val vm = viewModel()
+        val ex = vm.awaitActive { it.exercises.firstOrNull()?.rows?.any { r -> !r.isCompleted } == true }.exercises.first()
+        val plannedKey = ex.rows.first { !it.isCompleted }.rowKey
+        // Complete the set with an RPE (fill values, then pick RPE as the UI does).
+        vm.onCommitRow(ex.id, plannedKey, "80", "8")
+        vm.onRpeSelected(ex.id, plannedKey, BigDecimal("8.5"))
+        val completedKey = vm.awaitActive { it.exercises.first().rows.any { r -> r.isCompleted } }
+            .exercises.first().rows.first { it.isCompleted }.rowKey
+
+        // Uncheck (undo) → reverts to a planned row that keeps the RPE in memory.
+        vm.onToggleComplete(ex.id, completedKey, "", "")
+        val reverted = vm.awaitActive { it.exercises.first().rows.none { r -> r.isCompleted } }
+            .exercises.first().rows.first()
+        assertEquals(BigDecimal("8.5"), reverted.rpe)
+
+        // Re-check via the checkbox → the RPE must be persisted, not dropped.
+        vm.onToggleComplete(ex.id, reverted.rowKey, "80", "8")
+
+        val recompleted = vm.awaitActive { it.exercises.first().rows.any { r -> r.isCompleted } }
+            .exercises.first().rows.first { it.isCompleted }
+        assertEquals(BigDecimal("8.5"), recompleted.rpe)
+        assertEquals(BigDecimal("8.5"), database.workoutSetDao().getByExercise(ex.id).first().rpe)
+    }
+
+    @Test
     fun rpeSelectionOnACompletedRowEditsItsRpe() = runBlocking {
         val vm = viewModel()
         val exerciseId = vm.completeFirstPlanned("80", "8")

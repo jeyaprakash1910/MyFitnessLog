@@ -10,6 +10,7 @@ import com.myfitnesslog.feature.routine.data.local.RoutineEntity
 import com.myfitnesslog.feature.routine.data.local.RoutineExerciseDao
 import com.myfitnesslog.feature.routine.data.local.RoutineExerciseDetail
 import com.myfitnesslog.feature.routine.data.local.RoutineExerciseEntity
+import com.myfitnesslog.feature.routine.data.local.RoutineSummary
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
@@ -35,6 +36,9 @@ class RoutineRepositoryImpl @Inject constructor(
 ) : RoutineRepository, RoutineSyncSource, RoutineExerciseSyncSource {
 
     override fun observeRoutines(): Flow<List<RoutineEntity>> = routineDao.observeAll()
+
+    override fun observeRoutineSummaries(): Flow<List<RoutineSummary>> =
+        routineDao.observeSummaries()
 
     override fun observeRoutine(id: UUID): Flow<RoutineEntity?> = routineDao.observeById(id)
 

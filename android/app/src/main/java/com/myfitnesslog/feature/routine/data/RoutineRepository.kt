@@ -2,6 +2,7 @@ package com.myfitnesslog.feature.routine.data
 
 import com.myfitnesslog.feature.routine.data.local.RoutineEntity
 import com.myfitnesslog.feature.routine.data.local.RoutineExerciseDetail
+import com.myfitnesslog.feature.routine.data.local.RoutineSummary
 import kotlinx.coroutines.flow.Flow
 import java.util.UUID
 
@@ -20,6 +21,9 @@ import java.util.UUID
 interface RoutineRepository {
 
     fun observeRoutines(): Flow<List<RoutineEntity>>
+
+    /** Routine rows plus their exercise counts, for the Home list. */
+    fun observeRoutineSummaries(): Flow<List<RoutineSummary>>
 
     fun observeRoutine(id: UUID): Flow<RoutineEntity?>
 

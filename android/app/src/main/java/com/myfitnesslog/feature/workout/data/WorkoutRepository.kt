@@ -66,6 +66,13 @@ interface WorkoutRepository {
     suspend fun updateExerciseRest(workoutExerciseId: UUID, restSeconds: Int)
 
     /**
+     * Sets the free-text note on an exercise within its (in-progress) session.
+     * Blank input is stored as null. Session-scoped: the routine template is never
+     * modified. Rejected unless the owning session is IN_PROGRESS.
+     */
+    suspend fun updateExerciseNotes(workoutExerciseId: UUID, notes: String?)
+
+    /**
      * Moves an exercise up or down within its (in-progress) session by swapping its
      * `exerciseOrder` with the adjacent exercise. Session-scoped only — the routine
      * template is never modified (V2 Exercise Ordering Contract). No-op at a boundary.

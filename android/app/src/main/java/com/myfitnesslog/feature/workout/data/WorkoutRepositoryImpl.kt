@@ -182,6 +182,19 @@ class WorkoutRepositoryImpl @Inject constructor(
         syncTrigger.requestSync()
     }
 
+    override suspend fun updateExerciseNotes(workoutExerciseId: UUID, notes: String?) = withContext(ioDispatcher) {
+        val exercise = exerciseDao.getById(workoutExerciseId) ?: return@withContext
+        requireInProgress(exercise.workoutSessionId)
+        exerciseDao.upsert(
+            exercise.copy(
+                notes = notes?.trim()?.takeIf { it.isNotEmpty() },
+                updatedAt = clock.instant(),
+                syncStatus = SyncStatus.PENDING,
+            ),
+        )
+        syncTrigger.requestSync()
+    }
+
     override suspend fun moveExercise(workoutExerciseId: UUID, up: Boolean) = withContext(ioDispatcher) {
         val exercise = exerciseDao.getById(workoutExerciseId) ?: return@withContext
         val session = requireInProgress(exercise.workoutSessionId)

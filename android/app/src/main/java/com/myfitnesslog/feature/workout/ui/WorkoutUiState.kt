@@ -41,6 +41,8 @@ data class WorkoutExerciseUi(
     /** Rest duration used when a set of this exercise is completed (spec §5). */
     val restSeconds: Int,
     val rows: List<WorkoutSetRowUi>,
+    /** Free-text note for this exercise within the workout (null/blank when unset). */
+    val notes: String? = null,
 )
 
 /** Immutable state for the active workout screen. */

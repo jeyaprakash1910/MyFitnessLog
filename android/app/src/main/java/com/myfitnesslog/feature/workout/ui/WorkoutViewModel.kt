@@ -271,7 +271,15 @@ class WorkoutViewModel @Inject constructor(
     fun onToggleComplete(exerciseId: UUID, rowKey: String, weightText: String, repsText: String) {
         val draftKey = rowKey.draftKeyOrNull()
         if (draftKey != null) {
-            val input = SetInput(weightText.trim().toBigDecimalOrNull(), repsText.trim().toIntOrNull())
+            // Preserve the draft's already-entered RPE and set category; the checkbox
+            // only carries the inline weight/reps text, so rebuilding SetInput from
+            // those alone would drop an RPE the row already holds (e.g. one restored
+            // by a prior undo).
+            val existing = row(exerciseId, rowKey)?.toInput() ?: SetInput.EMPTY
+            val input = existing.copy(
+                weight = weightText.trim().toBigDecimalOrNull(),
+                repetitions = repsText.trim().toIntOrNull(),
+            )
             val result = SetTransitions.complete(LoggedSetRow(0, input, persistedId = null), input)
             dispatch(exerciseId, result.mutation, draftKey = draftKey)
             applyRest(result.rest, exerciseId)
@@ -331,6 +339,10 @@ class WorkoutViewModel @Inject constructor(
     /** Set the per-exercise rest duration (spec §5); negative values are clamped to 0. */
     fun onSetExerciseRest(exerciseId: UUID, restSeconds: Int) =
         launchCatching { repository.updateExerciseRest(exerciseId, restSeconds.coerceAtLeast(0)) }
+
+    /** Persist the free-text note for an exercise (blank is stored as no note). */
+    fun onSetExerciseNotes(exerciseId: UUID, notes: String) =
+        launchCatching { repository.updateExerciseNotes(exerciseId, notes) }
 
     fun onMoveExerciseUp(exerciseId: UUID) = launchCatching { repository.moveExercise(exerciseId, up = true) }
     fun onMoveExerciseDown(exerciseId: UUID) = launchCatching { repository.moveExercise(exerciseId, up = false) }
@@ -469,7 +481,7 @@ class WorkoutViewModel @Inject constructor(
                 previous = previousByNumber[r.setNumber]?.formatPrevious(),
             )
         }
-        return WorkoutExerciseUi(id, exerciseName, targetSummary(), targetRestSeconds ?: DEFAULT_REST_SECONDS, rows)
+        return WorkoutExerciseUi(id, exerciseName, targetSummary(), targetRestSeconds ?: DEFAULT_REST_SECONDS, rows, notes)
     }
 
     private fun WorkoutExerciseEntity.targetSummary(): String {
