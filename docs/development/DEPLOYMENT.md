@@ -36,6 +36,12 @@ All values come from your password manager (`SECRETS.md`). You will set:
 - Supabase: DB password; **transaction** pooler URL (`:6543`); **session** pooler URL
   (`:5432`).
 - `APP_API_KEY` — generate once: `openssl rand -hex 32`.
+- `APP_UPDATE_REPOSITORY` and `APP_UPDATE_GITHUB_TOKEN` - **optional**, enables in-app
+  Android updates (ADR-0016). The token is a GitHub fine-grained PAT with **read-only
+  Contents** access to this repository only. Leave both unset and the `/api/v1/app/*`
+  endpoints answer 503, which the app treats as "no update to offer"; nothing else
+  changes. The token must never be copied into the Android app: an APK is
+  distributed, so any secret inside it is a published secret.
 - These become environment variables on Render (see `backend/.env.prod.example`) and a
   GitHub Actions secret for backups.
 

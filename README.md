@@ -23,7 +23,9 @@ fully offline.
 > (multi-user) authentication remains a future version.
 >
 > No prebuilt APK is distributed: each install needs its own backend URL compiled
-> in, so build it yourself (see [Building a release](#building-a-release)).
+> in, so build the first one yourself (see
+> [Building a release](#building-a-release)). Subsequent updates install
+> over-the-air from the app itself (see [In-app updates](#in-app-updates)).
 > See [docs/ROADMAP.md](docs/ROADMAP.md) for authoritative status and
 > [docs/TECH_DEBT.md](docs/TECH_DEBT.md) for known limitations.
 
@@ -153,6 +155,22 @@ The version lives in `android/version.properties`. Edit `versionName` only;
 **[docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md) is the authoritative
 procedure** — including backing up the keystore (lose it and no installed copy
 can ever be updated) and backing up PostgreSQL before installing anything.
+
+#### In-app updates
+
+The first install is by hand, as above. After that an installed build finds its
+own updates: it asks the backend for the latest release on launch, shows a banner
+when there is a newer one, and downloads and installs it on the phone. No cable.
+
+Releasing therefore means **attaching the signed APK to the GitHub release** and
+tagging `vMAJOR.MINOR.PATCH`. The backend resolves that release with a read-only
+GitHub token and streams the APK to the app; the token stays server-side, because
+the repository is private and a secret inside a distributed APK is a published
+secret. Enabled by setting `APP_UPDATE_REPOSITORY` and `APP_UPDATE_GITHUB_TOKEN`
+on the backend. Unset, the endpoints answer 503 and no update is ever offered.
+
+Design and alternatives considered:
+[ADR-0016](docs/ADR/0016-in-app-update-delivery.md).
 
 ### Web
 

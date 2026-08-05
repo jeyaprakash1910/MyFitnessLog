@@ -53,6 +53,18 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.CONFLICT, ex.getMessage(), request);
     }
 
+    /**
+     * Updates could not be resolved (not configured, or the artifact store is
+     * unreachable). Logged at WARN, not ERROR: the caller did nothing wrong and
+     * the sync API is unaffected, so this must not read as a backend fault.
+     */
+    @ExceptionHandler(AppUpdateUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleAppUpdateUnavailable(
+            AppUpdateUnavailableException ex, HttpServletRequest request) {
+        log.warn("App update unavailable: {}", ex.getMessage());
+        return build(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), request);
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ErrorResponse> handleIllegalArgument(
             IllegalArgumentException ex, HttpServletRequest request) {

@@ -233,6 +233,55 @@ it is the party that declares it.
 
 ⸻
 
+App Distribution
+
+Method	Endpoint	Description
+GET	/app/latest-version	The latest published Android release
+GET	/app/apk	Stream that release's signed APK
+
+These serve the Android app itself, not workout data (ADR-0016). The app is
+distributed outside any store, so the backend is what tells an installed build
+that a newer one exists. Both sit behind the ordinary `X-API-Key` boundary; they
+are not on the permit-list.
+
+`GET /app/latest-version` response fields: `versionName`, `releaseNotes`,
+`publishedAt`, `sizeBytes`.
+
+```json
+{
+  "versionName": "1.2.0",
+  "releaseNotes": "Editable per-exercise notes during a workout.",
+  "publishedAt": "2026-08-01T10:00:00Z",
+  "sizeBytes": 13012345
+}
+```
+
+The response deliberately carries **no `versionCode` and no "update available"
+flag**. It reports what the latest release is; whether that is newer than the
+caller is the caller's own question, and only the caller knows what it is
+running. Answering it here would put the MAJOR.MINOR.PATCH ordering rule in two
+codebases at once. `releaseNotes` is Markdown and may be blank; `publishedAt` may
+be null; both are presentational, so a client must tolerate their absence and
+still compare versions.
+
+`versionName` is taken from the release tag and is always bare
+`MAJOR.MINOR.PATCH` (any `v` prefix is stripped). A tag that is not a semantic
+version is refused rather than reported, because a wrong version string here
+would make the client's comparison silently meaningless.
+
+`GET /app/apk` responds `application/vnd.android.package-archive` with
+`Content-Length` set from the release metadata, so a client can render real
+download progress. The body is streamed, not buffered.
+
+**Both endpoints return 503 when updates are unconfigured** (`app.update.*`
+unset), when the artifact store is unreachable, or when the latest release has no
+APK attached. 503 rather than 500 or 404: the request was valid and may succeed
+later. Clients are expected to treat it as "cannot tell right now" and stay quiet
+rather than surfacing an error, and specifically must not treat it as "you are up
+to date".
+
+⸻
+
 8. Standard Response Structure
 
 Successful responses return the requested resource directly.
@@ -281,6 +330,7 @@ All errors follow a consistent structure.
 | Malformed JSON request | 400 Bad Request | Request body could not be parsed. |
 | Resource not found | 404 Not Found | Requested resource does not exist. |
 | Business rule violation | 409 Conflict | Request violates a business rule. |
+| App update unavailable | 503 Service Unavailable | Updates are unconfigured or the artifact store is unreachable. |
 | Unexpected server error | 500 Internal Server Error | Unhandled server-side exception. |
 
 The backend must never expose:
@@ -305,6 +355,7 @@ Status	Usage
 404 Not Found	Resource not found
 409 Conflict	Business rule conflict
 500 Internal Server Error	Unexpected server error
+503 Service Unavailable	App updates unconfigured or artifact store unreachable
 
 ⸻
 

@@ -27,6 +27,19 @@ app:
   # Shared secret for the X-API-Key auth boundary. Empty in dev/test disables
   # authentication (see ApiKeyAuthFilter); production sets APP_API_KEY.
   api-key: ${APP_API_KEY:}
+  update:
+    # In-app Android updates (ADR-0016). Both values are required to enable the
+    # /api/v1/app/* endpoints; with either missing they answer 503 and the app
+    # simply never offers an update. Nothing else in the backend is affected.
+    #
+    # repository   "owner/repo" holding the release APKs as GitHub Release assets.
+    # github-token fine-grained PAT with READ-ONLY "Contents" access to exactly
+    #              that repository. A server-side secret: it is never sent to a
+    #              client, which is the whole reason the backend proxies the
+    #              download instead of handing out a GitHub URL.
+    repository: ${APP_UPDATE_REPOSITORY:}
+    github-token: ${APP_UPDATE_GITHUB_TOKEN:}
+
   cors:
     # Browser origins permitted to read this API (GET only, no credentials).
     # Defaults to the Vite dev server; override per deployment. Empty disables CORS.

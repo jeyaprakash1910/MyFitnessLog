@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    FileProvider paths for in-app updates (ADR-0016).
+
+    Exactly one directory is shared: `updates/` inside the app's internal cache,
+    where the downloaded APK is written. Scoping it this narrowly is the point of
+    the file - a broader root such as `<cache-path path="." />` would expose every
+    cached file to any component holding a granted URI, for no benefit.
+-->
+<paths>
+    <cache-path name="updates" path="updates/" />
+</paths>

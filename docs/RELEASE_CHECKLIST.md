@@ -293,7 +293,31 @@ git push origin main --follow-tags
       Always pass `--verify-tag`. Without it `gh` creates a missing tag rather
       than failing, so a typo publishes a release pointing at whatever `main`
       happens to be.
+- [ ] **The signed release APK attached to the GitHub release** (ADR-0016):
+
+      ```bash
+      gh release upload vX.Y.Z app/build/outputs/apk/release/app-release.apk
+      ```
+
+      This is what in-app updates actually serve. The backend resolves the
+      repository's latest release, finds its `.apk` asset, and streams it to
+      installed builds. Skip this and `GET /api/v1/app/latest-version` reports
+      503: no phone is offered the update, and nothing announces the omission.
+
+      Two things must hold or the release is invisible to installed builds:
+      the **tag is `vMAJOR.MINOR.PATCH`** (anything else is refused rather than
+      guessed at), and **exactly one `.apk` asset** is attached. The asset is
+      matched by extension, so mapping files and checksums alongside it are fine.
+
+      The release notes become the "What's new" text on the update screen, so
+      write the body for the person reading it on a phone.
 - [ ] Release verified: not a draft, and the asset list is what you intended
+- [ ] **In-app update verified from the previously installed build**: open the
+      app on the device that still runs the *old* version, confirm the banner
+      offers the new one, and install through it. This exercises the whole path
+      end to end - resolution, download, and the installer handoff - which no
+      earlier step covers, and it is the only step that proves an already-installed
+      copy can actually reach this release.
 
 ---
 
