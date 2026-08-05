@@ -80,14 +80,14 @@ docs/      Product, architecture, database, API, sync, coding standards, ADRs
   and decimal precision is preserved from PostgreSQL `NUMERIC` to rendered text
   rather than being lost to JavaScript floats. Responsive from mobile to
   desktop with zero axe WCAG 2.1 A/AA violations.
-- **700 automated tests**: **467 Android** (461 JVM/Robolectric + 6
+- **699 automated tests**: **467 Android** (461 JVM/Robolectric + 6
   instrumented, verified identical on emulator and physical hardware),
-  **100 backend** (JUnit 5/MockMvc over real PostgreSQL, incl. an end-to-end
+  **99 backend** (JUnit 5/MockMvc over real PostgreSQL, incl. an end-to-end
   sync-graph idempotency proof), and **133 web** (Vitest + React Testing
   Library). Nine of them drive the real stack against a running backend; they
   skip unless one is named explicitly, and refuse to run against a backend that
   does not declare itself disposable, so a test can never write to real data
-  (TD-013). Counting them, the suite is 700 tests; by default 691 run and those
+  (TD-013). Counting them, the suite is 699 tests; by default 690 run and those
   nine skip.
 
 Not yet built: authentication and multi-user support (V2), bidirectional/pull
