@@ -45,6 +45,25 @@ During Milestone 1 runtime verification, sending an unsupported HTTP method to a
 
 The generic `@ExceptionHandler(Exception.class)` in GlobalExceptionHandler catches Spring MVC's `HttpRequestMethodNotSupportedException` and maps it to 500.
 
+### Observed again in production, 6 Aug 2026
+
+While bringing up in-app updates (ADR-0016), a request to
+`GET /api/v1/app/latest-version` issued *during* a Render deploy hit the previous
+container, where that route did not yet exist. Spring raised
+`NoResourceFoundException` and the generic handler turned it into:
+
+* HTTP status: 500 Internal Server Error
+* Body: "An unexpected error occurred."
+
+The correct answer was **404**. This cost real debugging time: a 500 reads as "the
+new code is broken", so the deploy was investigated as a code defect before the
+timestamps showed the old container had served it. A 404 would have said "this
+route does not exist here" and pointed straight at the deploy window.
+
+This upgrades TD-001 from a theoretical concern about masked framework
+exceptions to one with a measured cost, and widens it beyond 405: the
+no-handler 404 case is the one that actually bit.
+
 ### Why this is currently acceptable (not a Milestone 1 defect)
 
 * API_SPECIFICATION.md does not currently define HTTP 405 handling.

@@ -163,14 +163,21 @@ M9.5 Dogfooding Readiness	✅ Completed (T1–T4)
 M10 Web Application	✅ Completed (prerequisites + Phases 1–4)
 M11 Hardening & Polish	✅ Track A complete (Phases 1–4); Track B continuous
 M12 Version 1 Release	✅ Completed (Phases 1–5) — v1.0.0 released 22 Jul 2026
+M13 In-App Update Delivery	✅ Completed - v1.2.0 released 6 Aug 2026
 
-Current status: **Version 1 released.** `v1.0.0` is tagged, pushed and published
-on GitHub (commit `4f80e76`), with the signed release APK verified on physical
-hardware. Every milestone M1–M12 is complete. The next milestone is Version 2
-(authentication and multi-user), not yet planned.
-Test count: 342 automated Android tests (336 JVM/Robolectric + 6 instrumented)
-+ 92 backend tests (JUnit 5/MockMvc over real PostgreSQL) + 133 web tests
-(Vitest/RTL, 4 of them live-backend) = 567 total, of which 558 run by default.
+Current status: **Version 1 released and self-updating.** `v1.0.0` is tagged,
+pushed and published on GitHub (commit `4f80e76`), with the signed release APK
+verified on physical hardware. Every milestone M1–M13 is complete. The next
+milestone is Version 2 (authentication and multi-user), not yet planned.
+
+Since **v1.2.0** an installed build updates itself over the air: the backend
+resolves the latest GitHub release with a server-side read-only token and streams
+its APK to the app (ADR-0016). Verified end to end on the physical OnePlus
+CPH2717 on 6 Aug 2026 - a 1.2.0 install detected, downloaded and installed 1.3.0
+with no cable, preserving the local database (`firstInstallTime` unchanged).
+Test count: 467 automated Android tests (461 JVM/Robolectric + 6 instrumented)
++ 100 backend tests (JUnit 5/MockMvc over real PostgreSQL) + 133 web tests
+(Vitest/RTL, 4 of them live-backend) = 700 total, of which 691 run by default.
 The nine live tests (five Android `LiveBackendSyncTest`, four web) drive the real
 stack against a running backend. Since M12 Phase 3 they skip unless a target is
 named explicitly (`MFL_LIVE_TEST_BASE_URL` / `VITE_LIVE_TEST_BASE_URL`) and

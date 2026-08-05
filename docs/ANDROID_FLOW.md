@@ -94,6 +94,7 @@ Home
 │       └── Workout Details
 │
 └── Settings
+        └── App Update
 
 ⸻
 
@@ -130,6 +131,7 @@ Rest Timer	Countdown between sets
 History	Workout history
 Workout Details	View completed workout
 Settings	Application settings
+App Update	Show an available release and install it
 
 ⸻
 
@@ -298,14 +300,41 @@ Future versions may introduce a dedicated workout correction flow.
 
 Version 1 settings are intentionally minimal.
 
-Examples:
+Implemented:
 
-* Application version
+* Previous Workout Values (where the Previous column reads from)
+* About > App version - shows the installed version and the result of the
+  update check, and opens the App Update screen
+
+Future:
+
 * Sync status
-* Manual sync (future)
-* About
+* Manual sync
 
 Authentication settings are excluded from Version 1.
+
+⸻
+
+14b. App Update Screen
+
+Reached from Settings > About > App version, or by tapping the update banner.
+Distribution is store-less (ADR-0016), so this screen is how a newer build
+reaches the phone at all.
+
+States:
+
+* Checking - a check is in flight
+* Up to date - this build is the latest published release
+* Available - shows the new version, download size and release notes, with a
+  Download and install action reporting real progress
+* Can't check - the backend was unreachable or has no updates configured
+
+"Can't check" is deliberately distinct from "up to date": the app must not claim
+the second when it means the first.
+
+The update banner appears above top-level screens when a release is available.
+It is suppressed on the Workout screen, because mid-set is the wrong moment to
+raise an update, and dismissal lasts for the process rather than permanently.
 
 ⸻
 

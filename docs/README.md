@@ -59,6 +59,11 @@ build instructions, start with the [root README](../README.md).
 | [ADR-0009](ADR/0009-rest-as-a-domain-event.md) | Rest is a domain event consumed by a session-scoped timer. |
 | [ADR-0010](ADR/0010-session-execution-vs-routine-templates.md) | Session-scoped execution never mutates routine templates. |
 | [ADR-0011](ADR/0011-read-only-workout-projections.md) | Workout state is surfaced through read-only projections. |
+| [ADR-0012](ADR/0012-snake-case-schema-identifiers.md) | Schema identifiers are unquoted snake_case. |
+| [ADR-0013](ADR/0013-api-key-auth-boundary.md) | A shared API key is the V1 authentication boundary. |
+| [ADR-0014](ADR/0014-dual-pooler-datasource.md) | Runtime and Flyway use separate Supabase poolers. |
+| [ADR-0015](ADR/0015-docker-deployment-on-render.md) | The backend deploys to Render as a Docker image. |
+| [ADR-0016](ADR/0016-in-app-update-delivery.md) | The backend delivers app updates from GitHub Releases. |
 
 ## Releases
 

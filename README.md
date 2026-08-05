@@ -4,9 +4,9 @@ An **offline-first** workout tracking application. The backend is the permanent
 source of truth; the Android app keeps a synchronized local copy so it works
 fully offline.
 
-> **Version 1.0.0 released — 22 July 2026.**
-> [Release](https://github.com/jeyaprakash1910/MyFitnessLog/releases/tag/v1.0.0) ·
-> [Release notes](docs/V1_RELEASE_NOTES.md)
+> **Version 1.3.0 released, 6 August 2026.**
+> [Latest release](https://github.com/jeyaprakash1910/MyFitnessLog/releases/tag/v1.3.0) ·
+> [V1 release notes](docs/V1_RELEASE_NOTES.md)
 >
 > Build routines, log workouts fully offline, and have them synchronize to the
 > backend in the background. The signed release build is verified on physical
@@ -24,8 +24,9 @@ fully offline.
 >
 > No prebuilt APK is distributed: each install needs its own backend URL compiled
 > in, so build the first one yourself (see
-> [Building a release](#building-a-release)). Subsequent updates install
-> over-the-air from the app itself (see [In-app updates](#in-app-updates)).
+> [Building a release](#building-a-release)). Since 1.2.0 every update after that
+> installs over the air from the app itself (see
+> [In-app updates](#in-app-updates)), verified on physical hardware.
 > See [docs/ROADMAP.md](docs/ROADMAP.md) for authoritative status and
 > [docs/TECH_DEBT.md](docs/TECH_DEBT.md) for known limitations.
 
@@ -61,6 +62,13 @@ docs/      Product, architecture, database, API, sync, coding standards, ADRs
     duration, routine/manual indicator, exercise count, notes preview) and a
     read-only detail screen (metadata + every snapshotted exercise and set),
     served by a dedicated read-only repository over the snapshot tables.
+  - In-app updates: on launch the app asks the backend for the latest published
+    release and, when a newer one exists, shows a dismissible banner (suppressed
+    during a workout). The update screen shows the release notes and download
+    progress, then hands the APK to the system installer. Settings > About shows
+    the installed version and checks on demand. Distribution is store-less, so
+    this is the only thing that tells an installed build a new one exists
+    (ADR-0016).
   - Background synchronization: every local write is uploaded to the backend in
     dependency order by a WorkManager-scheduled pass — offline-first throughout
     (the UI never waits on the network), with idempotent replay, exponential
@@ -72,19 +80,25 @@ docs/      Product, architecture, database, API, sync, coding standards, ADRs
   and decimal precision is preserved from PostgreSQL `NUMERIC` to rendered text
   rather than being lost to JavaScript floats. Responsive from mobile to
   desktop with zero axe WCAG 2.1 A/AA violations.
-- **567 automated tests** pass: **342 Android** (336 JVM/Robolectric + 6
+- **700 automated tests**: **467 Android** (461 JVM/Robolectric + 6
   instrumented, verified identical on emulator and physical hardware),
-  **92 backend** (JUnit 5/MockMvc over real PostgreSQL, incl. an end-to-end
+  **100 backend** (JUnit 5/MockMvc over real PostgreSQL, incl. an end-to-end
   sync-graph idempotency proof), and **133 web** (Vitest + React Testing
   Library). Nine of them drive the real stack against a running backend; they
   skip unless one is named explicitly, and refuse to run against a backend that
   does not declare itself disposable, so a test can never write to real data
-  (TD-013). Counting them, the suite is 567 tests; by default 558 run and those
+  (TD-013). Counting them, the suite is 700 tests; by default 691 run and those
   nine skip.
 
 Not yet built: authentication and multi-user support (V2), bidirectional/pull
 synchronization, and history pagination (TD-010). See the roadmap and technical
 debt register.
+
+Because synchronization is upload-only, a device shows only the workouts logged
+**on that device**. History created on another install is uploaded to the backend
+and visible in the web client, but never pulled down. This surfaces as apparently
+missing history when more than one install is in use, and is the pull-sync gap
+above rather than a fault.
 
 ## Documentation (read these first)
 
