@@ -150,3 +150,44 @@ data class WorkoutSetResponseDto(
     val rir: BigDecimal? = null,
     val isCompleted: Boolean,
 )
+
+/**
+ * Network model for `GET /api/v1/workout-sessions/{id}`: a session with its
+ * exercises and their sets, which is the whole of a completed workout.
+ *
+ * Nested rather than fetched per exercise because a workout is read as one thing.
+ * Restoring a hundred sessions with a request per exercise would be hundreds of
+ * round trips against a server that may be cold.
+ */
+@Serializable
+data class WorkoutSessionDetailResponseDto(
+    val id: String,
+    val routineId: String? = null,
+    val status: String,
+    @Serializable(with = InstantSerializer::class)
+    val startedAt: Instant,
+    @Serializable(with = InstantSerializer::class)
+    val endedAt: Instant? = null,
+    val notes: String? = null,
+    val exercises: List<WorkoutExerciseDetailResponseDto> = emptyList(),
+)
+
+/**
+ * An exercise within a session detail, with its sets.
+ *
+ * Carries no `workoutSessionId`, unlike [WorkoutExerciseResponseDto]: nesting
+ * already establishes the parent, so the server does not repeat it.
+ */
+@Serializable
+data class WorkoutExerciseDetailResponseDto(
+    val id: String,
+    val exerciseId: String,
+    val exerciseName: String,
+    val exerciseOrder: Int,
+    val targetSets: Int,
+    val minTargetReps: Int,
+    val maxTargetReps: Int,
+    val targetRestSeconds: Int? = null,
+    val notes: String? = null,
+    val sets: List<WorkoutSetResponseDto> = emptyList(),
+)

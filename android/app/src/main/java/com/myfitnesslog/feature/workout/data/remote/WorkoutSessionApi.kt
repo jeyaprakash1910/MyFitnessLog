@@ -3,6 +3,7 @@ package com.myfitnesslog.feature.workout.data.remote
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.PUT
+import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Path
 
@@ -16,6 +17,17 @@ import retrofit2.http.Path
  * only.
  */
 interface WorkoutSessionApi {
+
+    /**
+     * Completed workout history, newest first. The backend defines what counts as
+     * history (COMPLETED only), so restore does not re-implement that filter.
+     */
+    @GET("workout-sessions")
+    suspend fun getWorkoutSessions(): List<WorkoutSessionResponseDto>
+
+    /** One session with its exercises and sets: a whole workout in one call. */
+    @GET("workout-sessions/{id}")
+    suspend fun getWorkoutSession(@Path("id") id: String): WorkoutSessionDetailResponseDto
 
     @POST("workout-sessions")
     suspend fun startWorkoutSession(

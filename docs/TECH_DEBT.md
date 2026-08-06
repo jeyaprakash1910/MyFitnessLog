@@ -29,6 +29,67 @@ This register holds debt that outlives a single task. Short-lived working items 
 
 ---
 
+## TD-015 - WorkoutViewModelTest is intermittently flaky
+
+Status: Open - needs investigation
+
+Milestone identified: ADR-0017 Stage 1 (2026-08-07)
+Scheduled for: before Stage 2, since a flaky suite cannot police a convergence change
+
+### Observation
+
+`WorkoutViewModelTest` fails intermittently, roughly one full-suite run in four,
+with different tests failing each time. Two have been seen:
+
+* `completingViaRpeStartsTheRestTimer`
+* `rpeSelectionCompletesAPlannedRowWithThatRpe` - `TimeoutCancellationException:
+  Timed out waiting for 5000 ms`
+
+Every other suite passes consistently. Running the class alone always passes.
+
+### What was already fixed
+
+`completingViaRpeStartsTheRestTimer` asserted on `restTimer.value` immediately
+after calling `onCommitRow` and `onRpeSelected`, with no wait. Both dispatch onto
+the ViewModel's scope, so the assertion was a race that usually won. It now awaits
+the timer state, like its sibling tests. That is a genuine fix, and it is not the
+whole story.
+
+### Why the rest is not merely a slow machine
+
+`rpeSelectionCompletesAPlannedRowWithThatRpe` **does** await correctly and still
+timed out after a full five seconds, waiting for a row to become completed. Five
+seconds is a very long time for an in-memory Room write, which makes "the test
+machine was busy" an unconvincing explanation on its own.
+
+The more troubling possibility is an ordering race in the code under test:
+`onCommitRow` and `onRpeSelected` are dispatched back to back, and if the RPE
+selection can be processed before the commit lands, the row would never complete
+and the wait would legitimately expire. That would be a real defect in workout
+logging surfacing as a flaky test, not a test-only problem.
+
+### Impact
+
+Low today: the affected path works in the app and on the device. The risk is to
+the suite's credibility. A test that fails one run in four trains everyone to
+re-run rather than read, which is exactly how a genuine regression gets waved
+through.
+
+### Recommended investigation
+
+* Determine whether `onCommitRow` and `onRpeSelected` can interleave such that the
+  commit is lost. If they can, that is the bug, and the flake is a symptom.
+* If the ordering is genuinely safe, replace `runBlocking` with a deterministic
+  test dispatcher so the class does not depend on wall-clock timing at all.
+* Resist raising the 5000 ms timeout. That hides the symptom and would leave a
+  real race in place.
+
+This was deliberately **not** fixed inside the ADR-0017 Stage 1 change: workout
+logging is the core of the app, and a speculative concurrency fix does not belong
+in a pull request about the restore path.
+
+---
+
 ## TD-001 — HTTP method-not-supported returns 500 instead of 405
 
 Status: Open — deferred

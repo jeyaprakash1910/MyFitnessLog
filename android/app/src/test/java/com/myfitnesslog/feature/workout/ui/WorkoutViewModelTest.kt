@@ -537,6 +537,14 @@ class WorkoutViewModelTest {
 
         vm.onRpeSelected(ex.id, plannedKey, BigDecimal("8"))
 
+        // Wait for the timer to start rather than reading it immediately.
+        // Committing a row and selecting an RPE both dispatch onto the ViewModel's
+        // scope, so asserting on the next line is a race: it passes only when that
+        // work happens to finish first. It usually did, which is what made this
+        // flaky rather than broken. awaitFirst fails on its own timeout if the
+        // timer genuinely never starts, so the assertion still has teeth.
+        vm.restTimer.awaitFirst { it is com.myfitnesslog.feature.workout.domain.RestTimerState.Running }
+
         assertTrue(vm.restTimer.value is com.myfitnesslog.feature.workout.domain.RestTimerState.Running)
     }
 

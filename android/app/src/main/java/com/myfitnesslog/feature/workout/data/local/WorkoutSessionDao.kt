@@ -30,6 +30,10 @@ interface WorkoutSessionDao {
     @Query("SELECT * FROM workout_session WHERE id = :id")
     suspend fun getById(id: UUID): WorkoutSessionEntity?
 
+    /** How many workout sessions exist locally, in any status. */
+    @Query("SELECT COUNT(*) FROM workout_session")
+    suspend fun count(): Int
+
     @Upsert
     suspend fun upsert(session: WorkoutSessionEntity)
 

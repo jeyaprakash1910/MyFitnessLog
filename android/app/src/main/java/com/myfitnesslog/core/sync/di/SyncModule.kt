@@ -7,6 +7,8 @@ import com.myfitnesslog.core.sync.engine.SyncEngine
 import com.myfitnesslog.core.sync.engine.SyncEngineImpl
 import com.myfitnesslog.core.sync.engine.SyncRecovery
 import com.myfitnesslog.core.sync.engine.SyncRecoveryImpl
+import com.myfitnesslog.core.sync.restore.RestoreManager
+import com.myfitnesslog.core.sync.restore.RestoreManagerImpl
 import com.myfitnesslog.core.sync.source.RoutineExerciseSyncSource
 import com.myfitnesslog.core.sync.source.RoutineSyncSource
 import com.myfitnesslog.core.sync.source.WorkoutExerciseSyncSource
@@ -47,6 +49,14 @@ abstract class SyncModule {
     @Binds
     @Singleton
     abstract fun bindSyncManager(impl: SyncManagerImpl): SyncManager
+
+    /**
+     * The download half of synchronisation (ADR-0017). Singleton so a restore
+     * cannot be started twice concurrently by two callers.
+     */
+    @Binds
+    @Singleton
+    abstract fun bindRestoreManager(impl: RestoreManagerImpl): RestoreManager
 
     /**
      * The data layer's narrow view of the same singleton: repositories can ask

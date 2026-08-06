@@ -41,6 +41,17 @@ interface RoutineDao {
     @Query("SELECT * FROM routine WHERE id = :id")
     suspend fun getById(id: UUID): RoutineEntity?
 
+    /**
+     * How many routines exist locally, including soft-deleted ones.
+     *
+     * Soft-deleted rows count deliberately: restore only runs against a genuinely
+     * empty database, and a device that has deleted all its routines has still
+     * made decisions the backend does not know about yet. Treating it as empty
+     * could resurrect what the user removed.
+     */
+    @Query("SELECT COUNT(*) FROM routine")
+    suspend fun count(): Int
+
     @Upsert
     suspend fun upsert(routine: RoutineEntity)
 

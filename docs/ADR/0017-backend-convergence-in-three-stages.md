@@ -1,8 +1,8 @@
 # ADR-0017 - The backend becomes readable, in three stages
 
 Date: 2026-08-07
-Status: Accepted as direction. Stage 1 not yet implemented; Stages 2 and 3 are
-committed in shape but not in detail.
+Status: Accepted. Stage 1 implemented 2026-08-07; Stages 2 and 3 are committed in
+shape but not in detail.
 Related: ADR-0001 (history is the source of truth), ADR-0002 (Room is the Android
 source of truth), ADR-0003 (backend is the system source of truth), ADR-0004
 (snapshot-based workout history), ADR-0007 (deletion tombstones), docs/SYNC.md,
@@ -88,6 +88,17 @@ conflict to resolve, and not before.
 **Stage 1 - Restore.** Hydrate Room from the backend **only when the local
 database is empty**.
 
+> **Correction, 2026-08-07 (during implementation).** This ADR originally claimed
+> Stage 1 "requires no backend changes at all". That was wrong. It held for
+> workout history, where `GET /workout-sessions/{id}` already nests exercises and
+> sets, and was false for routines: `RoutineExerciseController` had no read
+> endpoint of any kind, and `GET /routines/{id}` returned only name, description
+> and display order. A routine's exercises could be created, updated, reordered
+> and deleted, but never read, so a routine could be written to the backend and
+> never reconstructed from it. Stage 1 therefore adds `RoutineDetailResponse` to
+> the by-id endpoint, mirroring the workout detail shape. The claim was made from
+> the API summary table without checking the controller.
+
 The empty-database precondition is the entire point, not a simplification to be
 apologised for. With nothing local to disagree with, there is no merge, no
 tombstone reconciliation, and no last-write-wins rule to get subtly wrong. It is
@@ -165,8 +176,9 @@ Positive:
 - The "never uninstall" warnings in CODING_STANDARDS §20c, the release checklist,
   and the README become advisory rather than load-bearing.
 - ADR-0003 becomes true in practice, not only by declaration.
-- Stage 1 requires **no backend changes at all**. Every endpoint it needs is
-  already built, tested, and in production use by the web client.
+- Stage 1 needs only one small backend addition (routine exercises on read; see
+  the correction above). Everything else it requires was already built, tested and
+  in production use by the web client.
 - A writing web client becomes possible, because "who wins" will have an answer.
 
 Negative / accepted:
@@ -186,3 +198,9 @@ Negative / accepted:
 - **More surface to test.** Download mappers are a second, independent translation
   between DTOs and entities, and they can drift from the upload mappers. They need
   their own tests rather than an assumption of symmetry.
+- **No read endpoint exposes `updatedAt`.** Every entity stores it (ADR-0006) and
+  no response returns it, so restored rows are stamped with the restore instant
+  instead. Harmless at Stage 1, where nothing compares timestamps, but Stage 3's
+  last-write-wins cannot be built until the backend starts sending it. Discovered
+  while implementing Stage 1 and recorded here so it is a known prerequisite
+  rather than a late surprise.

@@ -20,6 +20,15 @@ public interface RoutineExerciseService {
      * it if new, or updates the existing row's mutable fields. Validates the parent
      * routine (active) and the referenced master exercise.
      */
+    /**
+     * A routine's exercises, in performance order.
+     *
+     * <p>Added for the read path (ADR-0017): a client restoring its local copy has
+     * to be able to reconstruct what a routine contains, which nothing previously
+     * exposed.
+     */
+    List<RoutineExercise> getExercises(UUID routineId);
+
     RoutineExerciseSaveResult addExercise(UUID routineId, AddRoutineExerciseRequest request);
 
     /** Updates a routine exercise's mutable fields; throws if it does not exist. */
