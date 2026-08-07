@@ -5,17 +5,24 @@
 Runs the backend test suite in a disposable git worktree.
 
 ```bash
-./scripts/run-tests.sh                    # whole suite (110 tests)
+./scripts/run-tests.sh                    # whole suite (137 tests)
 ./scripts/run-tests.sh -Dtest=FooTest     # extra args are passed to Maven
 ```
 
-**Use this instead of `mvn test`.** The suite fails in the working copy and passes
-everywhere else, for reasons that are unknown; the script sidesteps it by running
-at HEAD in a throwaway worktree, then cleaning up. See TD-016 in
-`docs/TECH_DEBT.md` for what has been ruled out.
+**Prefer plain `mvn test`.** This script worked around TD-016, which was resolved
+on 2026-08-07: VS Code's Java language server was overwriting Maven's
+`target/classes`, and `"java.autobuild.enabled": false` fixed it. The script is
+kept only as a short-term fallback and should be deleted once the direct path has
+been trusted for a while. See TD-016 in `docs/TECH_DEBT.md`.
 
-Because a worktree checks out committed content, **uncommitted changes are not
-tested**. The script warns when it detects any.
+It is also the weaker option day to day, because a worktree checks out committed
+content, so **uncommitted changes are not tested**. The script warns when it
+detects any.
+
+The one thing it still does for you is default the connection to port **5433**.
+Plain `mvn test` uses the 5432 default from `src/test/resources/application.yml`,
+so on this machine export `TEST_DB_URL`, `TEST_DB_USERNAME` and `TEST_DB_PASSWORD`
+first (see the backend section of the root README).
 
 Requires JDK 21 (found automatically via `java_home` if needed) and a PostgreSQL
 holding `myfitnesslog_test`. Override the connection with `TEST_DB_URL`,

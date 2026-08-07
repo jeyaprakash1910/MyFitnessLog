@@ -2,27 +2,31 @@
 #
 # Runs the backend test suite in a disposable git worktree.
 #
-# WHY THIS EXISTS
+# THIS IS NO LONGER REQUIRED
 #
-# The suite fails in the working copy and passes everywhere else. Same commit,
-# byte-identical files (`diff -r` reports no difference), same JDK, same
-# classpath, same database: 110 tests pass in a fresh clone, in a git worktree,
-# and in a plain `cp -R` of the working copy to another path, and ~77 fail in the
-# working copy itself. Every context load fails the same way, with Spring unable
-# to find a mapper bean whose @Component class is present, compiled, and logged by
-# the scanner as an identified candidate.
+# It existed to work around TD-016: the suite failed in the working copy and
+# passed in a fresh clone, a worktree or a `cp -R`. That was resolved on
+# 2026-08-07. `mvn test` in backend/ now works directly, and is the shorter loop
+# because it also covers uncommitted changes.
 #
-# Ruled out by measurement, not assumption: the application code, the test code,
-# JetBrains vs Temurin JDK 21, JDK 26, stale target/ (manual rm -rf, not just
-# `mvn clean`), .DS_Store files, file permissions and ACLs, duplicate classes on
-# the classpath, class-file contents, test ordering, Android Studio and its
-# fsnotifier, Claude Code hooks, file-activated Maven profiles, the effective POM,
-# and Surefire's forked JVM command line. The last three are byte-identical
-# between a passing and a failing run.
+# The cause was VS Code's Red Hat Java extension. It imports backend/ as an
+# Eclipse project whose generated classpath declares
+# target/generated-sources/annotations as a source folder with no output of its
+# own, so it fell back to the project default, target/classes. With autobuild on,
+# the language server recompiled MapStruct's generated mappers into Maven's output
+# about a second after every build, and Eclipse's compiler emits class files even
+# when references do not resolve. The overwritten ExerciseCategoryMapperImpl lost
+# its `implements ExerciseCategoryMapper` clause, so Spring registered the bean but
+# could not match it to the interface. The fix is `"java.autobuild.enabled": false`
+# in .vscode/settings.json.
 #
-# The cause is unknown. Rather than leave the backend suite unrunnable, this
-# script makes the workaround a single command. It is containment, not a fix; see
-# TD-016 in docs/TECH_DEBT.md.
+# An earlier version of this header listed "class-file contents" as ruled out by
+# measurement. That was wrong, and it was exactly where the answer was. One `cmp`
+# between a passing and a failing build would have found it.
+#
+# This script is kept for now purely as a fallback, since the failure was
+# intermittent enough to mislead several investigations. Delete it once the direct
+# `mvn test` path has been trusted for a while. See TD-016 in docs/TECH_DEBT.md.
 #
 # WHAT IT DOES
 #

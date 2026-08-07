@@ -16,9 +16,15 @@ import org.junit.runner.RunWith
  * Guards the database migration policy.
  *
  * The app no longer falls back to a destructive upgrade, so a schema change
- * without a matching migration will throw on a user's device. **This repository
- * has no CI**, which makes this test the only thing that catches such a change
- * before it ships. It must fail loudly rather than skip.
+ * without a matching migration will throw on a user's device. This is the only
+ * thing that catches such a change before it ships, so it must fail loudly
+ * rather than skip.
+ *
+ * It runs on every push, in the `android-instrumented` job in
+ * `.github/workflows/ci.yml`, on an emulator. That job exists because of this
+ * test: for a while it lived here and nothing ever executed it, and on
+ * 2026-08-07 a migration with a wrong column type reached main and had to be
+ * caught by hand.
  *
  * When the schema changes:
  *  1. bump the version and let Room export the new JSON into `app/schemas/`,

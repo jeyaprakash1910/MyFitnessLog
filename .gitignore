@@ -5,8 +5,11 @@
 .idea/
 *.iml
 
-# VS Code
-.vscode/
+# VS Code. Personal settings stay local, but settings.json ships: it carries the
+# TD-016 fix (java.autobuild.enabled), without which the backend test suite fails
+# in the working copy for anyone using the Red Hat Java extension.
+.vscode/*
+!.vscode/settings.json
 
 # Environment
 .env

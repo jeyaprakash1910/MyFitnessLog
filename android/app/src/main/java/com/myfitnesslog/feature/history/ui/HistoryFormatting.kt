@@ -17,12 +17,20 @@ import java.util.UUID
  * the ViewModel so Compose never formats values itself.
  */
 
-private val dateFormatter: DateTimeFormatter =
+/**
+ * Resolved per call rather than held in a `val`.
+ *
+ * A top-level `val` captures [Locale.getDefault] once, when the class is first
+ * loaded. Android does not restart the process when the user changes their
+ * language, so a cached formatter keeps rendering dates in the previous locale
+ * until the app is killed.
+ */
+private fun dateFormatter(): DateTimeFormatter =
     DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(Locale.getDefault())
 
 /** Formats a workout's start instant as a medium local date, e.g. "21 Jul 2026". */
 fun formatWorkoutDate(startedAt: Instant, zone: ZoneId = ZoneId.systemDefault()): String =
-    dateFormatter.format(startedAt.atZone(zone))
+    dateFormatter().format(startedAt.atZone(zone))
 
 /**
  * Formats the duration of a completed workout from its persisted timestamps.

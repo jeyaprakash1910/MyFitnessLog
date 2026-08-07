@@ -1,0 +1,26 @@
+{
+    "java.configuration.updateBuildConfiguration": "disabled",
+
+    // TD-016. The Red Hat Java extension imports backend/ as an Eclipse
+    // project and, in the classpath it generates, target/generated-sources/
+    // annotations is a source folder with no output of its own, so it falls
+    // back to the project default: target/classes. With autobuild on, the
+    // language server recompiles MapStruct's generated *MapperImpl.java about
+    // a second after every Maven build and overwrites Maven's output with its
+    // own. Eclipse's compiler emits class files even when references do not
+    // resolve, so the overwritten ExerciseCategoryMapperImpl lost its
+    // "implements ExerciseCategoryMapper" clause and its types were left
+    // unqualified. Spring then registered the bean but could not match it to
+    // the interface, every @SpringBootTest context failed on a missing mapper,
+    // and ~77 of the 110 backend tests errored.
+    //
+    // That is why the suite passed in a fresh clone, a worktree or a cp -R and
+    // failed here: those copies are not in this VS Code workspace, so the
+    // language server never touched them. It also explains the symlink result,
+    // since a symlink reaches the same directory the server is building.
+    //
+    // Turning autobuild off stops the language server writing class files at
+    // all. Code navigation, completion and live diagnostics still work; they
+    // come from its own index, not from target/classes.
+    "java.autobuild.enabled": false
+}

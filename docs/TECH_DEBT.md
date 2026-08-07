@@ -2,7 +2,7 @@
 
 Project: MyFitnessLog
 Version: 1.5
-Last Updated: August 7, 2026 (TD-014 resolved for ADR-0017 Stage 2; TD-015 opened and parked)
+Last Updated: August 7, 2026 (TD-001 and TD-016 resolved; TD-014 resolved for ADR-0017 Stage 2; TD-015 opened and parked)
 
 This document records known, accepted technical debt: deliberate limitations that are not defects in the current milestone but must be addressed in a later milestone. Each item states the observation, why it is currently acceptable, the recommended future implementation, the documentation that must change first, and when it is scheduled.
 
@@ -21,7 +21,7 @@ This register holds debt that outlives a single task. Short-lived working items 
 
 | ID | Item | Status | Blocks |
 |---|---|---|---|
-| TD-001 | 405 returned as 500 | Open — deferred | — |
+| TD-001 | Framework exceptions returned 500 (404/405/400/415) | ✅ Resolved 2026-08-07 | - |
 | TD-002 | Category filtering in service, not repository | Open — note only | — |
 | TD-003 | History endpoint scans the whole table | ✅ Resolved 2026-07-22 | — |
 | TD-004 | WorkoutSet deletions never reach the backend | ✅ Resolved 2026-07-22 (ADR-0007) | — |
@@ -36,89 +36,102 @@ This register holds debt that outlives a single task. Short-lived working items 
 | TD-013 | Live sync tests write into the production database | ✅ Resolved 2026-07-22 (M12 Phase 3) | — |
 | TD-014 | WorkoutExercise removal during a workout is not propagated to the backend | ✅ Resolved 2026-08-07 (ADR-0017 Stage 2) | - |
 | TD-015 | ViewModel test classes are intermittently flaky (~1 run in 4) | **Open - parked deliberately** | ADR-0017 Stage 3 should fix it first |
-| TD-016 | Backend suite fails in the working copy, passes elsewhere | **Open - contained** via `backend/scripts/run-tests.sh` | - |
+| TD-016 | Backend suite failed in the working copy, passed elsewhere | ✅ Resolved 2026-08-07 (VS Code Java autobuild overwrote Maven's output) | - |
 
 ---
 
-## TD-016 - The backend test suite fails in the working copy and passes elsewhere
+## TD-016 - The backend test suite failed in the working copy and passed elsewhere
 
-Status: **Open - contained, cause unknown.** A workaround script exists and is the
-supported way to run the suite; the underlying cause was investigated at length
-and not found.
+Status: **Resolved 2026-08-07.** Cause found and fixed. The backend suite now runs
+normally with `mvn test` in `backend/`; no clone, worktree or script is required.
 
 Milestone identified: ADR-0016 (2026-08-06)
-Scheduled for: unscheduled. Reopen if the workaround ever stops working, or if the
-same symptom appears in another project on this machine.
+Resolved: 2026-08-07
 
-### Observation
+### What was happening
 
-Running `mvn test` in `backend/` fails with ~77 errors. Running the identical
-commit anywhere else passes all 110.
+Running `mvn test` in `backend/` failed with ~77 errors, always the same way: the
+Spring context could not start because a MapStruct mapper bean was missing. The
+identical commit passed all 110 tests in a fresh clone, a worktree, or a `cp -R`
+to another path.
 
-| Location | Result |
+The cause was **VS Code's Red Hat Java extension**. It imports `backend/` as an
+Eclipse project, and in the classpath it generates,
+`target/generated-sources/annotations` is declared as a source folder with no
+output directory of its own:
+
+```xml
+<classpathentry kind="src" path="target/generated-sources/annotations">
+<classpathentry kind="output" path="target/classes"/>
+```
+
+With no `output` attribute the entry falls back to the project default, which is
+`target/classes` - the directory Maven has just written. MapStruct's generated
+`*MapperImpl.java` files live in that source folder, so with autobuild on the
+language server recompiled them into Maven's output roughly one second after
+every build.
+
+Eclipse's compiler emits class files even when references fail to resolve. The
+overwritten `ExerciseCategoryMapperImpl` therefore lost its
+`implements ExerciseCategoryMapper` clause and had its parameter types left
+unqualified. Spring still registered the bean, but could not match it to the
+interface the controller asked for, so every `@SpringBootTest` context failed on
+a missing mapper.
+
+### Why the earlier evidence was so confusing
+
+Every previous observation is explained by this, including the two that looked
+contradictory:
+
+| Observation | Explanation |
 |---|---|
-| `MyFitnessLog/backend` (the working copy) | ~77 errors, reproducible |
-| A fresh `git clone` | 110 pass |
-| A `git worktree` at the same commit | 110 pass |
-| A plain `cp -R` of the working copy to another path | 110 pass |
-| The working copy reached through a symlink | ~77 errors |
+| A fresh clone, worktree or `cp -R` passed | None of them is in the VS Code workspace, so the language server never touched them |
+| The working copy reached through a symlink failed | A symlink reaches the same real directory the server is building into |
+| `diff -r` found no difference in sources | It was the compiled output that differed, not the sources |
+| One test class sometimes passed on its own | The corruption landed a second after the build, so a short run could beat it |
 
-Every failure is the same: the Spring context cannot start because a MapStruct
-mapper bean is missing. The class is present, compiled, annotated `@Component`,
-and the scanner logs it as an identified candidate component. It is then not
-available for injection, with no class-loading failure logged.
+The path was never the variable. Whether an editor was watching was.
 
-The symlink row is the informative one. The path does not matter; the actual
-directory does.
+### The fix
 
-### Ruled out by measurement
+One setting in `.vscode/settings.json`, committed with a comment explaining why:
 
-Application code, test code, JetBrains JBR vs Temurin JDK 21, JDK 26, stale
-`target/` (manual `rm -rf`, not just `mvn clean`), `.DS_Store` files, file
-permissions and ACLs, duplicate classes on the classpath, class-file contents,
-test ordering, Android Studio and its `fsnotifier`, Claude Code hooks,
-file-activated Maven profiles, the effective POM, and Surefire's forked JVM
-command line. The last three are byte-identical between a passing and a failing
-run, as is `diff -r` across the whole directory.
+```json
+"java.autobuild.enabled": false
+```
 
-Replacing every source file in the working copy with byte-identical copies from a
-fresh clone did **not** fix it.
+The language server stops writing class files entirely. Navigation, completion and
+live error markers keep working, because those come from its own index rather than
+from `target/classes`.
 
-### Why it is contained rather than fixed
+### How it was verified
 
-The investigation exhausted every hypothesis available and produced a
-contradiction it could not resolve: identical bytes, identical configuration,
-different behaviour, determined by the directory itself. Continuing was open-ended
-with no expectation of a result.
+1. Hashing the mapper class once a second after a build: previously rewritten at
+   t+2s (2270 bytes becoming 2529), now stable.
+2. `javap` on the compiled class: `implements com.myfitnesslog.mapper.ExerciseCategoryMapper`
+   present again, types fully qualified.
+3. `mvn -B clean test` in the working copy: **110 passed, 0 failures, 0 errors.**
+   Repeated after unrelated cleanup, still 110.
 
-`backend/scripts/run-tests.sh` makes the workaround one command: it runs the suite
-at HEAD in a disposable worktree, which is a configuration known to pass, and
-cleans up afterwards. That restores a runnable backend suite, which is what
-actually mattered.
+### What this corrects in the earlier write-up
 
-**Production is unaffected.** Render builds from a fresh clone, which is the
-passing configuration.
+The previous version of this entry, and the header of
+`backend/scripts/run-tests.sh`, both listed **class-file contents** as ruled out by
+measurement. That was wrong, and it was the one place the answer was sitting. A
+single `cmp` between a passing and a failing build would have ended the
+investigation immediately. The lesson worth keeping: "ruled out" is only worth
+recording when the check was actually run, and re-running a cheap check beats
+trusting a previous conclusion.
 
-**CI is unaffected too**, for the same reason: a GitHub runner checks out a fresh
-clone, so the backend suite runs there normally. It was added to the workflow on
-2026-08-07 and passes. This bug therefore costs a developer a slower local loop
-and costs the project nothing in automated coverage.
+`.DS_Store` files were also once suspected, cleared, then doubted again. They are
+now ruled out properly, against a deterministic reproducer.
 
-### Cost of the containment
+### Follow-up
 
-* The script tests **HEAD**, so uncommitted changes are not covered. It warns when
-  it sees any, but the shortest loop for backend work is now commit-then-test
-  rather than edit-then-test.
-* Each run pays a `clean` build in a fresh worktree, so it is slower than a warm
-  incremental `mvn test` would be.
-
-### If someone picks this up
-
-The one experiment not run was moving the working copy aside and cloning into the
-exact same absolute path. That would separate "something about this checkout" from
-"something about this directory on this filesystem", which is the last distinction
-the evidence leaves open. It requires relocating the working copy, which is why it
-was not attempted unprompted.
+`backend/scripts/run-tests.sh` still works and is harmless, but is no longer
+required. It is being kept briefly as a fallback because the failure was
+intermittent enough to mislead several investigations; delete it once the direct
+`mvn test` path has been trusted for a while.
 
 ---
 
@@ -168,6 +181,22 @@ This matters more than the fix, because it is what stops the flake doing damage.
 
 **Anything else is a real failure.** In particular a genuine assertion failure
 ("expected X but was Y") is never this bug. Do not re-run and move on.
+
+#### Rate measured on 2026-08-07
+
+Eight full local runs while verifying unrelated work, **two of which failed**,
+which is the one-in-four this entry claims. Both matched the criteria above, and
+between them they showed both signatures:
+
+| Failing test | Signature |
+|---|---|
+| `WorkoutViewModelTest.startingFromRoutineShowsSnapshottedExercises` and `.discardWorkoutEmitsEvent` | `Dispatchers.Main is used concurrently with setting it`, thrown from `resetMain()` in `tearDown` |
+| `WorkoutViewModelTest.completingViaRpeStartsTheRestTimer` | `TimeoutCancellationException` after 5000 ms waiting on a `StateFlow` |
+
+Useful mainly as a baseline: any future attempt needs more than three green runs
+to claim an improvement, because three green runs happen by chance roughly two
+times in five at this rate. The earlier attempt that appeared to work and was
+later found to be worse failed exactly this way.
 
 ### Root cause
 
@@ -303,67 +332,59 @@ and it is also what makes this fix worth doing.
 
 ---
 
-## TD-001 — HTTP method-not-supported returns 500 instead of 405
+## TD-001 - Framework exceptions returned 500 instead of their proper status
 
-Status: Open — deferred
+Status: **Resolved 2026-08-07.**
 
 Milestone identified: Backend Foundation (Milestone 1)
-Scheduled for: Exercise Library (Milestone 3, first real CRUD endpoints)
+Resolved: 2026-08-07
 
-### Observation
+### What was wrong
 
-During Milestone 1 runtime verification, sending an unsupported HTTP method to a mapped endpoint (`POST /api/v1/health`, which is GET-only) returned:
+The generic `@ExceptionHandler(Exception.class)` in `GlobalExceptionHandler`
+caught exceptions Spring MVC raises before a controller is reached and mapped all
+of them to **500 Internal Server Error**, logged at ERROR as "An unexpected error
+occurred."
 
-* HTTP status: 500 Internal Server Error
-* Body: the documented error envelope with message "An unexpected error occurred."
+That is wrong twice over. The caller is told the server broke when their request
+was malformed, and ordinary client mistakes appear in monitoring as backend
+faults, which is the noise that hides a real incident.
 
-The generic `@ExceptionHandler(Exception.class)` in GlobalExceptionHandler catches Spring MVC's `HttpRequestMethodNotSupportedException` and maps it to 500.
+### What it cost
 
-### Observed again in production, 6 Aug 2026
+Two measured incidents, not a theoretical concern:
 
-While bringing up in-app updates (ADR-0016), a request to
-`GET /api/v1/app/latest-version` issued *during* a Render deploy hit the previous
-container, where that route did not yet exist. Spring raised
-`NoResourceFoundException` and the generic handler turned it into:
+* **6 Aug 2026.** A request to `GET /api/v1/app/latest-version` during a Render
+  deploy reached the previous container, where the route did not yet exist.
+  Spring raised `NoResourceFoundException` and the handler returned 500. The
+  deploy was investigated as a code defect until the timestamps showed the old
+  container had served it. A 404 would have pointed at the deploy window
+  immediately.
+* **7 Aug 2026.** The first test ever written for `GET /api/v1/exercises/{id}`
+  sent a malformed UUID and got a 500. That is how this was picked up again.
 
-* HTTP status: 500 Internal Server Error
-* Body: "An unexpected error occurred."
+### The fix
 
-The correct answer was **404**. This cost real debugging time: a 500 reads as "the
-new code is broken", so the deploy was investigated as a code defect before the
-timestamps showed the old container had served it. A 404 would have said "this
-route does not exist here" and pointed straight at the deploy window.
+Explicit handlers for the framework exceptions, each returning the status the
+HTTP spec calls for:
 
-This upgrades TD-001 from a theoretical concern about masked framework
-exceptions to one with a measured cost, and widens it beyond 405: the
-no-handler 404 case is the one that actually bit.
+| Exception | Was | Now |
+|---|---|---|
+| `NoResourceFoundException` (unmapped path) | 500 | **404**, logged at WARN |
+| `HttpRequestMethodNotSupportedException` | 500 | **405**, with an `Allow` header |
+| `MethodArgumentTypeMismatchException` (bad UUID) | 500 | **400** |
+| `HttpMediaTypeNotSupportedException` | 500 | **415** |
+| `MissingServletRequestParameterException` | 500 | **400** |
 
-### Why this is currently acceptable (not a Milestone 1 defect)
+The catch-all remains for genuinely unexpected exceptions, which is what it was
+always for.
 
-* API_SPECIFICATION.md does not currently define HTTP 405 handling.
-* Milestone 1 was scoped to only the approved exception handlers:
-  * MethodArgumentNotValidException
-  * HttpMessageNotReadableException
-  * IllegalArgumentException
-  * Generic Exception
-* No functional CRUD endpoints exist yet, so the condition is not reachable in normal Milestone 1 usage.
+### Covered by
 
-### Impact
+`FrameworkErrorContractTest`, nine tests. It asserts the status, the error
+envelope and the `Allow` header, and includes a case pinning the exercise search
+parameter as optional so the missing-parameter handler cannot start rejecting it.
 
-* A client error (wrong method) is reported as a server error (5xx), which is semantically misleading for clients and monitoring.
-* The same masking applies to other framework-raised MVC conditions (for example 404 no-handler, 415 unsupported media type, 406 not acceptable), which would also surface as 500.
-
-### Recommended future implementation
-
-* Make GlobalExceptionHandler extend Spring's `ResponseEntityExceptionHandler` so framework MVC exceptions receive their correct HTTP status.
-* Override the relevant handler(s) so these responses still use the documented error envelope (timestamp, status, error, message, path).
-* Ensure `HttpRequestMethodNotSupportedException` returns 405, while the generic `Exception` handler continues to return 500 only for genuinely unexpected failures.
-
-### Documentation that must change first (documentation is the source of truth)
-
-* API_SPECIFICATION.md — Section 10 (HTTP Status Codes): add 405 Method Not Allowed (and clarify handling of other framework 4xx conditions) and confirm they return the standard error envelope.
-
-Implementation must not begin until the documentation above is updated and approved.
 
 ---
 

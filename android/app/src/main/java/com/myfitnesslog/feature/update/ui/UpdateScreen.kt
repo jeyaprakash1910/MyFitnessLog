@@ -43,6 +43,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.myfitnesslog.core.ui.theme.MyFitnessLogTheme
 import com.myfitnesslog.feature.update.domain.DownloadStatus
 import com.myfitnesslog.feature.update.domain.UpdateStatus
+import java.util.Locale
 
 /** Test tags used by Compose UI tests to locate elements. */
 object UpdateTestTags {
@@ -338,8 +339,12 @@ private fun IconBadge(icon: ImageVector, tint: Color) {
  */
 private fun formatSize(bytes: Long): String {
     val megabytes = bytes / 1_048_576.0
+    // Locale.getDefault() explicitly: this is shown to the user, so the decimal
+    // separator should be theirs. Saying so also stops String.format picking up
+    // whatever the JVM default happens to be, which is the actual bug lint's
+    // DefaultLocale warns about.
     return if (megabytes >= 10) "${megabytes.toInt()} MB"
-    else String.format("%.1f MB", megabytes)
+    else String.format(Locale.getDefault(), "%.1f MB", megabytes)
 }
 
 @Preview
