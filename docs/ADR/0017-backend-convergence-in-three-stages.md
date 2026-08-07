@@ -107,6 +107,20 @@ the whole of the read path (endpoints, DTOs, download mappers, entity writes at
 cheapest possible way to prove that half of the system works. It also closes the
 failure that has actually cost data: a lost, reset, or reinstalled phone.
 
+> **Second correction, 2026-08-07 (device verification).** Stage 1 was verified on
+> the physical OnePlus and initially appeared to restore nothing: the phone came
+> back with its old single routine and no history, while the backend held two
+> routines and two completed workouts. The cause was **Android Auto Backup**,
+> which silently reinstates the app's previous database at install time. The
+> database was therefore non-empty before the app ran a line of code, and restore
+> correctly declined. Auto Backup and this feature were two mechanisms racing to
+> restore the same rows, and the losing one was the authoritative one. The Room
+> database is now excluded from both cloud backup and device transfer
+> (`backup_rules.xml`, `data_extraction_rules.xml`), leaving the backend as the
+> single restore path. Excluding device transfer matters most: that is the
+> phone-to-phone copy people run when buying a new handset, which is the exact
+> scenario this feature exists for.
+
 **Stage 2 - Refresh.** Pull periodically, not only when empty.
 
 The rule: **the backend wins for any row with no pending local change**. Rows the

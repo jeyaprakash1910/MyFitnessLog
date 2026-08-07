@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Android Auto Backup rules for API 26-30 (see data_extraction_rules.xml for 31+).
+
+    The Room database is excluded so the backend remains the only thing that
+    restores workout data (ADR-0017).
+
+    This is not a size or privacy precaution. Auto Backup silently reinstates the
+    app's previous database when the app is installed, which made the database
+    non-empty before the app had run a line of code, so restore correctly decided
+    there was nothing to do and declined. The result was a device showing its old
+    local state while the backend held strictly more: verified on the physical
+    OnePlus on 2026-08-07, where the phone came back with one routine and no
+    history while the backend had two routines and two completed workouts.
+
+    Two mechanisms racing to restore the same rows is worse than either alone, and
+    the backend is the one that is authoritative, nightly-backed-up, and shared
+    across devices. Auto Backup's copy is a silent, stale, single-device snapshot
+    whose rows are already marked SYNCED, so nothing would ever reconcile them.
+
+    Everything else still backs up, including the settings DataStore.
+-->
+<full-backup-content>
+    <exclude domain="database" path="myfitnesslog.db" />
+    <exclude domain="database" path="myfitnesslog.db-wal" />
+    <exclude domain="database" path="myfitnesslog.db-shm" />
+</full-backup-content>

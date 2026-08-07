@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Backup and device-transfer rules for API 31+ (see backup_rules.xml for 26-30).
+
+    The Room database is excluded from both paths, for the reasons in
+    backup_rules.xml: Auto Backup reinstating a stale local database silently
+    pre-empts the authoritative restore from the backend (ADR-0017).
+
+    device-transfer matters as much as cloud-backup here, arguably more. It is the
+    phone-to-phone copy people run when they buy a new handset, which is precisely
+    the scenario restore exists to serve. Excluding only the cloud path would have
+    left the exact case this feature was built for still broken.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="database" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="database" />
+    </device-transfer>
+</data-extraction-rules>

@@ -342,7 +342,7 @@ class RestoreManagerImplTest {
  * something it should not. Throwing makes that a loud test failure rather than a
  * silent no-op that a reviewer has to notice.
  */
-private class ThrowingRoutineApi : RoutineApi {
+internal class ThrowingRoutineApi : RoutineApi {
     private fun no(): Nothing = throw UnsupportedOperationException("restore must not write")
     override suspend fun getRoutines(): List<RoutineResponseDto> = no()
     override suspend fun getRoutine(id: String): RoutineDetailResponseDto = no()
@@ -354,7 +354,7 @@ private class ThrowingRoutineApi : RoutineApi {
     override suspend fun deleteRoutineExercise(id: String) = no()
 }
 
-private class ThrowingSessionApi : WorkoutSessionApi {
+internal class ThrowingSessionApi : WorkoutSessionApi {
     private fun no(): Nothing = throw UnsupportedOperationException("restore must not write")
     override suspend fun getWorkoutSessions(): List<WorkoutSessionResponseDto> = no()
     override suspend fun getWorkoutSession(id: String): WorkoutSessionDetailResponseDto = no()
