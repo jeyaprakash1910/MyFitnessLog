@@ -19,6 +19,11 @@ It is also the weaker option day to day, because a worktree checks out committed
 content, so **uncommitted changes are not tested**. The script warns when it
 detects any.
 
+The one thing it still does for you is default the connection to port **5433**.
+Plain `mvn test` uses the 5432 default from `src/test/resources/application.yml`,
+so on this machine export `TEST_DB_URL`, `TEST_DB_USERNAME` and `TEST_DB_PASSWORD`
+first (see the backend section of the root README).
+
 Requires JDK 21 (found automatically via `java_home` if needed) and a PostgreSQL
 holding `myfitnesslog_test`. Override the connection with `TEST_DB_URL`,
 `TEST_DB_USERNAME` and `TEST_DB_PASSWORD`; it defaults to port **5433**.

@@ -148,6 +148,19 @@ CHECK constraints), configured through the `TEST_DB_*` env overrides in
 `src/test/resources/application.yml`. CI uses the same overrides against a
 Postgres 17 service container, matching the Supabase major version in production.
 
+**If your PostgreSQL is not on 5432**, export the connection first, or `mvn test`
+fails with `Connection to localhost:5432 refused`. On the current development
+machine Homebrew's `postgresql@17` listens on **5433**, because the server on 5432
+is an orphaned 16.x whose binaries an upgrade removed:
+
+```bash
+export TEST_DB_URL=jdbc:postgresql://localhost:5433/myfitnesslog_test
+export TEST_DB_USERNAME=myfitnesslog
+export TEST_DB_PASSWORD=myfitnesslog
+```
+
+The default stays 5432 because that is correct for CI and for a standard install.
+
 All three suites run automatically on every push and pull request
 (`.github/workflows/ci.yml`).
 
