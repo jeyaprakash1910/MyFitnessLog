@@ -7,6 +7,8 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.myfitnesslog.core.sync.engine.SyncEngine
 import com.myfitnesslog.core.sync.engine.SyncRecovery
+import com.myfitnesslog.core.sync.restore.RefreshManager
+import com.myfitnesslog.core.sync.restore.RefreshOutcome
 import com.myfitnesslog.core.sync.model.SyncResult
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
@@ -25,6 +27,7 @@ class SyncWorker @AssistedInject constructor(
     @Assisted params: WorkerParameters,
     private val syncEngine: SyncEngine,
     private val syncRecovery: SyncRecovery,
+    private val refreshManager: RefreshManager,
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result {
@@ -37,6 +40,19 @@ class SyncWorker @AssistedInject constructor(
 
         val result = syncEngine.sync()
         Log.i(TAG, "Sync finished: ${result::class.simpleName} ${result.summary}")
+
+        // Pull after pushing, never before (ADR-0017 Stage 2). Refresh defers
+        // while anything is still queued, so running it here, once the pass has
+        // drained what it can, is the only point where the backend's answer is
+        // worth having. Its result deliberately does not affect the Worker's:
+        // a failed refresh means the local copy is briefly stale, which is the
+        // app's ordinary offline state and not a reason to burn a retry.
+        when (val refresh = refreshManager.refresh()) {
+            is RefreshOutcome.Applied ->
+                if (refresh.changedAnything) Log.i(TAG, "Refresh applied: $refresh")
+            is RefreshOutcome.Failed -> Log.i(TAG, "Refresh skipped: ${refresh.reason}")
+            RefreshOutcome.Deferred -> Log.i(TAG, "Refresh deferred: uploads still pending.")
+        }
 
         return when (result) {
             is SyncResult.NothingToSync, is SyncResult.Success -> Result.success()

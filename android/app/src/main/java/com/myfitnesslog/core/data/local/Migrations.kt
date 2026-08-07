@@ -86,8 +86,35 @@ val MIGRATION_4_5: Migration = object : Migration(4, 5) {
 }
 
 /**
+ * Adds the workout-exercise deletion tombstone table (TD-014).
+ *
+ * Mirrors `workout_set_tombstone` exactly, including the index on
+ * `workoutSessionId` that lets the sync engine skip deletions belonging to a
+ * session whose own upload failed.
+ *
+ * Additive: no existing table is touched, so nothing already recorded can be
+ * lost by running it.
+ */
+val MIGRATION_5_6: Migration = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `workout_exercise_tombstone` (" +
+                "`workoutExerciseId` TEXT NOT NULL, " +
+                "`workoutSessionId` TEXT NOT NULL, " +
+                "`deletedAt` INTEGER NOT NULL, " +
+                "PRIMARY KEY(`workoutExerciseId`))",
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS " +
+                "`index_workout_exercise_tombstone_workoutSessionId` " +
+                "ON `workout_exercise_tombstone` (`workoutSessionId`)",
+        )
+    }
+}
+
+/**
  * Every migration the database ships with, passed to `addMigrations` in
  * DatabaseModule. Declared last so each migration is defined before this list
  * references it.
  */
-val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_3_4, MIGRATION_4_5)
+val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)

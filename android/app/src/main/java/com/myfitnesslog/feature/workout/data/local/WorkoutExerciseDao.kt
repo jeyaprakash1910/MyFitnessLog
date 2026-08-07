@@ -2,6 +2,7 @@ package com.myfitnesslog.feature.workout.data.local
 
 import androidx.room.Dao
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Upsert
 import com.myfitnesslog.core.data.local.SyncStatus
 import kotlinx.coroutines.flow.Flow
@@ -48,4 +49,33 @@ interface WorkoutExerciseDao {
     /** Releases stranded SYNCING rows back to PENDING. See [RoutineDao.recoverStaleSyncing]. */
     @Query("UPDATE workout_exercise SET syncStatus = 'PENDING' WHERE syncStatus = 'SYNCING'")
     suspend fun recoverStaleSyncing(): Int
+
+    // --- deletion tombstones (TD-014) ------------------------------------
+    //
+    // Owned here for the same reason WorkoutSetDao owns its tombstones: the
+    // tombstone exists only as the shadow of a deletion, and keeping both in one
+    // DAO lets the removal and the queued deletion happen in a single Room
+    // transaction so they can never diverge.
+
+    @Upsert
+    suspend fun upsertTombstone(tombstone: WorkoutExerciseTombstoneEntity)
+
+    /**
+     * Removes an exercise and queues its deletion for upload, atomically.
+     *
+     * The two halves must not be separable. A tombstone without the delete would
+     * ask the backend to remove an exercise the phone still shows; a delete
+     * without the tombstone is exactly the divergence TD-014 was filed for.
+     */
+    @Transaction
+    suspend fun deleteAndRecord(tombstone: WorkoutExerciseTombstoneEntity) {
+        deleteById(tombstone.workoutExerciseId)
+        upsertTombstone(tombstone)
+    }
+
+    @Query("SELECT * FROM workout_exercise_tombstone ORDER BY deletedAt ASC")
+    suspend fun getPendingTombstones(): List<WorkoutExerciseTombstoneEntity>
+
+    @Query("DELETE FROM workout_exercise_tombstone WHERE workoutExerciseId = :workoutExerciseId")
+    suspend fun deleteTombstone(workoutExerciseId: UUID)
 }

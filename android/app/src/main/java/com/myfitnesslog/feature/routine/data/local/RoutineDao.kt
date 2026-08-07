@@ -52,6 +52,28 @@ interface RoutineDao {
     @Query("SELECT COUNT(*) FROM routine")
     suspend fun count(): Int
 
+    /**
+     * Every live routine, for reconciling against the backend (ADR-0017 Stage 2).
+     *
+     * Returns rows rather than ids because refresh needs each row's syncStatus:
+     * a routine the outbox still owns must be left alone even when the backend
+     * has never heard of it.
+     */
+    @Query("SELECT * FROM routine WHERE isDeleted = 0")
+    suspend fun getAllLive(): List<RoutineEntity>
+
+    /**
+     * Removes a routine outright, for a refresh reconciling against the backend
+     * (ADR-0017 Stage 2).
+     *
+     * A hard delete rather than the usual soft delete: soft deletion exists to
+     * carry the removal *to* the backend, and this row is already gone there.
+     * Marking it deleted would queue an upload telling the server to delete
+     * something it has never heard of.
+     */
+    @Query("DELETE FROM routine WHERE id = :id")
+    suspend fun deleteById(id: UUID)
+
     @Upsert
     suspend fun upsert(routine: RoutineEntity)
 

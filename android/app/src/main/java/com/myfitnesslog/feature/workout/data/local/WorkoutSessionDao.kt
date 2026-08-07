@@ -34,6 +34,19 @@ interface WorkoutSessionDao {
     @Query("SELECT COUNT(*) FROM workout_session")
     suspend fun count(): Int
 
+    /**
+     * Completed sessions only, for reconciling against the backend's history
+     * (ADR-0017 Stage 2).
+     *
+     * Deliberately excludes IN_PROGRESS and DISCARDED. The backend's history
+     * endpoint returns completed sessions alone, so an in-progress workout is
+     * absent from it for a perfectly good reason. Comparing against all statuses
+     * would read that absence as "deleted remotely" and wipe the workout the user
+     * is in the middle of.
+     */
+    @Query("SELECT * FROM workout_session WHERE status = 'COMPLETED'")
+    suspend fun getAllCompleted(): List<WorkoutSessionEntity>
+
     @Upsert
     suspend fun upsert(session: WorkoutSessionEntity)
 

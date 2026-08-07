@@ -12,6 +12,7 @@ import com.myfitnesslog.core.sync.source.RoutineExerciseSyncSource
 import com.myfitnesslog.core.sync.source.RoutineSyncSource
 import com.myfitnesslog.core.sync.source.WorkoutExerciseSyncSource
 import com.myfitnesslog.core.sync.source.WorkoutSessionSyncSource
+import com.myfitnesslog.core.sync.source.WorkoutExerciseDeletionSyncSource
 import com.myfitnesslog.core.sync.source.WorkoutSetDeletionSyncSource
 import com.myfitnesslog.core.sync.source.WorkoutSetSyncSource
 import com.myfitnesslog.core.util.IoDispatcher
@@ -72,6 +73,7 @@ class SyncEngineImpl @Inject constructor(
     private val workoutExerciseSource: WorkoutExerciseSyncSource,
     private val setSource: WorkoutSetSyncSource,
     private val deletionSource: WorkoutSetDeletionSyncSource,
+    private val exerciseDeletionSource: WorkoutExerciseDeletionSyncSource,
     private val routineApi: RoutineApi,
     private val sessionApi: WorkoutSessionApi,
     private val logApi: WorkoutLogApi,
@@ -87,6 +89,7 @@ class SyncEngineImpl @Inject constructor(
         pass.syncWorkoutExercises()
         pass.syncWorkoutSets()
         pass.syncWorkoutSetDeletions()
+        pass.syncWorkoutExerciseDeletions()
         pass.syncWorkoutSessionTransitions()
 
         pass.toResult()
@@ -327,6 +330,56 @@ class SyncEngineImpl @Inject constructor(
                         } else {
                             // Retryable: the session must not be sealed while one
                             // of its sets is still pending removal.
+                            blockedSessions += tombstone.workoutSessionId
+                        }
+                    }
+                }
+            }
+        }
+
+        /**
+         * Replays workout-exercise removals (TD-014).
+         *
+         * Ordered deliberately between the set deletions and the terminal
+         * transition. After the set deletions, because the backend refuses to
+         * remove an exercise that still has sets attached, and those sets are
+         * removed by the phase before this one. Before the transition, because a
+         * sealed session rejects every write, deletions included.
+         *
+         * Failure handling matches the set tombstones: success drops the row, a
+         * rejection drops it too (an unchanged retry fails identically forever),
+         * and anything retryable keeps it and blocks the session from being
+         * sealed while one of its exercises is still pending removal.
+         */
+        suspend fun syncWorkoutExerciseDeletions() {
+            exerciseDeletionSource.getPendingWorkoutExerciseDeletions().forEach { tombstone ->
+                if (tombstone.workoutSessionId in blockedSessions) {
+                    skip(
+                        SyncEntityType.WORKOUT_EXERCISE_DELETION,
+                        tombstone.workoutExerciseId,
+                        tombstone.workoutSessionId,
+                    )
+                    return@forEach
+                }
+                when (val result = attempt {
+                    logApi.deleteWorkoutExercise(tombstone.workoutExerciseId.toString())
+                }) {
+                    is UploadResult.Success -> {
+                        uploaded++
+                        exerciseDeletionSource
+                            .clearWorkoutExerciseDeletion(tombstone.workoutExerciseId)
+                    }
+
+                    is UploadResult.Failed -> {
+                        fail(
+                            SyncEntityType.WORKOUT_EXERCISE_DELETION,
+                            tombstone.workoutExerciseId,
+                            result,
+                        )
+                        if (result.reason == SyncFailureReason.REJECTED) {
+                            exerciseDeletionSource
+                                .clearWorkoutExerciseDeletion(tombstone.workoutExerciseId)
+                        } else {
                             blockedSessions += tombstone.workoutSessionId
                         }
                     }

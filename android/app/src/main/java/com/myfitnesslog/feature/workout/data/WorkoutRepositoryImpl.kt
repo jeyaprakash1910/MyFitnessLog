@@ -6,6 +6,7 @@ import com.myfitnesslog.core.data.local.WorkoutStatus
 import com.myfitnesslog.core.sync.SyncTrigger
 import com.myfitnesslog.core.sync.source.WorkoutExerciseSyncSource
 import com.myfitnesslog.core.sync.source.WorkoutSessionSyncSource
+import com.myfitnesslog.core.sync.source.WorkoutExerciseDeletionSyncSource
 import com.myfitnesslog.core.sync.source.WorkoutSetDeletionSyncSource
 import com.myfitnesslog.core.sync.source.WorkoutSetSyncSource
 import com.myfitnesslog.core.util.IoDispatcher
@@ -16,6 +17,7 @@ import com.myfitnesslog.feature.workout.data.local.WorkoutSessionDao
 import com.myfitnesslog.feature.workout.data.local.WorkoutSessionEntity
 import com.myfitnesslog.feature.workout.data.local.WorkoutSetDao
 import com.myfitnesslog.feature.workout.data.local.WorkoutSetEntity
+import com.myfitnesslog.feature.workout.data.local.WorkoutExerciseTombstoneEntity
 import com.myfitnesslog.feature.workout.data.local.WorkoutSetTombstoneEntity
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
@@ -43,7 +45,8 @@ class WorkoutRepositoryImpl @Inject constructor(
     WorkoutSessionSyncSource,
     WorkoutExerciseSyncSource,
     WorkoutSetSyncSource,
-    WorkoutSetDeletionSyncSource {
+    WorkoutSetDeletionSyncSource,
+    WorkoutExerciseDeletionSyncSource {
 
     override fun observeActiveSession(): Flow<WorkoutSessionEntity?> = sessionDao.observeActive()
 
@@ -233,7 +236,17 @@ class WorkoutRepositoryImpl @Inject constructor(
                 ),
             )
         }
-        exerciseDao.deleteById(workoutExerciseId)
+        // Tombstone the exercise row itself too (TD-014). Its sets were already
+        // tombstoned above; without this the backend keeps an exercise the user
+        // deleted, and once the phone reads the backend back (ADR-0017 Stage 2) a
+        // refresh would resurrect it on the device.
+        exerciseDao.deleteAndRecord(
+            WorkoutExerciseTombstoneEntity(
+                workoutExerciseId = workoutExerciseId,
+                workoutSessionId = session.id,
+                deletedAt = now,
+            ),
+        )
         syncTrigger.requestSync()
     }
 
@@ -310,6 +323,12 @@ class WorkoutRepositoryImpl @Inject constructor(
 
     override suspend fun setWorkoutSetSyncStatus(id: UUID, status: SyncStatus) =
         withContext(ioDispatcher) { setDao.updateSyncStatus(id, status) }
+
+    override suspend fun getPendingWorkoutExerciseDeletions(): List<WorkoutExerciseTombstoneEntity> =
+        withContext(ioDispatcher) { exerciseDao.getPendingTombstones() }
+
+    override suspend fun clearWorkoutExerciseDeletion(workoutExerciseId: UUID) =
+        withContext(ioDispatcher) { exerciseDao.deleteTombstone(workoutExerciseId) }
 
     override suspend fun getPendingWorkoutSetDeletions(): List<WorkoutSetTombstoneEntity> =
         withContext(ioDispatcher) { setDao.getPendingTombstones() }

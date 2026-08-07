@@ -714,10 +714,27 @@ ran against production by default.
 
 ## TD-014 — WorkoutExercise removal during a workout is not propagated to the backend
 
-Status: Open — deferred
+Status: ✅ Resolved 2026-08-07 (ADR-0017 Stage 2 prerequisite)
 
 Milestone identified: V2 workout logging, Milestone F (2026-07-27)
-Scheduled for: post-V1, alongside a `WorkoutExercise` deletion mechanism
+Resolved by: `workout_exercise_tombstone` (Room migration 5 → 6) plus a deletion
+phase in the sync engine, mirroring the set tombstones of ADR-0007.
+
+### Why it stopped being cosmetic
+
+This item was filed as a bounded, one-directional divergence with no user-visible
+impact, and that assessment was correct **while synchronisation only ran upwards**.
+Adding the read path changed its severity rather than its mechanics: once the phone
+reads the backend back, a refresh downloads the lingering exercise and
+**resurrects on the device an exercise the user deleted**. A cosmetic residue on a
+write-only system becomes a correctness bug the moment that system gains a second
+direction, which is why this was fixed before Stage 2 rather than alongside it.
+
+The deletion phase is ordered deliberately: after the set deletions, because the
+backend refuses to remove an exercise that still has sets; and before the terminal
+transition, because a sealed session rejects every write. Refresh additionally
+defers entirely while any tombstone is unreplayed, so the resurrection window is
+closed from both ends.
 
 ### Observation
 
