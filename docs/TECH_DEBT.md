@@ -44,8 +44,32 @@ with different tests failing each time. Two have been seen:
 * `completingViaRpeStartsTheRestTimer`
 * `rpeSelectionCompletesAPlannedRowWithThatRpe` - `TimeoutCancellationException:
   Timed out waiting for 5000 ms`
+* `settingExerciseRestPersistsTheNewDuration`
 
 Every other suite passes consistently. Running the class alone always passes.
+
+### A better clue, 2026-08-07
+
+A run during the ADR-0017 Stage 2 build failed in a **second** class,
+`WorkoutIndicatorViewModelTest`, with a far more specific message:
+
+    java.lang.IllegalStateException: Dispatchers.Main is used concurrently with
+    setting it
+
+That reframes the problem. Nine test classes call `Dispatchers.setMain` in
+`@Before` and `resetMain` in `@After`, and all of them do so correctly, so the
+fault is not missing cleanup. Gradle runs one fork, so it is not parallel classes
+either. The message means a coroutine from an **earlier test was still running on
+Main** when the next class replaced the dispatcher.
+
+The likely source is a ViewModel whose `viewModelScope` is never cancelled:
+`WorkoutViewModelTest` uses `runBlocking` rather than `runTest` and creates
+ViewModels it never clears, so their coroutines outlive the test method. That
+would explain why the class that leaks and the class that fails need not be the
+same one, which is exactly the pattern observed.
+
+Worth trying first: cancel each ViewModel in `@After`, or move those classes to a
+shared main-dispatcher rule that also drains outstanding work before resetting.
 
 ### What was already fixed
 
