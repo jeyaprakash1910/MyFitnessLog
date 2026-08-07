@@ -7,10 +7,9 @@ name: CI
 # how a wrong column type in a Room migration reached main on 2026-08-07, caught
 # by hand rather than by anything systematic.
 #
-# The backend runs here too, against a PostgreSQL service container. Note that
-# TD-016, which makes the suite fail in a developer's working copy, does not
-# apply: a runner checks out a fresh clone, which is one of the configurations
-# where the suite passes. Locally, use backend/scripts/run-tests.sh.
+# The backend runs here too, against a PostgreSQL service container. This job was
+# always unaffected by TD-016, because a runner has no editor rewriting its build
+# output; that is now resolved anyway, so locally plain `mvn test` works too.
 #
 # The Android suite is intermittently flaky (TD-015): a leaked coroutine still
 # using Dispatchers.Main makes roughly one run in four fail while the code is

@@ -133,13 +133,16 @@ a `myfitnesslog_test` database for tests).
 ```bash
 cd backend
 mvn spring-boot:run          # Flyway migrates on start; API at :8080/api/v1
-./scripts/run-tests.sh       # 110 tests (JUnit 5 + MockMvc) against the test database
+mvn test                     # 110 tests (JUnit 5 + MockMvc) against the test database
 ```
 
-**Use the script, not `mvn test` directly.** The suite fails in the working copy
-and passes everywhere else for reasons that are not understood; the script runs it
-at HEAD in a disposable worktree, which is a configuration known to pass. It tests
-committed content, so it warns when you have uncommitted changes. See TD-016.
+If you use VS Code with the Red Hat Java extension, keep
+`"java.autobuild.enabled": false` (already set in `.vscode/settings.json`). With
+autobuild on, the language server recompiles MapStruct's generated mappers into
+Maven's `target/classes` after every build and breaks the suite. That was TD-016,
+resolved 2026-08-07; `backend/scripts/run-tests.sh` was the workaround and is no
+longer needed.
+
 Tests run against a real PostgreSQL (faithful to the quoted-identifier schema and
 CHECK constraints), configured through the `TEST_DB_*` env overrides in
 `src/test/resources/application.yml`. CI uses the same overrides against a

@@ -2,7 +2,7 @@
 
 Project: MyFitnessLog
 Version: 1.5
-Last Updated: August 7, 2026 (TD-014 resolved for ADR-0017 Stage 2; TD-015 opened and parked)
+Last Updated: August 7, 2026 (TD-016 resolved: VS Code Java autobuild was overwriting Maven's output; TD-014 resolved for ADR-0017 Stage 2; TD-015 opened and parked)
 
 This document records known, accepted technical debt: deliberate limitations that are not defects in the current milestone but must be addressed in a later milestone. Each item states the observation, why it is currently acceptable, the recommended future implementation, the documentation that must change first, and when it is scheduled.
 
@@ -36,89 +36,102 @@ This register holds debt that outlives a single task. Short-lived working items 
 | TD-013 | Live sync tests write into the production database | ✅ Resolved 2026-07-22 (M12 Phase 3) | — |
 | TD-014 | WorkoutExercise removal during a workout is not propagated to the backend | ✅ Resolved 2026-08-07 (ADR-0017 Stage 2) | - |
 | TD-015 | ViewModel test classes are intermittently flaky (~1 run in 4) | **Open - parked deliberately** | ADR-0017 Stage 3 should fix it first |
-| TD-016 | Backend suite fails in the working copy, passes elsewhere | **Open - contained** via `backend/scripts/run-tests.sh` | - |
+| TD-016 | Backend suite fails in the working copy, passes elsewhere | ✅ Resolved 2026-08-07 (VS Code Java autobuild overwrote Maven's output) | - |
 
 ---
 
-## TD-016 - The backend test suite fails in the working copy and passes elsewhere
+## TD-016 - The backend test suite failed in the working copy and passed elsewhere
 
-Status: **Open - contained, cause unknown.** A workaround script exists and is the
-supported way to run the suite; the underlying cause was investigated at length
-and not found.
+Status: **Resolved 2026-08-07.** Cause found and fixed. The backend suite now runs
+normally with `mvn test` in `backend/`; no clone, worktree or script is required.
 
 Milestone identified: ADR-0016 (2026-08-06)
-Scheduled for: unscheduled. Reopen if the workaround ever stops working, or if the
-same symptom appears in another project on this machine.
+Resolved: 2026-08-07
 
-### Observation
+### What was happening
 
-Running `mvn test` in `backend/` fails with ~77 errors. Running the identical
-commit anywhere else passes all 110.
+Running `mvn test` in `backend/` failed with ~77 errors, always the same way: the
+Spring context could not start because a MapStruct mapper bean was missing. The
+identical commit passed all 110 tests in a fresh clone, a worktree, or a `cp -R`
+to another path.
 
-| Location | Result |
+The cause was **VS Code's Red Hat Java extension**. It imports `backend/` as an
+Eclipse project, and in the classpath it generates,
+`target/generated-sources/annotations` is declared as a source folder with no
+output directory of its own:
+
+```xml
+<classpathentry kind="src" path="target/generated-sources/annotations">
+<classpathentry kind="output" path="target/classes"/>
+```
+
+With no `output` attribute the entry falls back to the project default, which is
+`target/classes` - the directory Maven has just written. MapStruct's generated
+`*MapperImpl.java` files live in that source folder, so with autobuild on the
+language server recompiled them into Maven's output roughly one second after
+every build.
+
+Eclipse's compiler emits class files even when references fail to resolve. The
+overwritten `ExerciseCategoryMapperImpl` therefore lost its
+`implements ExerciseCategoryMapper` clause and had its parameter types left
+unqualified. Spring still registered the bean, but could not match it to the
+interface the controller asked for, so every `@SpringBootTest` context failed on
+a missing mapper.
+
+### Why the earlier evidence was so confusing
+
+Every previous observation is explained by this, including the two that looked
+contradictory:
+
+| Observation | Explanation |
 |---|---|
-| `MyFitnessLog/backend` (the working copy) | ~77 errors, reproducible |
-| A fresh `git clone` | 110 pass |
-| A `git worktree` at the same commit | 110 pass |
-| A plain `cp -R` of the working copy to another path | 110 pass |
-| The working copy reached through a symlink | ~77 errors |
+| A fresh clone, worktree or `cp -R` passed | None of them is in the VS Code workspace, so the language server never touched them |
+| The working copy reached through a symlink failed | A symlink reaches the same real directory the server is building into |
+| `diff -r` found no difference in sources | It was the compiled output that differed, not the sources |
+| One test class sometimes passed on its own | The corruption landed a second after the build, so a short run could beat it |
 
-Every failure is the same: the Spring context cannot start because a MapStruct
-mapper bean is missing. The class is present, compiled, annotated `@Component`,
-and the scanner logs it as an identified candidate component. It is then not
-available for injection, with no class-loading failure logged.
+The path was never the variable. Whether an editor was watching was.
 
-The symlink row is the informative one. The path does not matter; the actual
-directory does.
+### The fix
 
-### Ruled out by measurement
+One setting in `.vscode/settings.json`, committed with a comment explaining why:
 
-Application code, test code, JetBrains JBR vs Temurin JDK 21, JDK 26, stale
-`target/` (manual `rm -rf`, not just `mvn clean`), `.DS_Store` files, file
-permissions and ACLs, duplicate classes on the classpath, class-file contents,
-test ordering, Android Studio and its `fsnotifier`, Claude Code hooks,
-file-activated Maven profiles, the effective POM, and Surefire's forked JVM
-command line. The last three are byte-identical between a passing and a failing
-run, as is `diff -r` across the whole directory.
+```json
+"java.autobuild.enabled": false
+```
 
-Replacing every source file in the working copy with byte-identical copies from a
-fresh clone did **not** fix it.
+The language server stops writing class files entirely. Navigation, completion and
+live error markers keep working, because those come from its own index rather than
+from `target/classes`.
 
-### Why it is contained rather than fixed
+### How it was verified
 
-The investigation exhausted every hypothesis available and produced a
-contradiction it could not resolve: identical bytes, identical configuration,
-different behaviour, determined by the directory itself. Continuing was open-ended
-with no expectation of a result.
+1. Hashing the mapper class once a second after a build: previously rewritten at
+   t+2s (2270 bytes becoming 2529), now stable.
+2. `javap` on the compiled class: `implements com.myfitnesslog.mapper.ExerciseCategoryMapper`
+   present again, types fully qualified.
+3. `mvn -B clean test` in the working copy: **110 passed, 0 failures, 0 errors.**
+   Repeated after unrelated cleanup, still 110.
 
-`backend/scripts/run-tests.sh` makes the workaround one command: it runs the suite
-at HEAD in a disposable worktree, which is a configuration known to pass, and
-cleans up afterwards. That restores a runnable backend suite, which is what
-actually mattered.
+### What this corrects in the earlier write-up
 
-**Production is unaffected.** Render builds from a fresh clone, which is the
-passing configuration.
+The previous version of this entry, and the header of
+`backend/scripts/run-tests.sh`, both listed **class-file contents** as ruled out by
+measurement. That was wrong, and it was the one place the answer was sitting. A
+single `cmp` between a passing and a failing build would have ended the
+investigation immediately. The lesson worth keeping: "ruled out" is only worth
+recording when the check was actually run, and re-running a cheap check beats
+trusting a previous conclusion.
 
-**CI is unaffected too**, for the same reason: a GitHub runner checks out a fresh
-clone, so the backend suite runs there normally. It was added to the workflow on
-2026-08-07 and passes. This bug therefore costs a developer a slower local loop
-and costs the project nothing in automated coverage.
+`.DS_Store` files were also once suspected, cleared, then doubted again. They are
+now ruled out properly, against a deterministic reproducer.
 
-### Cost of the containment
+### Follow-up
 
-* The script tests **HEAD**, so uncommitted changes are not covered. It warns when
-  it sees any, but the shortest loop for backend work is now commit-then-test
-  rather than edit-then-test.
-* Each run pays a `clean` build in a fresh worktree, so it is slower than a warm
-  incremental `mvn test` would be.
-
-### If someone picks this up
-
-The one experiment not run was moving the working copy aside and cloning into the
-exact same absolute path. That would separate "something about this checkout" from
-"something about this directory on this filesystem", which is the last distinction
-the evidence leaves open. It requires relocating the working copy, which is why it
-was not attempted unprompted.
+`backend/scripts/run-tests.sh` still works and is harmless, but is no longer
+required. It is being kept briefly as a fallback because the failure was
+intermittent enough to mislead several investigations; delete it once the direct
+`mvn test` path has been trusted for a while.
 
 ---
 
