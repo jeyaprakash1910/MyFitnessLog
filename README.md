@@ -142,8 +142,12 @@ and passes everywhere else for reasons that are not understood; the script runs 
 at HEAD in a disposable worktree, which is a configuration known to pass. It tests
 committed content, so it warns when you have uncommitted changes. See TD-016.
 Tests run against a real PostgreSQL (faithful to the quoted-identifier schema and
-CHECK constraints). They are portable to Testcontainers on a Docker-capable machine
-via the `TEST_DB_*` env overrides in `src/test/resources/application.yml`.
+CHECK constraints), configured through the `TEST_DB_*` env overrides in
+`src/test/resources/application.yml`. CI uses the same overrides against a
+Postgres 17 service container, matching the Supabase major version in production.
+
+All three suites run automatically on every push and pull request
+(`.github/workflows/ci.yml`).
 
 ### Android
 Requires JDK 17 and the Android SDK (`ANDROID_HOME` / `local.properties`).

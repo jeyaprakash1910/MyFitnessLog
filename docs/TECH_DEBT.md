@@ -99,6 +99,11 @@ actually mattered.
 **Production is unaffected.** Render builds from a fresh clone, which is the
 passing configuration.
 
+**CI is unaffected too**, for the same reason: a GitHub runner checks out a fresh
+clone, so the backend suite runs there normally. It was added to the workflow on
+2026-08-07 and passes. This bug therefore costs a developer a slower local loop
+and costs the project nothing in automated coverage.
+
 ### Cost of the containment
 
 * The script tests **HEAD**, so uncommitted changes are not covered. It warns when
