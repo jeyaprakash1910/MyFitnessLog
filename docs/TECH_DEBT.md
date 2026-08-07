@@ -36,7 +36,7 @@ This register holds debt that outlives a single task. Short-lived working items 
 | TD-013 | Live sync tests write into the production database | ✅ Resolved 2026-07-22 (M12 Phase 3) | — |
 | TD-014 | WorkoutExercise removal during a workout is not propagated to the backend | ✅ Resolved 2026-08-07 (ADR-0017 Stage 2) | - |
 | TD-015 | ViewModel test classes are intermittently flaky (~1 run in 4) | **Open - parked deliberately** | ADR-0017 Stage 3 should fix it first |
-| TD-016 | Backend suite fails in the working copy, passes elsewhere | ✅ Resolved 2026-08-07 (VS Code Java autobuild overwrote Maven's output) | - |
+| TD-016 | Backend suite failed in the working copy, passed elsewhere | ✅ Resolved 2026-08-07 (VS Code Java autobuild overwrote Maven's output) | - |
 
 ---
 
@@ -181,6 +181,22 @@ This matters more than the fix, because it is what stops the flake doing damage.
 
 **Anything else is a real failure.** In particular a genuine assertion failure
 ("expected X but was Y") is never this bug. Do not re-run and move on.
+
+#### Rate measured on 2026-08-07
+
+Eight full local runs while verifying unrelated work, **two of which failed**,
+which is the one-in-four this entry claims. Both matched the criteria above, and
+between them they showed both signatures:
+
+| Failing test | Signature |
+|---|---|
+| `WorkoutViewModelTest.startingFromRoutineShowsSnapshottedExercises` and `.discardWorkoutEmitsEvent` | `Dispatchers.Main is used concurrently with setting it`, thrown from `resetMain()` in `tearDown` |
+| `WorkoutViewModelTest.completingViaRpeStartsTheRestTimer` | `TimeoutCancellationException` after 5000 ms waiting on a `StateFlow` |
+
+Useful mainly as a baseline: any future attempt needs more than three green runs
+to claim an improvement, because three green runs happen by chance roughly two
+times in five at this rate. The earlier attempt that appeared to work and was
+later found to be worse failed exactly this way.
 
 ### Root cause
 
