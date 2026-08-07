@@ -412,8 +412,9 @@ Every Room schema change must:
 
 Never modify a committed schema JSON, and never edit a released Migration.
 
-This repository has no CI, so MigrationTest is the only thing enforcing the
-policy. It is an instrumented test and needs a running device — **the emulator**:
+MigrationTest is what enforces the policy. It runs on every push, on an
+emulator, in the `android-instrumented` CI job. To run it yourself it needs a
+device, and that device must be **the emulator**:
 
     ANDROID_SERIAL=emulator-5554 ./gradlew :app:connectedDebugAndroidTest
 

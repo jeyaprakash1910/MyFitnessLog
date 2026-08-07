@@ -125,7 +125,8 @@ developer machines that were being destructively upgraded anyway, so no migratio
 path into them is provided. Every schema change from here ships with a `Migration`
 in `core/data/local/Migrations.kt` **and** a data-preservation case in
 `MigrationTest` — see CODING_STANDARDS §20b, which is the enforceable statement
-of this rule. There is no CI, so that instrumented test is the only guard.
+of this rule. That instrumented test is the only guard, and since 2026-08-07 it
+runs on an emulator in CI on every push.
 
 ⸻
 
