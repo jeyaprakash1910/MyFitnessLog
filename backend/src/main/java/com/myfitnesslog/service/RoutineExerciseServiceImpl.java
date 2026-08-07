@@ -43,6 +43,17 @@ public class RoutineExerciseServiceImpl implements RoutineExerciseService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<RoutineExercise> getExercises(UUID routineId) {
+        // Resolve the routine first so an unknown id is a 404 rather than an empty
+        // list. "This routine has no exercises" and "this routine does not exist"
+        // are different answers, and a client restoring its state must not treat
+        // the second as the first and quietly reconstruct an empty routine.
+        routineService.getRoutine(routineId);
+        return routineExerciseRepository.findByRoutine_IdOrderByExerciseOrderAsc(routineId);
+    }
+
+    @Override
     @Transactional
     public RoutineExerciseSaveResult addExercise(UUID routineId, AddRoutineExerciseRequest request) {
         Routine routine = routineService.getRoutine(routineId);

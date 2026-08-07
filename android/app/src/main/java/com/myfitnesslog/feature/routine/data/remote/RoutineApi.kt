@@ -3,6 +3,7 @@ package com.myfitnesslog.feature.routine.data.remote
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
+import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.Path
@@ -18,6 +19,17 @@ import retrofit2.http.Path
  * This interface performs no synchronization on its own; it is transport only.
  */
 interface RoutineApi {
+
+    /**
+     * Every routine, as summaries. Used by restore to learn which routines exist
+     * before fetching each one's contents (ADR-0017).
+     */
+    @GET("routines")
+    suspend fun getRoutines(): List<RoutineResponseDto>
+
+    /** One routine with its exercises: everything needed to rebuild it locally. */
+    @GET("routines/{id}")
+    suspend fun getRoutine(@Path("id") id: String): RoutineDetailResponseDto
 
     @POST("routines")
     suspend fun createRoutine(

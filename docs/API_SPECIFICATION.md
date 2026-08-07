@@ -151,12 +151,47 @@ GET	/exercises/search	Search exercises (query parameter: q — case-insensitive 
 Routines
 
 Method	Endpoint	Description
-GET	/routines	List routines
-GET	/routines/{id}	Routine details
+GET	/routines	List routines (summaries)
+GET	/routines/{id}	Routine with its exercises
 POST	/routines	Create routine
 PUT	/routines/{id}	Update routine
 DELETE	/routines/{id}	Soft delete routine
 POST	/routines/{id}/duplicate	Duplicate routine
+
+`GET /routines` returns `RoutineResponse` summaries (`id`, `name`, `description`,
+`displayOrder`). `GET /routines/{id}` returns those same fields **plus an
+`exercises` array** of `RoutineExerciseResponse`, in `exerciseOrder`.
+
+```json
+{
+  "id": "…", "name": "Push A", "description": "chest day", "displayOrder": 0,
+  "exercises": [
+    {
+      "id": "…", "exerciseId": "…", "exerciseOrder": 0,
+      "targetSets": 3, "minTargetReps": 8, "maxTargetReps": 12,
+      "targetRestSeconds": 90, "notes": null
+    }
+  ]
+}
+```
+
+The split mirrors workout sessions: a list returns summaries, a by-id call returns
+the aggregate. A picker needs names; anything rebuilding a routine needs what is
+in it.
+
+**The order is part of the contract.** `exercises` is sorted by `exerciseOrder`
+server-side, because the order is the routine itself rather than a display
+preference. A client must not have to re-sort, and one that forgot would hand the
+user a scrambled workout.
+
+`exercises` is always present, empty for a routine with none, so a client can
+iterate without a null check. An unknown id is **404**, not an empty routine:
+those are different answers, and a client rebuilding local state must not treat
+a deleted routine as an empty one.
+
+Added for the Android restore path (ADR-0017). Before it, routine exercises could
+be created, updated, reordered and deleted but never read, so a routine written to
+the backend could not be reconstructed from it.
 
 ⸻
 

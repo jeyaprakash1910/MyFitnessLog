@@ -2,8 +2,12 @@ package com.myfitnesslog.controller;
 
 import com.myfitnesslog.dto.request.CreateRoutineRequest;
 import com.myfitnesslog.dto.request.UpdateRoutineRequest;
+import com.myfitnesslog.dto.response.RoutineDetailResponse;
 import com.myfitnesslog.dto.response.RoutineResponse;
+import com.myfitnesslog.entity.Routine;
+import com.myfitnesslog.mapper.RoutineExerciseMapper;
 import com.myfitnesslog.mapper.RoutineMapper;
+import com.myfitnesslog.service.RoutineExerciseService;
 import com.myfitnesslog.service.RoutineSaveResult;
 import com.myfitnesslog.service.RoutineService;
 import jakarta.validation.Valid;
@@ -32,8 +36,15 @@ public class RoutineController {
 
     private final RoutineService routineService;
     private final RoutineMapper routineMapper;
+    private final RoutineExerciseService routineExerciseService;
+    private final RoutineExerciseMapper routineExerciseMapper;
 
-    public RoutineController(RoutineService routineService, RoutineMapper routineMapper) {
+    public RoutineController(RoutineService routineService,
+                             RoutineMapper routineMapper,
+                             RoutineExerciseService routineExerciseService,
+                             RoutineExerciseMapper routineExerciseMapper) {
+        this.routineExerciseService = routineExerciseService;
+        this.routineExerciseMapper = routineExerciseMapper;
         this.routineService = routineService;
         this.routineMapper = routineMapper;
     }
@@ -43,9 +54,23 @@ public class RoutineController {
         return routineMapper.toResponseList(routineService.getAllRoutines());
     }
 
+    /**
+     * A routine and the exercises it contains.
+     *
+     * <p>Returns the detail shape rather than the summary the list endpoint uses,
+     * because a caller asking for one routine by id is asking what is in it. Until
+     * ADR-0017 nothing exposed routine exercises on read at all, so a routine could
+     * be written to the backend and never reconstructed from it.
+     */
     @GetMapping("/{id}")
-    public RoutineResponse getRoutine(@PathVariable UUID id) {
-        return routineMapper.toResponse(routineService.getRoutine(id));
+    public RoutineDetailResponse getRoutine(@PathVariable UUID id) {
+        Routine routine = routineService.getRoutine(id);
+        return new RoutineDetailResponse(
+                routine.getId(),
+                routine.getName(),
+                routine.getDescription(),
+                routine.getDisplayOrder(),
+                routineExerciseMapper.toResponseList(routineExerciseService.getExercises(id)));
     }
 
     /**

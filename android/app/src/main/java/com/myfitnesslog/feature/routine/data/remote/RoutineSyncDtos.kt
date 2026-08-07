@@ -68,3 +68,20 @@ data class RoutineExerciseResponseDto(
     val targetRestSeconds: Int? = null,
     val notes: String? = null,
 )
+
+/**
+ * Network model for `GET /api/v1/routines/{id}` (ADR-0017).
+ *
+ * Distinct from [RoutineResponseDto], which the list endpoint returns: a summary
+ * identifies a routine, this one carries enough to rebuild it. [exercises] is
+ * defaulted to empty so a response from a backend predating the read path still
+ * deserializes rather than failing the whole restore.
+ */
+@Serializable
+data class RoutineDetailResponseDto(
+    val id: String,
+    val name: String,
+    val description: String? = null,
+    val displayOrder: Int = 0,
+    val exercises: List<RoutineExerciseResponseDto> = emptyList(),
+)

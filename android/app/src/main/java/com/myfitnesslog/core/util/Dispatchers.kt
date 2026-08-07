@@ -20,3 +20,11 @@ annotation class DefaultDispatcher
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
 annotation class MainDispatcher
+
+/**
+ * Qualifies the process-lifetime [kotlinx.coroutines.CoroutineScope] for work
+ * that must outlive any screen, such as the launch-time restore.
+ */
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class ApplicationScope
