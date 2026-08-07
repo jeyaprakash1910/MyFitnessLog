@@ -185,9 +185,10 @@ resolves the latest GitHub release with a server-side read-only token and stream
 its APK to the app (ADR-0016). Verified end to end on the physical OnePlus
 CPH2717 on 6 Aug 2026 - a 1.2.0 install detected, downloaded and installed 1.3.0
 with no cable, preserving the local database (`firstInstallTime` unchanged).
-Test count: 467 automated Android tests (461 JVM/Robolectric + 6 instrumented)
-+ 99 backend tests (JUnit 5/MockMvc over real PostgreSQL) + 133 web tests
-(Vitest/RTL, 4 of them live-backend) = 699 total, of which 690 run by default.
+Test count: 491 automated Android tests (484 JVM/Robolectric + 7 instrumented)
++ 110 backend tests (JUnit 5/MockMvc over real PostgreSQL) + 133 web tests
+(Vitest/RTL, 4 of them live-backend) = 734 total, of which 725 run by default.
+All three suites run on every push and pull request via GitHub Actions.
 The nine live tests (five Android `LiveBackendSyncTest`, four web) drive the real
 stack against a running backend. Since M12 Phase 3 they skip unless a target is
 named explicitly (`MFL_LIVE_TEST_BASE_URL` / `VITE_LIVE_TEST_BASE_URL`) and
