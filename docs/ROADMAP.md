@@ -170,6 +170,16 @@ pushed and published on GitHub (commit `4f80e76`), with the signed release APK
 verified on physical hardware. Every milestone M1–M13 is complete. The next
 milestone is Version 2 (authentication and multi-user), not yet planned.
 
+**Known outstanding work**, neither of which blocks release:
+
+* **ADR-0017 Stage 3** - editable workout history, plus the last-write-wins rule it
+  needs. Requires the backend to start returning `updatedAt` on reads, which no
+  endpoint does today.
+* **TD-015** - the Android ViewModel test classes fail on roughly one full-suite
+  run in four while the code is fine. Parked as a deliberate decision after two
+  reverted fix attempts; scheduled as the first step of Stage 3. Read the register
+  entry before attempting it.
+
 Since **v1.2.0** an installed build updates itself over the air: the backend
 resolves the latest GitHub release with a server-side read-only token and streams
 its APK to the app (ADR-0016). Verified end to end on the physical OnePlus

@@ -1,12 +1,21 @@
 # Technical Debt Register
 
 Project: MyFitnessLog
-Version: 1.4
-Last Updated: July 22, 2026 (v1.0.0 released; TD-006 and TD-013 resolved in M12)
+Version: 1.5
+Last Updated: August 7, 2026 (TD-014 resolved for ADR-0017 Stage 2; TD-015 opened and parked)
 
 This document records known, accepted technical debt: deliberate limitations that are not defects in the current milestone but must be addressed in a later milestone. Each item states the observation, why it is currently acceptable, the recommended future implementation, the documentation that must change first, and when it is scheduled.
 
 This register holds debt that outlives a single task. Short-lived working items live in the development TODO and are not duplicated here.
+
+> **Parked, not forgotten: TD-015.** The Android ViewModel test classes fail on
+> roughly one full-suite run in four, with the code under test working correctly.
+> It was diagnosed on 2026-08-07, two fixes were attempted and **both reverted**
+> (one made it four times worse), and it was then parked as a deliberate decision
+> rather than an oversight. Before touching it, read TD-015 in full: it records
+> which approach is already known to fail, and how to tell this flake apart from a
+> real test failure. The scheduled moment to fix it is the **first step of
+> ADR-0017 Stage 3**, or whenever CI is introduced.
 
 ### Index
 
@@ -25,139 +34,150 @@ This register holds debt that outlives a single task. Short-lived working items 
 | TD-011 | Routine deletions never reached the backend | ✅ Resolved 2026-07-22 | — |
 | TD-012 | Reference data keeps referenced withdrawn rows | Open — note only | — |
 | TD-013 | Live sync tests write into the production database | ✅ Resolved 2026-07-22 (M12 Phase 3) | — |
-| TD-014 | WorkoutExercise removal during a workout is not propagated to the backend | Open — deferred | post-V1 |
+| TD-014 | WorkoutExercise removal during a workout is not propagated to the backend | ✅ Resolved 2026-08-07 (ADR-0017 Stage 2) | - |
+| TD-015 | ViewModel test classes are intermittently flaky (~1 run in 4) | **Open - parked deliberately** | ADR-0017 Stage 3 should fix it first |
 
 ---
 
-## TD-015 - WorkoutViewModelTest is intermittently flaky
+## TD-015 - The ViewModel test classes are intermittently flaky
 
-Status: Open - needs investigation
+Status: **Open - parked deliberately.** Diagnosed, two fixes attempted and
+reverted, and a decision recorded not to pursue it standalone. Read the
+"Deferral" section before starting: the obvious fix is known to make it worse.
 
 Milestone identified: ADR-0017 Stage 1 (2026-08-07)
-Scheduled for: before Stage 2, since a flaky suite cannot police a convergence change
+Last investigated: 2026-08-07
+Scheduled for: **the first step of ADR-0017 Stage 3** (editable history), not
+before. See "When to actually do this".
 
-### Observation
+### What you see
 
-`WorkoutViewModelTest` fails intermittently, roughly one full-suite run in four,
-with different tests failing each time. Two have been seen:
+Running the full Android unit suite, roughly **one run in four** ends with two or
+three failures. Re-running usually passes. The code under test is not broken; the
+tests trip over each other.
 
-* `completingViaRpeStartsTheRestTimer`
-* `rpeSelectionCompletesAPlannedRowWithThatRpe` - `TimeoutCancellationException:
-  Timed out waiting for 5000 ms`
-* `settingExerciseRestPersistsTheNewDuration`
+Affected classes, all of them ViewModel tests:
 
-Every other suite passes consistently. Running the class alone always passes.
+* `WorkoutViewModelTest` (most often)
+* `ExercisePickerViewModelTest`
+* `WorkoutIndicatorViewModelTest`
+* occasionally `RoutineEditViewModelTest`, `RoutineDetailViewModelTest`
 
-### A better clue, 2026-08-07
+Two failure shapes, both symptoms of one cause:
 
-A run during the ADR-0017 Stage 2 build failed in a **second** class,
-`WorkoutIndicatorViewModelTest`, with a far more specific message:
+    java.lang.IllegalStateException: Dispatchers.Main is used concurrently with setting it
+    kotlinx.coroutines.TimeoutCancellationException: Timed out waiting for 5000 ms
 
-    java.lang.IllegalStateException: Dispatchers.Main is used concurrently with
-    setting it
+A third, `UninitializedPropertyAccessException: lateinit property database has not
+been initialized`, is downstream noise: `setUp` threw before assigning `database`,
+so `tearDown` fails too.
 
-That reframes the problem. Nine test classes call `Dispatchers.setMain` in
-`@Before` and `resetMain` in `@After`, and all of them do so correctly, so the
-fault is not missing cleanup. Gradle runs one fork, so it is not parallel classes
-either. The message means a coroutine from an **earlier test was still running on
-Main** when the next class replaced the dispatcher.
+### Telling a flake from a real failure
 
-The likely source is a ViewModel whose `viewModelScope` is never cancelled:
-`WorkoutViewModelTest` uses `runBlocking` rather than `runTest` and creates
-ViewModels it never clears, so their coroutines outlive the test method. That
-would explain why the class that leaks and the class that fails need not be the
-same one, which is exactly the pattern observed.
+This matters more than the fix, because it is what stops the flake doing damage.
+**A failure is the known flake only if all of these hold:**
 
-Worth trying first: cancel each ViewModel in `@After`, or move those classes to a
-shared main-dispatcher rule that also drains outstanding work before resetting.
+1. it is in one of the classes listed above, **and**
+2. the message is `Dispatchers.Main is used concurrently with setting it`, or a
+   5000 ms timeout in that same class, **and**
+3. re-running the suite passes.
 
-### What was already fixed
+**Anything else is a real failure.** In particular a genuine assertion failure
+("expected X but was Y") is never this bug. Do not re-run and move on.
 
-`completingViaRpeStartsTheRestTimer` asserted on `restTimer.value` immediately
-after calling `onCommitRow` and `onRpeSelected`, with no wait. Both dispatch onto
-the ViewModel's scope, so the assertion was a race that usually won. It now awaits
-the timer state, like its sibling tests. That is a genuine fix, and it is not the
-whole story.
+### Root cause
 
-### Why the rest is not merely a slow machine
+An earlier version of this entry claimed one class was poisoning the next. **That
+was wrong**, and the correction matters for anyone attempting a fix. The stack
+trace shows the exception thrown from `Dispatchers.resetMain()` inside the failing
+class's **own** `tearDown`:
 
-`rpeSelectionCompletesAPlannedRowWithThatRpe` **does** await correctly and still
-timed out after a full five seconds, waiting for a row to become completed. Five
-seconds is a very long time for an in-memory Room write, which makes "the test
-machine was busy" an unconvincing explanation on its own.
+    at kotlinx.coroutines.test.TestDispatchers.resetMain(TestDispatchers.kt:34)
+    at ...ExercisePickerViewModelTest.tearDown(ExercisePickerViewModelTest.kt:108)
 
-The more troubling possibility is an ordering race in the code under test:
-`onCommitRow` and `onRpeSelected` are dispatched back to back, and if the RPE
-selection can be processed before the commit lands, the row would never complete
-and the wait would legitimately expire. That would be a real defect in workout
-logging surfacing as a flaky test, not a test-only problem.
+So a single class is still running work on `Dispatchers.Main` at the moment it
+resets it. The work is a `viewModelScope` coroutine: these tests construct
+ViewModels directly, nothing ever clears them, and a `viewModelScope` lives on
+Main until the ViewModel is cleared. Typically it is a Flow collector started by
+`stateIn`.
 
-### Attempted fix, 2026-08-07: made it worse, reverted
+### Deferral: two attempted fixes, both reverted
 
-Worth recording in full, because the obvious remedy is the wrong one and the next
-attempt should not repeat it.
+Recorded in full because the obvious remedy is the wrong one.
 
-**The earlier diagnosis above was wrong.** The stack trace shows the exception is
-thrown from `Dispatchers.resetMain()` inside the failing class's **own**
-`tearDown`, not from the next class's `setMain`. So this is not one class
-poisoning another; it is a single class still running something on Main at the
-moment it tries to reset it.
+**Attempt 1 - give the tests ownership of their ViewModels.** A `ViewModelStore`
+per test class, `put` on construction, `clear()` in `tearDown` before `resetMain`,
+so the scopes are genuinely cancelled. Sound in principle, and it did stabilise a
+two-class run. Across the full suite it changed nothing measurable.
 
-Two changes were tried and both reverted:
+**Attempt 2 - drain Main before resetting it.** Hold the `UnconfinedTestDispatcher`
+installed as Main and call `scheduler.advanceUntilIdle()` after clearing.
+**Dramatically worse.** Cancelling scopes and draining the scheduler are
+*themselves* work dispatched on Main, which is exactly what `resetMain`'s
+concurrency check objects to. The cleanup caused the collision it was meant to
+prevent.
 
-1. **Give the tests ownership of their ViewModels** (a `ViewModelStore`, cleared
-   in `tearDown` before `resetMain`) so `viewModelScope` is actually cancelled.
-   Sound in principle, and it did stabilise a two-class run. Across the full suite
-   it changed nothing measurable: 2 failures in 6 runs, against a baseline of
-   roughly 1 in 4.
-
-2. **Drain Main before resetting it**, by holding the `UnconfinedTestDispatcher`
-   and calling `scheduler.advanceUntilIdle()` after clearing. This made it
-   dramatically **worse**: 8 failures in 8 runs, up from 1 in 4. Cancelling the
-   scopes and draining the scheduler are themselves work dispatched on Main, which
-   is precisely what `resetMain`'s concurrency check objects to.
-
-Measured rates, full suite, `--rerun-tasks` each time:
+Measured, full suite, `--rerun-tasks` between each:
 
 | Variant | Runs failing |
 |---|---|
 | Baseline | ~1 in 4 |
-| ViewModelStore ownership | 2 in 6 |
-| Ownership + `advanceUntilIdle` | **8 in 8** |
+| Attempt 1: ViewModelStore ownership | 2 in 6 |
+| Attempt 2: ownership + `advanceUntilIdle` | **8 in 8** |
 | Reverted to baseline | 1 in 6 |
+
+Both reverted. No production or test code carries these changes.
 
 ### Where the next attempt should start
 
-"Cancel the scopes, then reset" does not work while an `UnconfinedTestDispatcher`
-is installed as Main, because the cleanup runs on the dispatcher being removed.
-The promising direction is therefore to stop needing cleanup at teardown at all:
+**Do not** try "cancel the scopes, then reset". It does not work while an
+`UnconfinedTestDispatcher` is installed as Main, because the cleanup runs on the
+very dispatcher being removed. That path is closed; two variants of it were
+measured above.
 
-* These classes use `runBlocking` with an unconfined Main. Moving them to
-  `runTest` with a single `StandardTestDispatcher` shared as Main would give the
-  test explicit control of when work runs, so nothing is in flight at teardown.
-* That is a restructure of the affected test classes rather than a few lines, and
-  it touches workout logging's tests, so it deserves its own change rather than
-  being bolted onto an unrelated one.
+The promising direction is to remove the need for teardown cleanup at all. These
+classes use `runBlocking` with an unconfined Main, so coroutines run eagerly and
+whenever they like. Moving them to `runTest` with a single shared
+`StandardTestDispatcher` gives the test explicit control of when work runs, so
+nothing is in flight when teardown arrives.
 
-### Impact
+That is a restructure of the affected classes, not a patch. Budget accordingly and
+verify by **running the full suite at least eight times**; anything less cannot
+distinguish a fix from luck at a 1-in-4 base rate.
 
-Low today: the affected path works in the app and on the device. The risk is to
-the suite's credibility. A test that fails one run in four trains everyone to
-re-run rather than read, which is exactly how a genuine regression gets waved
-through.
+### Why it is parked rather than fixed
 
-### Recommended investigation
+* **The failure mode is the safe one.** It makes tests fail when the code is fine.
+  It cannot make a test pass when the code is broken. False alarms, not false
+  reassurance.
+* **The workaround is one re-run**, and the fingerprint above tells you when it
+  applies.
+* **The fix is expensive and demonstrably risky.** It touches workout-logging test
+  files, the most important code in the app, and the first attempt made things
+  four times worse.
+* **Nothing runs these tests automatically.** There is no CI workflow; the only
+  GitHub Action is the nightly database backup. The flake therefore costs a human
+  a re-run occasionally, not a blocked pipeline.
 
-* Determine whether `onCommitRow` and `onRpeSelected` can interleave such that the
-  commit is lost. If they can, that is the bug, and the flake is a symptom.
-* If the ordering is genuinely safe, replace `runBlocking` with a deterministic
-  test dispatcher so the class does not depend on wall-clock timing at all.
-* Resist raising the 5000 ms timeout. That hides the symptom and would leave a
-  real race in place.
+### The real risk
 
-This was deliberately **not** fixed inside the ADR-0017 Stage 1 change: workout
-logging is the core of the app, and a speculative concurrency fix does not belong
-in a pull request about the restore path.
+Flaky tests train people to dismiss failures, and eventually a genuine one is
+waved through as "just the flake". The fingerprint rule above is the mitigation.
+If that rule ever starts being applied loosely, fix this immediately regardless of
+cost.
+
+### When to actually do this
+
+**As the first step of ADR-0017 Stage 3** (editable workout history). That change
+amends ADR-0001 and ADR-0004, makes immutable history mutable, and lands squarely
+in these test files. It is the riskiest change on the roadmap and the one that
+most needs a suite you can trust. You will be in this code anyway.
+
+**Or when CI is introduced**, whichever comes first. Adding a workflow that runs
+the Android and web suites on every push would surface this on roughly one push in
+four, which is the point at which it stops being an occasional annoyance and
+starts blocking work. Note the ordering: CI is worth more than this fix on its own,
+and it is also what makes this fix worth doing.
 
 ---
 

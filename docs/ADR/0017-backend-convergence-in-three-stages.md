@@ -149,6 +149,13 @@ deletion would wipe the workout the user is currently performing.
 **Stage 3 - Edit.** Allow completed workouts to be edited, and define what happens
 when two copies disagree.
 
+> **Start Stage 3 by fixing TD-015.** The Android ViewModel test classes fail on
+> about one full-suite run in four, and the affected files are exactly the ones
+> Stage 3 changes. This is the riskiest change on the roadmap - it makes immutable
+> history mutable - and it is the one that least tolerates a suite people have
+> learned to re-run rather than read. Two fix attempts are already recorded as
+> failures in the register; do not repeat them.
+
 This stage, and only this stage, **amends ADR-0001 and ADR-0004**. History being
 an immutable snapshot is a deliberate decision, not an oversight: it is what makes
 "previous performance" a stable input and what keeps a completed session
