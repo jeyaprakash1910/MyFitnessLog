@@ -36,6 +36,84 @@ This register holds debt that outlives a single task. Short-lived working items 
 | TD-013 | Live sync tests write into the production database | ✅ Resolved 2026-07-22 (M12 Phase 3) | — |
 | TD-014 | WorkoutExercise removal during a workout is not propagated to the backend | ✅ Resolved 2026-08-07 (ADR-0017 Stage 2) | - |
 | TD-015 | ViewModel test classes are intermittently flaky (~1 run in 4) | **Open - parked deliberately** | ADR-0017 Stage 3 should fix it first |
+| TD-016 | Backend suite fails in the working copy, passes elsewhere | **Open - contained** via `backend/scripts/run-tests.sh` | - |
+
+---
+
+## TD-016 - The backend test suite fails in the working copy and passes elsewhere
+
+Status: **Open - contained, cause unknown.** A workaround script exists and is the
+supported way to run the suite; the underlying cause was investigated at length
+and not found.
+
+Milestone identified: ADR-0016 (2026-08-06)
+Scheduled for: unscheduled. Reopen if the workaround ever stops working, or if the
+same symptom appears in another project on this machine.
+
+### Observation
+
+Running `mvn test` in `backend/` fails with ~77 errors. Running the identical
+commit anywhere else passes all 110.
+
+| Location | Result |
+|---|---|
+| `MyFitnessLog/backend` (the working copy) | ~77 errors, reproducible |
+| A fresh `git clone` | 110 pass |
+| A `git worktree` at the same commit | 110 pass |
+| A plain `cp -R` of the working copy to another path | 110 pass |
+| The working copy reached through a symlink | ~77 errors |
+
+Every failure is the same: the Spring context cannot start because a MapStruct
+mapper bean is missing. The class is present, compiled, annotated `@Component`,
+and the scanner logs it as an identified candidate component. It is then not
+available for injection, with no class-loading failure logged.
+
+The symlink row is the informative one. The path does not matter; the actual
+directory does.
+
+### Ruled out by measurement
+
+Application code, test code, JetBrains JBR vs Temurin JDK 21, JDK 26, stale
+`target/` (manual `rm -rf`, not just `mvn clean`), `.DS_Store` files, file
+permissions and ACLs, duplicate classes on the classpath, class-file contents,
+test ordering, Android Studio and its `fsnotifier`, Claude Code hooks,
+file-activated Maven profiles, the effective POM, and Surefire's forked JVM
+command line. The last three are byte-identical between a passing and a failing
+run, as is `diff -r` across the whole directory.
+
+Replacing every source file in the working copy with byte-identical copies from a
+fresh clone did **not** fix it.
+
+### Why it is contained rather than fixed
+
+The investigation exhausted every hypothesis available and produced a
+contradiction it could not resolve: identical bytes, identical configuration,
+different behaviour, determined by the directory itself. Continuing was open-ended
+with no expectation of a result.
+
+`backend/scripts/run-tests.sh` makes the workaround one command: it runs the suite
+at HEAD in a disposable worktree, which is a configuration known to pass, and
+cleans up afterwards. That restores a runnable backend suite, which is what
+actually mattered.
+
+**Production is unaffected.** Render builds from a fresh clone, which is the
+passing configuration.
+
+### Cost of the containment
+
+* The script tests **HEAD**, so uncommitted changes are not covered. It warns when
+  it sees any, but the shortest loop for backend work is now commit-then-test
+  rather than edit-then-test.
+* Each run pays a `clean` build in a fresh worktree, so it is slower than a warm
+  incremental `mvn test` would be.
+
+### If someone picks this up
+
+The one experiment not run was moving the working copy aside and cloning into the
+exact same absolute path. That would separate "something about this checkout" from
+"something about this directory on this filesystem", which is the last distinction
+the evidence leaves open. It requires relocating the working copy, which is why it
+was not attempted unprompted.
 
 ---
 
