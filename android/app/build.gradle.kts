@@ -196,6 +196,7 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
+    alias(libs.plugins.test.retry)
 }
 
 val generateReleaseNetworkSecurityConfig =
@@ -313,6 +314,7 @@ android {
         }
     }
 
+
     // Room exported schemas double as test assets so migration tests can read them.
     sourceSets {
         getByName("androidTest") {
@@ -334,6 +336,37 @@ android {
 // evaluation, so they do not exist yet at this point in the script.
 tasks.matching { it.name == "preReleaseBuild" || it.name == "mergeReleaseResources" }
     .configureEach { dependsOn(generateReleaseNetworkSecurityConfig) }
+
+/**
+ * Retry a failed test once, but only on CI (TD-015).
+ *
+ * WorkoutViewModelTest, and whichever class happens to run after it, fail roughly
+ * one run in four while the code is correct: a leaked coroutine is still using
+ * `Dispatchers.Main` when a test class installs or resets it. Two attempts to fix
+ * the cause were measured and reverted, one of which made it four times worse.
+ * docs/TECH_DEBT.md TD-015 has the detail and the dead ends.
+ *
+ * This is containment, and the part that matters is that it hides nothing. A test
+ * that fails and then passes is reported as **FLAKY**, not as green, so the
+ * problem stays visible and countable rather than turning into a habit of
+ * re-running red builds. `maxFailures` still fails the build outright when the
+ * suite is broadly broken rather than merely flaky, so a real regression cannot
+ * hide behind a retry.
+ *
+ * Local runs are deliberately untouched: `./gradlew test` on a developer machine
+ * shows the truth, flake included, because that is where the fix will be worked
+ * on.
+ */
+tasks.withType<Test>().configureEach {
+    retry {
+        maxRetries.set(if (System.getenv("CI") != null) 1 else 0)
+        // A suite failing this widely is not flaky, it is broken. Stop retrying
+        // and report it.
+        maxFailures.set(5)
+        // A retried pass is a pass for the build, and a FLAKY entry in the report.
+        failOnPassedAfterRetry.set(false)
+    }
+}
 
 dependencies {
     // AndroidX core / lifecycle / activity

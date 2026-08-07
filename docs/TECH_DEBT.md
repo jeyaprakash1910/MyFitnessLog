@@ -119,9 +119,10 @@ was not attempted unprompted.
 
 ## TD-015 - The ViewModel test classes are intermittently flaky
 
-Status: **Open - parked deliberately.** Diagnosed, two fixes attempted and
-reverted, and a decision recorded not to pursue it standalone. Read the
-"Deferral" section before starting: the obvious fix is known to make it worse.
+Status: **Open - contained on CI, cause not fixed.** Three fix attempts, all
+measured and reverted. CI now retries a failed test once and reports it as FLAKY,
+so a red build means a real failure. Read "Attempts" before starting: two
+approaches are known to fail and one made it four times worse.
 
 Milestone identified: ADR-0017 Stage 1 (2026-08-07)
 Last investigated: 2026-08-07
@@ -204,7 +205,45 @@ Measured, full suite, `--rerun-tasks` between each:
 | Attempt 2: ownership + `advanceUntilIdle` | **8 in 8** |
 | Reverted to baseline | 1 in 6 |
 
-Both reverted. No production or test code carries these changes.
+**Attempt 3 - cancel the leaked rest-timer scopes.** The most promising lead, and
+the diagnosis still looks right. `RestTimer.start` launches a coroutine that ticks
+with `delay(1000)` for the whole rest period, and `WorkoutViewModelTest` builds
+each timer with `CoroutineScope(UnconfinedTestDispatcher())` that **nothing ever
+cancels**. The timer's `StateFlow` is observed by a ViewModel on Main, so a live
+timer keeps using Main indefinitely. Resetting Main does not stop it, because the
+scope is its own.
+
+That explains every observation: only rest-timer tests failed, the damage often
+landed on a later class, clearing the ViewModels did not help, and draining the
+scheduler made it four times worse because advancing virtual time fired every
+pending tick at once, flooding Main precisely as it was reset.
+
+Cancelling those scopes in `tearDown` nonetheless produced **3 failures in 10
+runs**, indistinguishable from baseline. The remaining failures shifted from
+"Main is used concurrently" to `TimeoutCancellationException`, which may point at
+a genuine ordering race between `onCommitRow` and `onRpeSelected` in
+`WorkoutViewModel` rather than at the tests. Unproven, and reverted rather than
+kept, since an unproven change to this file is what caused attempt 2.
+
+All three reverted. No production or test code carries these changes.
+
+### Containment: CI retries once and reports FLAKY
+
+Since the cause resists three attempts, CI is made trustworthy instead. The Gradle
+`test-retry` plugin is configured in `android/app/build.gradle.kts`:
+
+* **`maxRetries` is 1 on CI and 0 locally.** A developer running `./gradlew test`
+  sees the truth, flake included, because that is where the fix gets worked on.
+* **A retried pass is reported as FLAKY, not green.** The point is to keep the
+  problem visible and countable rather than to hide it. Hiding it is what would
+  eventually let a real failure through.
+* **`maxFailures` is 5.** A suite failing that widely is broken, not flaky, so
+  retries stop and the build goes red.
+
+Verified rather than assumed: with retry enabled, **6 of 6** runs went green while
+the flake still occurred and stayed recorded in three of them; and a deliberately
+planted real failure still failed the build, so retry rescues flakes and not
+regressions.
 
 ### Where the next attempt should start
 

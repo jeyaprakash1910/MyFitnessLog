@@ -42,6 +42,9 @@ coroutinesTest = "1.9.0"
 hiltAndroidTesting = "2.53.1"
 robolectric = "4.14.1"
 
+# Test retry: reruns a failed test and reports it as flaky rather than red (TD-015)
+testRetry = "1.6.2"
+
 [libraries]
 # AndroidX core
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -109,3 +112,4 @@ kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "ko
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
+test-retry = { id = "org.gradle.test-retry", version.ref = "testRetry" }
