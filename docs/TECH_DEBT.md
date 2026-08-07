@@ -92,6 +92,53 @@ selection can be processed before the commit lands, the row would never complete
 and the wait would legitimately expire. That would be a real defect in workout
 logging surfacing as a flaky test, not a test-only problem.
 
+### Attempted fix, 2026-08-07: made it worse, reverted
+
+Worth recording in full, because the obvious remedy is the wrong one and the next
+attempt should not repeat it.
+
+**The earlier diagnosis above was wrong.** The stack trace shows the exception is
+thrown from `Dispatchers.resetMain()` inside the failing class's **own**
+`tearDown`, not from the next class's `setMain`. So this is not one class
+poisoning another; it is a single class still running something on Main at the
+moment it tries to reset it.
+
+Two changes were tried and both reverted:
+
+1. **Give the tests ownership of their ViewModels** (a `ViewModelStore`, cleared
+   in `tearDown` before `resetMain`) so `viewModelScope` is actually cancelled.
+   Sound in principle, and it did stabilise a two-class run. Across the full suite
+   it changed nothing measurable: 2 failures in 6 runs, against a baseline of
+   roughly 1 in 4.
+
+2. **Drain Main before resetting it**, by holding the `UnconfinedTestDispatcher`
+   and calling `scheduler.advanceUntilIdle()` after clearing. This made it
+   dramatically **worse**: 8 failures in 8 runs, up from 1 in 4. Cancelling the
+   scopes and draining the scheduler are themselves work dispatched on Main, which
+   is precisely what `resetMain`'s concurrency check objects to.
+
+Measured rates, full suite, `--rerun-tasks` each time:
+
+| Variant | Runs failing |
+|---|---|
+| Baseline | ~1 in 4 |
+| ViewModelStore ownership | 2 in 6 |
+| Ownership + `advanceUntilIdle` | **8 in 8** |
+| Reverted to baseline | 1 in 6 |
+
+### Where the next attempt should start
+
+"Cancel the scopes, then reset" does not work while an `UnconfinedTestDispatcher`
+is installed as Main, because the cleanup runs on the dispatcher being removed.
+The promising direction is therefore to stop needing cleanup at teardown at all:
+
+* These classes use `runBlocking` with an unconfined Main. Moving them to
+  `runTest` with a single `StandardTestDispatcher` shared as Main would give the
+  test explicit control of when work runs, so nothing is in flight at teardown.
+* That is a restructure of the affected test classes rather than a few lines, and
+  it touches workout logging's tests, so it deserves its own change rather than
+  being bolted onto an unrelated one.
+
 ### Impact
 
 Low today: the affected path works in the app and on the device. The risk is to
