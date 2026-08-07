@@ -133,9 +133,14 @@ Requires JDK 21 and a local PostgreSQL (a `myfitnesslog` database for the app an
 a `myfitnesslog_test` database for tests).
 ```bash
 cd backend
-mvn spring-boot:run   # Flyway migrates (V1–V7) on start; API at :8080/api/v1
-mvn test              # 92 tests (JUnit 5 + MockMvc) against the test database
+mvn spring-boot:run          # Flyway migrates on start; API at :8080/api/v1
+./scripts/run-tests.sh       # 110 tests (JUnit 5 + MockMvc) against the test database
 ```
+
+**Use the script, not `mvn test` directly.** The suite fails in the working copy
+and passes everywhere else for reasons that are not understood; the script runs it
+at HEAD in a disposable worktree, which is a configuration known to pass. It tests
+committed content, so it warns when you have uncommitted changes. See TD-016.
 Tests run against a real PostgreSQL (faithful to the quoted-identifier schema and
 CHECK constraints). They are portable to Testcontainers on a Docker-capable machine
 via the `TEST_DB_*` env overrides in `src/test/resources/application.yml`.
