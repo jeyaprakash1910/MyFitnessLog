@@ -363,10 +363,20 @@ All errors follow a consistent structure.
 |----------------|------------|-------------|
 | Validation failure | 400 Bad Request | Request validation failed. |
 | Malformed JSON request | 400 Bad Request | Request body could not be parsed. |
+| Malformed path or query value | 400 Bad Request | A value could not be converted to its declared type, typically a path id that is not a UUID. |
+| Missing required parameter | 400 Bad Request | A required query parameter was not supplied. |
 | Resource not found | 404 Not Found | Requested resource does not exist. |
+| No endpoint for the path | 404 Not Found | No handler is mapped to the path. Distinct from the row above: the resource type itself is unknown here, which is what a client sees when it calls a route an older deployment does not have. |
+| Method not supported | 405 Method Not Allowed | The path exists but not for this verb. The response carries an `Allow` header listing the verbs that are accepted. |
+| Unsupported media type | 415 Unsupported Media Type | The request body is in a format the endpoint does not accept. |
 | Business rule violation | 409 Conflict | Request violates a business rule. |
 | App update unavailable | 503 Service Unavailable | Updates are unconfigured or the artifact store is unreachable. |
 | Unexpected server error | 500 Internal Server Error | Unhandled server-side exception. |
+
+Every row above returns the standard error envelope. **A 500 means the server
+genuinely failed**: until 2026-08-07 the five client-side rows above were all
+reported as 500, which made a malformed request indistinguishable from a backend
+fault both to the caller and in the logs (TD-001).
 
 The backend must never expose:
 
@@ -386,9 +396,11 @@ Status	Usage
 200 OK	Successful retrieval/update
 201 Created	Resource created
 204 No Content	Successful deletion
-400 Bad Request	Validation failure
-404 Not Found	Resource not found
+400 Bad Request	Validation failure, or a malformed path/query value
+404 Not Found	Resource not found, or no endpoint mapped to the path
+405 Method Not Allowed	Path exists but not for this verb (includes an Allow header)
 409 Conflict	Business rule conflict
+415 Unsupported Media Type	Request body format not accepted
 500 Internal Server Error	Unexpected server error
 503 Service Unavailable	App updates unconfigured or artifact store unreachable
 

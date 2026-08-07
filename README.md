@@ -80,15 +80,20 @@ docs/      Product, architecture, database, API, sync, coding standards, ADRs
   and decimal precision is preserved from PostgreSQL `NUMERIC` to rendered text
   rather than being lost to JavaScript floats. Responsive from mobile to
   desktop with zero axe WCAG 2.1 A/AA violations.
-- **734 automated tests**, all three suites run on every push by CI: **491
-  Android** (484 JVM/Robolectric + 7 instrumented, verified identical on emulator
-  and physical hardware), **110 backend** (JUnit 5/MockMvc over real PostgreSQL,
-  incl. an end-to-end sync-graph idempotency proof), and **133 web** (Vitest +
-  React Testing Library). Nine of them drive the real stack against a running backend; they
-  skip unless one is named explicitly, and refuse to run against a backend that
-  does not declare itself disposable, so a test can never write to real data
-  (TD-013). Counting them, the suite is 734 tests; by default 725 run and those
-  nine skip.
+- **761 automated tests**, every one of them run on every push by CI: **491
+  Android** (484 JVM/Robolectric + 7 instrumented on an emulator, verified
+  identical on physical hardware), **137 backend** (JUnit 5/MockMvc over real
+  PostgreSQL, incl. an end-to-end sync-graph idempotency proof), and **133 web**
+  (Vitest + React Testing Library). Nine of them drive the real stack against a
+  running backend; they skip unless one is named explicitly, and refuse to run
+  against a backend that does not declare itself disposable, so a test can never
+  write to real data (TD-013). Counting them, the suite is 761 tests; by default
+  752 run and those nine skip.
+
+  The seven instrumented tests only began running automatically on 2026-08-07.
+  Six of them are Room migration tests, and until then nothing executed them,
+  which is how a migration with a wrong column type reached main and had to be
+  caught by hand.
 
   - Restore and refresh: a device with no data of its own rebuilds from the
     backend at launch, and thereafter reconciles after every sync pass, so a
@@ -133,7 +138,7 @@ a `myfitnesslog_test` database for tests).
 ```bash
 cd backend
 mvn spring-boot:run          # Flyway migrates on start; API at :8080/api/v1
-mvn test                     # 110 tests (JUnit 5 + MockMvc) against the test database
+mvn test                     # 137 tests (JUnit 5 + MockMvc) against the test database
 ```
 
 If you use VS Code with the Red Hat Java extension, keep

@@ -2,7 +2,7 @@
 
 Project: MyFitnessLog
 Version: 1.5
-Last Updated: August 7, 2026 (TD-016 resolved: VS Code Java autobuild was overwriting Maven's output; TD-014 resolved for ADR-0017 Stage 2; TD-015 opened and parked)
+Last Updated: August 7, 2026 (TD-001 and TD-016 resolved; TD-014 resolved for ADR-0017 Stage 2; TD-015 opened and parked)
 
 This document records known, accepted technical debt: deliberate limitations that are not defects in the current milestone but must be addressed in a later milestone. Each item states the observation, why it is currently acceptable, the recommended future implementation, the documentation that must change first, and when it is scheduled.
 
@@ -21,7 +21,7 @@ This register holds debt that outlives a single task. Short-lived working items 
 
 | ID | Item | Status | Blocks |
 |---|---|---|---|
-| TD-001 | 405 returned as 500 | Open — deferred | — |
+| TD-001 | Framework exceptions returned 500 (404/405/400/415) | ✅ Resolved 2026-08-07 | - |
 | TD-002 | Category filtering in service, not repository | Open — note only | — |
 | TD-003 | History endpoint scans the whole table | ✅ Resolved 2026-07-22 | — |
 | TD-004 | WorkoutSet deletions never reach the backend | ✅ Resolved 2026-07-22 (ADR-0007) | — |
@@ -332,67 +332,59 @@ and it is also what makes this fix worth doing.
 
 ---
 
-## TD-001 — HTTP method-not-supported returns 500 instead of 405
+## TD-001 - Framework exceptions returned 500 instead of their proper status
 
-Status: Open — deferred
+Status: **Resolved 2026-08-07.**
 
 Milestone identified: Backend Foundation (Milestone 1)
-Scheduled for: Exercise Library (Milestone 3, first real CRUD endpoints)
+Resolved: 2026-08-07
 
-### Observation
+### What was wrong
 
-During Milestone 1 runtime verification, sending an unsupported HTTP method to a mapped endpoint (`POST /api/v1/health`, which is GET-only) returned:
+The generic `@ExceptionHandler(Exception.class)` in `GlobalExceptionHandler`
+caught exceptions Spring MVC raises before a controller is reached and mapped all
+of them to **500 Internal Server Error**, logged at ERROR as "An unexpected error
+occurred."
 
-* HTTP status: 500 Internal Server Error
-* Body: the documented error envelope with message "An unexpected error occurred."
+That is wrong twice over. The caller is told the server broke when their request
+was malformed, and ordinary client mistakes appear in monitoring as backend
+faults, which is the noise that hides a real incident.
 
-The generic `@ExceptionHandler(Exception.class)` in GlobalExceptionHandler catches Spring MVC's `HttpRequestMethodNotSupportedException` and maps it to 500.
+### What it cost
 
-### Observed again in production, 6 Aug 2026
+Two measured incidents, not a theoretical concern:
 
-While bringing up in-app updates (ADR-0016), a request to
-`GET /api/v1/app/latest-version` issued *during* a Render deploy hit the previous
-container, where that route did not yet exist. Spring raised
-`NoResourceFoundException` and the generic handler turned it into:
+* **6 Aug 2026.** A request to `GET /api/v1/app/latest-version` during a Render
+  deploy reached the previous container, where the route did not yet exist.
+  Spring raised `NoResourceFoundException` and the handler returned 500. The
+  deploy was investigated as a code defect until the timestamps showed the old
+  container had served it. A 404 would have pointed at the deploy window
+  immediately.
+* **7 Aug 2026.** The first test ever written for `GET /api/v1/exercises/{id}`
+  sent a malformed UUID and got a 500. That is how this was picked up again.
 
-* HTTP status: 500 Internal Server Error
-* Body: "An unexpected error occurred."
+### The fix
 
-The correct answer was **404**. This cost real debugging time: a 500 reads as "the
-new code is broken", so the deploy was investigated as a code defect before the
-timestamps showed the old container had served it. A 404 would have said "this
-route does not exist here" and pointed straight at the deploy window.
+Explicit handlers for the framework exceptions, each returning the status the
+HTTP spec calls for:
 
-This upgrades TD-001 from a theoretical concern about masked framework
-exceptions to one with a measured cost, and widens it beyond 405: the
-no-handler 404 case is the one that actually bit.
+| Exception | Was | Now |
+|---|---|---|
+| `NoResourceFoundException` (unmapped path) | 500 | **404**, logged at WARN |
+| `HttpRequestMethodNotSupportedException` | 500 | **405**, with an `Allow` header |
+| `MethodArgumentTypeMismatchException` (bad UUID) | 500 | **400** |
+| `HttpMediaTypeNotSupportedException` | 500 | **415** |
+| `MissingServletRequestParameterException` | 500 | **400** |
 
-### Why this is currently acceptable (not a Milestone 1 defect)
+The catch-all remains for genuinely unexpected exceptions, which is what it was
+always for.
 
-* API_SPECIFICATION.md does not currently define HTTP 405 handling.
-* Milestone 1 was scoped to only the approved exception handlers:
-  * MethodArgumentNotValidException
-  * HttpMessageNotReadableException
-  * IllegalArgumentException
-  * Generic Exception
-* No functional CRUD endpoints exist yet, so the condition is not reachable in normal Milestone 1 usage.
+### Covered by
 
-### Impact
+`FrameworkErrorContractTest`, nine tests. It asserts the status, the error
+envelope and the `Allow` header, and includes a case pinning the exercise search
+parameter as optional so the missing-parameter handler cannot start rejecting it.
 
-* A client error (wrong method) is reported as a server error (5xx), which is semantically misleading for clients and monitoring.
-* The same masking applies to other framework-raised MVC conditions (for example 404 no-handler, 415 unsupported media type, 406 not acceptable), which would also surface as 500.
-
-### Recommended future implementation
-
-* Make GlobalExceptionHandler extend Spring's `ResponseEntityExceptionHandler` so framework MVC exceptions receive their correct HTTP status.
-* Override the relevant handler(s) so these responses still use the documented error envelope (timestamp, status, error, message, path).
-* Ensure `HttpRequestMethodNotSupportedException` returns 405, while the generic `Exception` handler continues to return 500 only for genuinely unexpected failures.
-
-### Documentation that must change first (documentation is the source of truth)
-
-* API_SPECIFICATION.md — Section 10 (HTTP Status Codes): add 405 Method Not Allowed (and clarify handling of other framework 4xx conditions) and confirm they return the standard error envelope.
-
-Implementation must not begin until the documentation above is updated and approved.
 
 ---
 

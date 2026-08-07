@@ -46,19 +46,55 @@ cd backend
 mvn test
 ```
 Backend tests run against a real PostgreSQL, faithful to the quoted-identifier schema
-and CHECK constraints.
+and CHECK constraints. If yours is not on the default port 5432, export
+`TEST_DB_URL`, `TEST_DB_USERNAME` and `TEST_DB_PASSWORD` first, or the run fails with
+`Connection to localhost:5432 refused` (the README's backend section has the exact
+values for this machine, where PostgreSQL 17 is on 5433).
+
+If you use VS Code with the Red Hat Java extension, leave
+`"java.autobuild.enabled": false` set in `.vscode/settings.json`. With autobuild on,
+the language server recompiles MapStruct's generated mappers into Maven's
+`target/classes` a second after each build and roughly 77 tests fail with a missing
+mapper bean. That was TD-016.
 
 **Android** (JDK 17; Android SDK):
 ```bash
 cd android
 ./gradlew testDebugUnitTest      # JVM/Robolectric unit tests
+./gradlew lintDebug              # Android lint; CI fails on errors
+ANDROID_SERIAL=emulator-5554 ./gradlew connectedDebugAndroidTest   # instrumented
 ```
+The instrumented tests are emulator-only by construction; see
+[Physical-device guard](#physical-device-guard-android-instrumented-tests).
 
 **Web** (Node 20+):
 ```bash
 cd web
 npm run test                     # Vitest + React Testing Library
+npm run typecheck && npm run lint && npm run format:check
 ```
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every push to `main` and every pull request. Four
+jobs, in parallel:
+
+| Job | What it runs |
+|---|---|
+| Android unit tests | `testDebugUnitTest`, release-variant compile, `lintDebug` |
+| Android instrumented tests | `connectedDebugAndroidTest` on an API 30 emulator |
+| Backend tests | `mvn clean test` against a PostgreSQL 17 service container |
+| Web | typecheck, lint, format check, Vitest |
+
+The instrumented job exists because of a specific gap. Six of the seven instrumented
+tests cover Room migrations, and until 2026-08-07 nothing ran them: they live in
+`androidTest/`, which needs a device, and no job could provide one. In that window a
+migration with a wrong column type reached `main` and was caught by hand. Migration
+defects are the worst thing this project can ship, because synchronisation is one-way
+(ADR-0003) and a corrupted local database cannot be rebuilt from the backend.
+
+A failed Android unit test is retried once and reported as **FLAKY** rather than green,
+which contains TD-015 without hiding it. Anything else red is a real failure.
 
 ## Integration and live-stack tests
 
