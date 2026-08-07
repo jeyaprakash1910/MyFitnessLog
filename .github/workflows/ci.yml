@@ -1,0 +1,118 @@
+name: CI
+
+# Runs the Android and web test suites on every push and pull request.
+#
+# Until now nothing ran the tests automatically: the only workflow here was the
+# nightly database backup, so the suites ran when somebody remembered. That is
+# how a wrong column type in a Room migration reached main on 2026-08-07, caught
+# by hand rather than by anything systematic.
+#
+# The backend suite is deliberately absent. It needs a live PostgreSQL, and it
+# also fails in a working copy for reasons nobody has explained (TD-016), so
+# adding it here would mean debugging that mystery inside CI. Run it locally with
+# backend/scripts/run-tests.sh. Adding it is tracked as future work in that entry.
+#
+# Note on the Android suite: it is intermittently flaky (TD-015), failing roughly
+# one run in four while the code is fine. Expect occasional red builds that pass
+# on re-run, and check the failure against the fingerprint in TD-015 before
+# assuming it is real. That noise is the trigger to finally fix TD-015.
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+  workflow_dispatch: {}
+
+# A newer push makes an in-flight run obsolete, except on main where every commit
+# should get its own verdict.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    name: Android unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      # JDK 17: app/build.gradle.kts pins jvmToolchain(17) and both source and
+      # target compatibility. This is not the backend's Java 21.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # No local.properties in CI. That is fine and intentional: apiBaseUrl falls
+      # back to the emulator loopback and apiKey to empty, which is exactly the
+      # configuration the unit tests expect. Only a signed release build needs
+      # real values, and CI does not produce one.
+      - name: Unit tests
+        working-directory: android
+        run: ./gradlew :app:testDebugUnitTest --console=plain
+
+      # Compiling the release variant catches what a debug-only build misses:
+      # the generated network security config, the release manifest merge, and
+      # resource shrinking rules. It stops short of packaging, which would need
+      # the signing keystore.
+      - name: Release variant compiles
+        working-directory: android
+        run: ./gradlew :app:compileReleaseKotlin --console=plain
+
+      - name: Upload test report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-test-report
+          path: android/app/build/reports/tests/testDebugUnitTest/
+          retention-days: 7
+
+  web:
+    name: Web tests, types and lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      # package.json declares engines.node >= 20.19.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      # `npm ci` rather than `npm install`: it installs exactly the lockfile and
+      # fails if the two have drifted, so CI cannot silently test a different
+      # dependency tree than a developer has.
+      - name: Install
+        working-directory: web
+        run: npm ci
+
+      # Each step runs even if an earlier one failed, so a single push reports
+      # every problem at once instead of one per re-run.
+      - name: Types
+        working-directory: web
+        run: npm run typecheck
+
+      - name: Lint
+        if: '!cancelled()'
+        working-directory: web
+        run: npm run lint
+
+      - name: Format
+        if: '!cancelled()'
+        working-directory: web
+        run: npm run format:check
+
+      # The four live-backend tests skip on their own when no backend is named,
+      # so this needs no special handling (TD-013).
+      - name: Tests
+        if: '!cancelled()'
+        working-directory: web
+        run: npm test
