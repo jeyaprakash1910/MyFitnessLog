@@ -7,10 +7,13 @@ import com.myfitnesslog.core.sync.engine.SyncEngine
 import com.myfitnesslog.core.sync.engine.SyncEngineImpl
 import com.myfitnesslog.core.sync.engine.SyncRecovery
 import com.myfitnesslog.core.sync.engine.SyncRecoveryImpl
+import com.myfitnesslog.core.sync.restore.RefreshManager
+import com.myfitnesslog.core.sync.restore.RefreshManagerImpl
 import com.myfitnesslog.core.sync.restore.RestoreManager
 import com.myfitnesslog.core.sync.restore.RestoreManagerImpl
 import com.myfitnesslog.core.sync.source.RoutineExerciseSyncSource
 import com.myfitnesslog.core.sync.source.RoutineSyncSource
+import com.myfitnesslog.core.sync.source.WorkoutExerciseDeletionSyncSource
 import com.myfitnesslog.core.sync.source.WorkoutExerciseSyncSource
 import com.myfitnesslog.core.sync.source.WorkoutSessionSyncSource
 import com.myfitnesslog.core.sync.source.WorkoutSetDeletionSyncSource
@@ -59,6 +62,14 @@ abstract class SyncModule {
     abstract fun bindRestoreManager(impl: RestoreManagerImpl): RestoreManager
 
     /**
+     * Stage 2 of the same read path: periodic reconciliation rather than a
+     * one-time rebuild (ADR-0017).
+     */
+    @Binds
+    @Singleton
+    abstract fun bindRefreshManager(impl: RefreshManagerImpl): RefreshManager
+
+    /**
      * The data layer's narrow view of the same singleton: repositories can ask
      * for a sync but cannot reach the periodic schedule.
      */
@@ -91,4 +102,9 @@ abstract class SyncModule {
     abstract fun bindWorkoutSetDeletionSyncSource(
         impl: WorkoutRepositoryImpl,
     ): WorkoutSetDeletionSyncSource
+
+    @Binds
+    abstract fun bindWorkoutExerciseDeletionSyncSource(
+        impl: WorkoutRepositoryImpl,
+    ): WorkoutExerciseDeletionSyncSource
 }

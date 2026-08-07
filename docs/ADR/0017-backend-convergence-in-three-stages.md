@@ -1,7 +1,7 @@
 # ADR-0017 - The backend becomes readable, in three stages
 
 Date: 2026-08-07
-Status: Accepted. Stage 1 implemented 2026-08-07; Stages 2 and 3 are committed in
+Status: Accepted. Stages 1 and 2 implemented 2026-08-07; Stage 3 is committed in
 shape but not in detail.
 Related: ADR-0001 (history is the source of truth), ADR-0002 (Room is the Android
 source of truth), ADR-0003 (backend is the system source of truth), ADR-0004
@@ -128,6 +128,23 @@ outbox still owns are left untouched until they drain, so a refresh can never
 discard work that has not been uploaded yet. This is what finally makes ADR-0003
 true in practice, and it is what lets a second device see the first device's
 history.
+
+As implemented, that rule needed two guards rather than one, because "pending"
+turned out to have two meanings:
+
+- **Deferral.** If anything at all is queued, including an unreplayed deletion
+  tombstone, the whole refresh is abandoned rather than partially applied. A
+  backend known to be behind is not worth reconciling against, and reconciling
+  against an incomplete backend could delete rows that merely failed to arrive.
+- **A per-row check.** The pending queries match `PENDING` and `FAILED` only, so a
+  row *currently uploading* (`SYNCING`) is invisible to them. Without the per-row
+  guard, a refresh starting mid-upload would overwrite that row with the server's
+  older copy.
+
+Removals are reconciled only inside a scope the backend promises to enumerate
+completely. Completed sessions qualify; in-progress and discarded ones do not,
+because the history endpoint omits them by design and reading that absence as a
+deletion would wipe the workout the user is currently performing.
 
 **Stage 3 - Edit.** Allow completed workouts to be edited, and define what happens
 when two copies disagree.

@@ -23,6 +23,7 @@ import com.myfitnesslog.feature.workout.data.local.WorkoutSessionDao
 import com.myfitnesslog.feature.workout.data.local.WorkoutSessionEntity
 import com.myfitnesslog.feature.workout.data.local.WorkoutSetDao
 import com.myfitnesslog.feature.workout.data.local.WorkoutSetEntity
+import com.myfitnesslog.feature.workout.data.local.WorkoutExerciseTombstoneEntity
 import com.myfitnesslog.feature.workout.data.local.WorkoutSetTombstoneEntity
 
 /**
@@ -60,8 +61,9 @@ import com.myfitnesslog.feature.workout.data.local.WorkoutSetTombstoneEntity
         WorkoutExerciseEntity::class,
         WorkoutSetEntity::class,
         WorkoutSetTombstoneEntity::class,
+        WorkoutExerciseTombstoneEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 @TypeConverters(

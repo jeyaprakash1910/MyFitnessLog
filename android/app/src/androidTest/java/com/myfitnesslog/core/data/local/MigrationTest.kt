@@ -263,6 +263,38 @@ class MigrationTest {
      * `Migration`, this fails, which is exactly the point.
      */
     @Test
+    fun migration5To6AddsExerciseTombstonesAndKeepsLoggedWork() {
+        val sessionId = "40000000-0000-0000-0000-000000000001"
+
+        helper.createDatabase(TEST_DB, 5).use { db ->
+            db.execSQL(
+                "INSERT INTO workout_session " +
+                    "(id, routineId, status, startedAt, endedAt, notes, createdAt, updatedAt, syncStatus) " +
+                    "VALUES ('$sessionId', NULL, 'IN_PROGRESS', 1, NULL, NULL, 1, 1, 'SYNCED')",
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, 6, true, MIGRATION_5_6).use { db ->
+            // The new table exists and accepts a tombstone.
+            db.execSQL(
+                "INSERT INTO workout_exercise_tombstone " +
+                    "(workoutExerciseId, workoutSessionId, deletedAt) " +
+                    "VALUES ('40000000-0000-0000-0000-000000000002', '$sessionId', 5)",
+            )
+            db.query("SELECT COUNT(*) FROM workout_exercise_tombstone").use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals(1, c.getInt(0))
+            }
+
+            // Additive means additive: nothing recorded before the upgrade is lost.
+            db.query("SELECT id FROM workout_session").use { c ->
+                assertTrue("The existing session did not survive the migration.", c.moveToFirst())
+                assertEquals(sessionId, c.getString(0))
+            }
+        }
+    }
+
+    @Test
     fun everyVersionAboveTheBaselineHasAMigration() {
         val currentVersion = currentSchemaVersion()
 

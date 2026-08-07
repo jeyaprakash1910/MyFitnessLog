@@ -9,6 +9,7 @@ import com.myfitnesslog.core.data.remote.createApi
 import com.myfitnesslog.core.sync.engine.SyncEngineImpl
 import com.myfitnesslog.core.sync.engine.SyncRecoveryImpl
 import com.myfitnesslog.core.sync.model.SyncResult
+import com.myfitnesslog.core.sync.testing.FakeWorkoutExerciseDeletionSyncSource
 import com.myfitnesslog.core.sync.testing.RecordingSyncTrigger
 import com.myfitnesslog.feature.exercise.data.local.ExerciseCategoryEntity
 import com.myfitnesslog.feature.exercise.data.local.ExerciseEntity
@@ -147,6 +148,7 @@ class SyncEndToEndTest {
             workoutExerciseSource = workoutRepository,
             setSource = workoutRepository,
             deletionSource = workoutRepository,
+            exerciseDeletionSource = FakeWorkoutExerciseDeletionSyncSource(),
             routineApi = server.createApi<RoutineApi>(),
             sessionApi = server.createApi<WorkoutSessionApi>(),
             logApi = server.createApi<WorkoutLogApi>(),
@@ -430,6 +432,7 @@ class SyncEndToEndTest {
             workoutExerciseSource = workoutRepository,
             setSource = workoutRepository,
             deletionSource = workoutRepository,
+            exerciseDeletionSource = FakeWorkoutExerciseDeletionSyncSource(),
             routineApi = server.createApi<RoutineApi>(),
             sessionApi = server.createApi<WorkoutSessionApi>(),
             logApi = server.createApi<WorkoutLogApi>(),

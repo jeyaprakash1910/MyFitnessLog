@@ -7,6 +7,7 @@ import com.myfitnesslog.core.data.local.SetCategory
 import com.myfitnesslog.core.data.local.SyncStatus
 import com.myfitnesslog.core.sync.engine.SyncEngineImpl
 import com.myfitnesslog.core.sync.model.SyncResult
+import com.myfitnesslog.core.sync.testing.FakeWorkoutExerciseDeletionSyncSource
 import com.myfitnesslog.core.sync.testing.RecordingSyncTrigger
 import com.myfitnesslog.feature.exercise.data.local.ExerciseCategoryEntity
 import com.myfitnesslog.feature.exercise.data.local.ExerciseEntity
@@ -196,6 +197,7 @@ class LiveBackendSyncTest {
             workoutExerciseSource = workoutRepository,
             setSource = workoutRepository,
             deletionSource = workoutRepository,
+            exerciseDeletionSource = FakeWorkoutExerciseDeletionSyncSource(),
             routineApi = retrofit.create(RoutineApi::class.java),
             sessionApi = retrofit.create(WorkoutSessionApi::class.java),
             logApi = retrofit.create(WorkoutLogApi::class.java),

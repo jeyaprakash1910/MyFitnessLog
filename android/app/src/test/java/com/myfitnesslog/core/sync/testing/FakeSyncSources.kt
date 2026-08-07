@@ -5,6 +5,7 @@ import com.myfitnesslog.core.sync.source.RoutineExerciseSyncSource
 import com.myfitnesslog.core.sync.source.RoutineSyncSource
 import com.myfitnesslog.core.sync.source.WorkoutExerciseSyncSource
 import com.myfitnesslog.core.sync.source.WorkoutSessionSyncSource
+import com.myfitnesslog.core.sync.source.WorkoutExerciseDeletionSyncSource
 import com.myfitnesslog.core.sync.source.WorkoutSetDeletionSyncSource
 import com.myfitnesslog.core.sync.source.WorkoutSetSyncSource
 import com.myfitnesslog.feature.routine.data.local.RoutineEntity
@@ -12,6 +13,7 @@ import com.myfitnesslog.feature.routine.data.local.RoutineExerciseEntity
 import com.myfitnesslog.feature.workout.data.local.PendingWorkoutSet
 import com.myfitnesslog.feature.workout.data.local.WorkoutExerciseEntity
 import com.myfitnesslog.feature.workout.data.local.WorkoutSessionEntity
+import com.myfitnesslog.feature.workout.data.local.WorkoutExerciseTombstoneEntity
 import com.myfitnesslog.feature.workout.data.local.WorkoutSetTombstoneEntity
 import java.util.UUID
 
@@ -132,5 +134,18 @@ class FakeWorkoutSetDeletionSyncSource(
 
     override suspend fun clearWorkoutSetDeletion(workoutSetId: UUID) {
         cleared += workoutSetId
+    }
+}
+
+class FakeWorkoutExerciseDeletionSyncSource(
+    var pending: List<WorkoutExerciseTombstoneEntity> = emptyList(),
+) : WorkoutExerciseDeletionSyncSource {
+    val cleared = mutableListOf<UUID>()
+
+    override suspend fun getPendingWorkoutExerciseDeletions(): List<WorkoutExerciseTombstoneEntity> =
+        pending
+
+    override suspend fun clearWorkoutExerciseDeletion(workoutExerciseId: UUID) {
+        cleared += workoutExerciseId
     }
 }

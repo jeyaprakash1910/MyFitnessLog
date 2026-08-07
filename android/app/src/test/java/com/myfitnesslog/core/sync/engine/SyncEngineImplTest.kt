@@ -10,6 +10,7 @@ import com.myfitnesslog.core.sync.testing.FakeRoutineExerciseSyncSource
 import com.myfitnesslog.core.sync.testing.FakeRoutineSyncSource
 import com.myfitnesslog.core.sync.testing.FakeWorkoutExerciseSyncSource
 import com.myfitnesslog.core.sync.testing.FakeWorkoutSessionSyncSource
+import com.myfitnesslog.core.sync.testing.FakeWorkoutExerciseDeletionSyncSource
 import com.myfitnesslog.core.sync.testing.FakeWorkoutSetDeletionSyncSource
 import com.myfitnesslog.core.sync.testing.FakeWorkoutSetSyncSource
 import com.myfitnesslog.core.sync.testing.SyncEntityFixtures
@@ -27,7 +28,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import java.time.Instant
 import java.util.UUID
+import com.myfitnesslog.feature.workout.data.local.WorkoutExerciseTombstoneEntity
+import org.junit.Assert.assertFalse
 
 /**
  * Behaviour tests for [SyncEngineImpl].
@@ -52,6 +56,7 @@ class SyncEngineImplTest {
     private val workoutExerciseSource = FakeWorkoutExerciseSyncSource()
     private val setSource = FakeWorkoutSetSyncSource()
     private val deletionSource = FakeWorkoutSetDeletionSyncSource()
+    private val exerciseDeletionSource = FakeWorkoutExerciseDeletionSyncSource()
 
     /** Every path that was requested, in order — the ordering contract. */
     private val requestedPaths = mutableListOf<String>()
@@ -109,6 +114,7 @@ class SyncEngineImplTest {
             workoutExerciseSource = workoutExerciseSource,
             setSource = setSource,
             deletionSource = deletionSource,
+            exerciseDeletionSource = exerciseDeletionSource,
             routineApi = server.createApi<RoutineApi>(),
             sessionApi = server.createApi<WorkoutSessionApi>(),
             logApi = server.createApi<WorkoutLogApi>(),
@@ -645,6 +651,105 @@ class SyncEngineImplTest {
             requestedPaths.toString(),
             requestedPaths.contains("DELETE /api/v1/routine-exercises/$childId"),
         )
+    }
+
+    // ---- Exercise deletions (TD-014) -------------------------------------
+
+    @Test
+    fun `an exercise deletion is sent after its sets are removed and before sealing`() = runTest {
+        // The ordering is what makes this work at all. The backend refuses to
+        // remove an exercise that still has sets, so the set deletions must land
+        // first; and it refuses every write to a sealed session, so both must land
+        // before the transition. Getting either wrong leaves the exercise on the
+        // backend, which is the whole of TD-014.
+        val sessionId = UUID.randomUUID()
+        val deletedExerciseId = UUID.randomUUID()
+        val deletedSetId = UUID.randomUUID()
+
+        sessionSource.pending = listOf(SyncEntityFixtures.session(id = sessionId, routineId = null))
+        deletionSource.pending = listOf(
+            SyncEntityFixtures.setTombstone(
+                workoutSetId = deletedSetId,
+                workoutExerciseId = deletedExerciseId,
+                sessionId = sessionId,
+            ),
+        )
+        exerciseDeletionSource.pending = listOf(
+            WorkoutExerciseTombstoneEntity(
+                workoutExerciseId = deletedExerciseId,
+                workoutSessionId = sessionId,
+                deletedAt = Instant.parse("2026-08-07T10:00:00Z"),
+            ),
+        )
+
+        val result = engine.sync()
+
+        assertEquals(
+            listOf(
+                "POST /api/v1/workout-sessions",
+                "DELETE /api/v1/workout-sets/$deletedSetId",
+                "DELETE /api/v1/workout-exercises/$deletedExerciseId",
+                "PUT /api/v1/workout-sessions/$sessionId/complete",
+            ),
+            requestedPaths,
+        )
+        assertEquals(listOf(deletedExerciseId), exerciseDeletionSource.cleared)
+        assertTrue(result.toString(), result is SyncResult.Success)
+    }
+
+    @Test
+    fun `a retryable exercise-deletion failure keeps the tombstone and blocks sealing`() = runTest {
+        // Sealing the session while an exercise is still pending removal would
+        // strand it on the backend permanently: a sealed session rejects every
+        // later write, so the deletion could never be replayed.
+        val sessionId = UUID.randomUUID()
+        val deletedExerciseId = UUID.randomUUID()
+
+        sessionSource.pending = listOf(SyncEntityFixtures.session(id = sessionId, routineId = null))
+        exerciseDeletionSource.pending = listOf(
+            WorkoutExerciseTombstoneEntity(
+                workoutExerciseId = deletedExerciseId,
+                workoutSessionId = sessionId,
+                deletedAt = Instant.parse("2026-08-07T10:00:00Z"),
+            ),
+        )
+        overrides["/api/v1/workout-exercises/$deletedExerciseId"] =
+            MockResponse().setResponseCode(500)
+
+        engine.sync()
+
+        assertTrue(
+            "tombstone must survive a retryable failure",
+            exerciseDeletionSource.cleared.isEmpty(),
+        )
+        assertFalse(
+            "session must not be sealed while a deletion is outstanding",
+            requestedPaths.any { it.endsWith("/complete") },
+        )
+    }
+
+    @Test
+    fun `a rejected exercise deletion drops the tombstone instead of retrying forever`() = runTest {
+        // A 4xx means an unchanged retry fails identically. Keeping the tombstone
+        // would re-send the same doomed request on every pass for the life of the
+        // install.
+        val sessionId = UUID.randomUUID()
+        val deletedExerciseId = UUID.randomUUID()
+
+        sessionSource.pending = listOf(SyncEntityFixtures.session(id = sessionId, routineId = null))
+        exerciseDeletionSource.pending = listOf(
+            WorkoutExerciseTombstoneEntity(
+                workoutExerciseId = deletedExerciseId,
+                workoutSessionId = sessionId,
+                deletedAt = Instant.parse("2026-08-07T10:00:00Z"),
+            ),
+        )
+        overrides["/api/v1/workout-exercises/$deletedExerciseId"] =
+            MockResponse().setResponseCode(400)
+
+        engine.sync()
+
+        assertEquals(listOf(deletedExerciseId), exerciseDeletionSource.cleared)
     }
 
     // ---- Set deletions (ADR-0007) ----------------------------------------

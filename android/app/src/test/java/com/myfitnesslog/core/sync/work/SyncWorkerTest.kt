@@ -7,6 +7,8 @@ import androidx.work.WorkerParameters
 import androidx.work.testing.TestListenableWorkerBuilder
 import com.myfitnesslog.core.sync.engine.SyncEngine
 import com.myfitnesslog.core.sync.engine.SyncRecovery
+import com.myfitnesslog.core.sync.restore.RefreshManager
+import com.myfitnesslog.core.sync.restore.RefreshOutcome
 import com.myfitnesslog.core.sync.model.SyncEntityType
 import com.myfitnesslog.core.sync.model.SyncFailure
 import com.myfitnesslog.core.sync.model.SyncFailureReason
@@ -74,6 +76,12 @@ class SyncWorkerTest {
                             override suspend fun recoverStaleSyncing(): Int {
                                 callOrder += "recover"
                                 return recovery.recoverStaleSyncing()
+                            }
+                        },
+                        refreshManager = object : RefreshManager {
+                            override suspend fun refresh(): RefreshOutcome {
+                                callOrder += "refresh"
+                                return RefreshOutcome.Deferred
                             }
                         },
                     )
@@ -167,7 +175,7 @@ class SyncWorkerTest {
 
         buildWorker().doWork()
 
-        assertEquals(listOf("recover", "sync"), callOrder)
+        assertEquals(listOf("recover", "sync", "refresh"), callOrder)
         assertEquals(1, recovery.callCount)
         assertEquals(1, engine.callCount)
     }
@@ -188,7 +196,7 @@ class SyncWorkerTest {
 
         val result = buildWorker().doWork()
 
-        assertEquals(listOf("recover", "sync"), callOrder)
+        assertEquals(listOf("recover", "sync", "refresh"), callOrder)
         assertEquals(ListenableWorker.Result.success(), result)
     }
 

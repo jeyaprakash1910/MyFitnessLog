@@ -6,6 +6,7 @@ import com.myfitnesslog.feature.routine.data.local.RoutineExerciseEntity
 import com.myfitnesslog.feature.workout.data.local.PendingWorkoutSet
 import com.myfitnesslog.feature.workout.data.local.WorkoutExerciseEntity
 import com.myfitnesslog.feature.workout.data.local.WorkoutSessionEntity
+import com.myfitnesslog.feature.workout.data.local.WorkoutExerciseTombstoneEntity
 import com.myfitnesslog.feature.workout.data.local.WorkoutSetTombstoneEntity
 import java.util.UUID
 
@@ -82,6 +83,20 @@ interface WorkoutSetSyncSource {
  * removed. There is no status to set — [clearWorkoutSetDeletion] is the only
  * terminal state.
  */
+/**
+ * Workout-exercise removals awaiting replay to the backend (TD-014).
+ *
+ * Separate from [WorkoutExerciseSyncSource] because a deletion is not an upload of
+ * a row: the row is gone, and all that remains is the instruction to remove it
+ * remotely.
+ */
+interface WorkoutExerciseDeletionSyncSource {
+    suspend fun getPendingWorkoutExerciseDeletions(): List<WorkoutExerciseTombstoneEntity>
+
+    /** Drops a tombstone once its deletion has been settled with the backend. */
+    suspend fun clearWorkoutExerciseDeletion(workoutExerciseId: UUID)
+}
+
 interface WorkoutSetDeletionSyncSource {
     suspend fun getPendingWorkoutSetDeletions(): List<WorkoutSetTombstoneEntity>
 
