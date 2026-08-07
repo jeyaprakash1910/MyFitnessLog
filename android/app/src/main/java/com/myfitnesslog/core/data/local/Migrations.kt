@@ -19,8 +19,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * Removing it means a version bump with no matching migration **throws at
  * startup** instead. That is the intended trade: a loud, recoverable failure in
  * development beats a silent, permanent one on someone's phone. `MigrationTest`
- * is what turns that runtime failure into a failing test first — and since this
- * repository has no CI, that test is the only thing enforcing the policy.
+ * is what turns that runtime failure into a failing test first, and that test is
+ * the only thing enforcing the policy. It runs on an emulator in CI on every
+ * push; before 2026-08-07 nothing ran it at all, which is how a migration with a
+ * wrong column type reached main.
  *
  * ## Why the list starts at 3
  *

@@ -15,7 +15,8 @@ This register holds debt that outlives a single task. Short-lived working items 
 > rather than an oversight. Before touching it, read TD-015 in full: it records
 > which approach is already known to fail, and how to tell this flake apart from a
 > real test failure. The scheduled moment to fix it is the **first step of
-> ADR-0017 Stage 3**, or whenever CI is introduced.
+> ADR-0017 Stage 3**. CI now exists and contains this without hiding it: a failed
+> test is retried once and reported as FLAKY.
 
 ### Index
 
@@ -306,9 +307,11 @@ distinguish a fix from luck at a 1-in-4 base rate.
 * **The fix is expensive and demonstrably risky.** It touches workout-logging test
   files, the most important code in the app, and the first attempt made things
   four times worse.
-* **Nothing runs these tests automatically.** There is no CI workflow; the only
-  GitHub Action is the nightly database backup. The flake therefore costs a human
-  a re-run occasionally, not a blocked pipeline.
+* **CI contains it without hiding it.** Since 2026-08-07 the suite runs on every
+  push, and a failed test is retried once and reported as **FLAKY** rather than
+  green. So the flake costs a re-run inside the job rather than a blocked
+  pipeline, and stays visible and countable. (This bullet previously read
+  "nothing runs these tests automatically", which was true when it was written.)
 
 ### The real risk
 
@@ -324,11 +327,13 @@ amends ADR-0001 and ADR-0004, makes immutable history mutable, and lands squarel
 in these test files. It is the riskiest change on the roadmap and the one that
 most needs a suite you can trust. You will be in this code anyway.
 
-**Or when CI is introduced**, whichever comes first. Adding a workflow that runs
-the Android and web suites on every push would surface this on roughly one push in
-four, which is the point at which it stops being an occasional annoyance and
-starts blocking work. Note the ordering: CI is worth more than this fix on its own,
-and it is also what makes this fix worth doing.
+**CI arrived first, on 2026-08-07**, which was the other trigger this entry named.
+It did not force the issue the way this section predicted, because the retry
+contains the flake: a failed test is retried once and reported as FLAKY, so a red
+build still means a real failure. The prediction that CI was worth more than this
+fix on its own held. What has changed is that the flake is now counted rather than
+estimated, so the next attempt has a measured baseline to beat rather than an
+impression.
 
 ---
 
