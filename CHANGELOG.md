@@ -7,6 +7,150 @@ the project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+Test and delivery infrastructure. Nothing user-facing in the app changed, but the
+backend's error responses did, and that is a contract change for anything calling
+the API.
+
+### Added
+
+- **Continuous integration.** Four jobs on every push and pull request: Android
+  unit tests with lint and a release-variant compile, Android instrumented tests
+  on an emulator, backend tests against a PostgreSQL 17 service container, and
+  the web suite with typecheck, lint and format. All 761 tests now run
+  automatically; previously none did.
+- **The instrumented tests run for the first time.** Six of the seven cover Room
+  migrations. They live in `androidTest/`, need a device, and until now nothing
+  could provide one, so nothing ever executed them.
+- Coverage for the `X-API-Key` boundary, the only thing between a public backend
+  URL and personal training history, which had none.
+- Coverage for the exercise endpoints, which had none. This is the catalogue a
+  fresh install downloads when rebuilding itself from the backend.
+- **Flake containment on CI.** A failed Android test is retried once and
+  reported as **FLAKY** rather than green, so TD-015 costs a retry inside the job
+  instead of a blocked pipeline while staying visible and countable. Capped, so a
+  broadly broken suite still fails outright. Local runs are untouched and show
+  the truth.
+
+### Changed
+
+- **Client mistakes no longer return 500** (TD-001, open since Milestone 1).
+  Exceptions Spring raises before a controller is reached were all falling
+  through to the catch-all handler:
+
+  | Request | Was | Now |
+  |---|---|---|
+  | Path with no endpoint | 500 | 404 |
+  | Unsupported method | 500 | 405, with an `Allow` header |
+  | Malformed UUID or query value | 500 | 400 |
+  | Unsupported media type | 500 | 415 |
+  | Missing required parameter | 500 | 400 |
+
+  A 500 now means the server genuinely failed. `docs/API_SPECIFICATION.md` is
+  updated to match.
+
+### Fixed
+
+- **The backend test suite runs in a working copy again** (TD-016). VS Code's
+  Java language server was recompiling MapStruct's generated mappers into
+  Maven's `target/classes` about a second after every build, and Eclipse's
+  compiler emits class files even when references do not resolve, so a mapper
+  lost the clause declaring which interface it implements. Spring registered the
+  bean but could not match it to the interface, and roughly 77 tests failed. The
+  fix is `"java.autobuild.enabled": false`, now committed in
+  `.vscode/settings.json` so it ships with the repository.
+- Two locale defects Android lint had been reporting into a void: a date
+  formatter that captured the locale once at class-load and kept using it after
+  the user changed language, and a download size formatted with whatever decimal
+  separator the JVM defaulted to.
+
+### Documentation
+
+- Corrected four passages stating the repository has no CI, three of which
+  described as unenforced the migration guard that now runs on every push.
+- `docs/development/TESTING.md` gains a continuous-integration section.
+- TD-015 records a measured flake rate and both of its signatures, so a future
+  fix has a baseline to beat rather than an impression.
+
+## [1.5.0] - 2026-08-07
+
+Your phone now stays in step with the server on its own. The second stage of
+ADR-0017: synchronisation was upload-only, and this adds the read back.
+
+### Added
+
+- **Periodic refresh from the backend.** Changes made anywhere appear on the
+  device within about 15 minutes, unprompted.
+
+### Fixed
+
+- Removing an exercise during a workout now reaches the backend, so it stays
+  removed (TD-014). Previously the removal was local only and a later refresh
+  could bring it back.
+
+### Notes
+
+- The refresh never overwrites a local change that has not yet uploaded, and
+  never touches a workout in progress. Verified on hardware: a routine renamed
+  directly on the server appeared on the device unprompted, while an in-progress
+  workout was left untouched by the same pass.
+
+## [1.4.0] - 2026-08-07
+
+Your history now survives losing your phone. The first stage of ADR-0017, and
+the answer to the gap called out in the 1.0.0 notes: the backend was the durable
+copy but could not repopulate a device.
+
+### Added
+
+- **Restore on a fresh install.** A device with no data of its own rebuilds from
+  the backend at first launch: routines with their exercises, and completed
+  workouts. Nothing to press, and it only runs when the local database is empty.
+  If the backend cannot be reached it stays quiet and tries again next launch.
+- A read endpoint returning a routine together with its exercises, which no
+  endpoint previously provided.
+
+### Fixed
+
+- Android Auto Backup was restoring a stale database ahead of the app's own
+  restore, which then saw a non-empty database and declined to run. The Room
+  database is now excluded from both cloud backup and device transfer.
+
+### Notes
+
+- Verified by fully uninstalling and reinstalling on hardware: everything came
+  back.
+
+## [1.3.0] - 2026-08-06
+
+No functional change. This release exists so the in-app updater could be
+exercised against a real published release on real hardware, which it was.
+
+## [1.2.0] - 2026-08-06
+
+Your phone now tells you when there is a new version. Distribution is store-less,
+so before this nothing told an installed build that a newer one existed
+(ADR-0016).
+
+### Added
+
+- **In-app updates.** An update banner on the home screen when a newer release
+  exists, suppressed during a workout. The update screen shows the release notes
+  and download progress, then hands the APK to the system installer. Settings >
+  About shows the installed version and checks on demand.
+- Backend endpoints that resolve the latest GitHub release and stream its APK,
+  authenticated server-side so the repository can stay private.
+- Editable per-exercise notes during a workout.
+
+### Changed
+
+- A dark green and teal theme across all screens, including the active-workout
+  table and elevated card surfaces.
+
+### Fixed
+
+- Completing a set with the checkbox no longer discards an RPE already entered
+  for that set.
+
 ## [1.1.0] — 2026-07-30
 
 A redesign of the active workout-logging experience alongside the operational work
@@ -89,6 +233,10 @@ backend on a private network. See the full
 - Synchronization is one-way: the backend is the durable copy but cannot repopulate a
   device, so a phone that loses its database does not get its history back.
 
-[Unreleased]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.4.0...v1.5.0
+[1.4.0]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.3.0...v1.4.0
+[1.3.0]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.2.0...v1.3.0
+[1.2.0]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/jeyaprakash1910/MyFitnessLog/releases/tag/v1.0.0

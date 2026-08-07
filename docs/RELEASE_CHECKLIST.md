@@ -270,6 +270,14 @@ flags. "It worked in debug" proves nothing about the artifact being shipped.
 
 ## 9. Tag and publish
 
+- [ ] **`CHANGELOG.md` has a section for this version.** Move what is under
+      `[Unreleased]` into a new `## [X.Y.Z] - YYYY-MM-DD` heading, and add the
+      compare link at the bottom of the file. This step did not exist until
+      2026-08-07, and four releases in a row skipped it: 1.2.0 through 1.5.0 all
+      shipped with the changelog still ending at 1.1.0, and had to be
+      reconstructed afterwards from tags and release notes. The GitHub release
+      body is written for whoever is installing the app; the changelog is the
+      record for whoever is reading the code later. They are not substitutes.
 - [ ] Commit any release-related changes
 - [ ] Annotated tag matching the established style — a subject line, then what
       the release contains and what is verified:
