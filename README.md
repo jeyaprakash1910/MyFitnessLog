@@ -4,8 +4,8 @@ An **offline-first** workout tracking application. The backend is the permanent
 source of truth; the Android app keeps a synchronized local copy so it works
 fully offline.
 
-> **Version 1.3.0 released, 6 August 2026.**
-> [Latest release](https://github.com/jeyaprakash1910/MyFitnessLog/releases/tag/v1.3.0) ·
+> **Version 1.5.0 released, 7 August 2026.**
+> [Latest release](https://github.com/jeyaprakash1910/MyFitnessLog/releases/tag/v1.5.0) ·
 > [V1 release notes](docs/V1_RELEASE_NOTES.md)
 >
 > Build routines, log workouts fully offline, and have them synchronize to the
@@ -80,25 +80,24 @@ docs/      Product, architecture, database, API, sync, coding standards, ADRs
   and decimal precision is preserved from PostgreSQL `NUMERIC` to rendered text
   rather than being lost to JavaScript floats. Responsive from mobile to
   desktop with zero axe WCAG 2.1 A/AA violations.
-- **699 automated tests**: **467 Android** (461 JVM/Robolectric + 6
-  instrumented, verified identical on emulator and physical hardware),
-  **99 backend** (JUnit 5/MockMvc over real PostgreSQL, incl. an end-to-end
-  sync-graph idempotency proof), and **133 web** (Vitest + React Testing
-  Library). Nine of them drive the real stack against a running backend; they
+- **734 automated tests**, all three suites run on every push by CI: **491
+  Android** (484 JVM/Robolectric + 7 instrumented, verified identical on emulator
+  and physical hardware), **110 backend** (JUnit 5/MockMvc over real PostgreSQL,
+  incl. an end-to-end sync-graph idempotency proof), and **133 web** (Vitest +
+  React Testing Library). Nine of them drive the real stack against a running backend; they
   skip unless one is named explicitly, and refuse to run against a backend that
   does not declare itself disposable, so a test can never write to real data
-  (TD-013). Counting them, the suite is 699 tests; by default 690 run and those
+  (TD-013). Counting them, the suite is 734 tests; by default 725 run and those
   nine skip.
 
-Not yet built: authentication and multi-user support (V2), bidirectional/pull
-synchronization, and history pagination (TD-010). See the roadmap and technical
-debt register.
+  - Restore and refresh: a device with no data of its own rebuilds from the
+    backend at launch, and thereafter reconciles after every sync pass, so a
+    change made anywhere reaches it. The backend wins for any row with no pending
+    local change; anything the outbox still owns is left alone (ADR-0017).
 
-Because synchronization is upload-only, a device shows only the workouts logged
-**on that device**. History created on another install is uploaded to the backend
-and visible in the web client, but never pulled down. This surfaces as apparently
-missing history when more than one install is in use, and is the pull-sync gap
-above rather than a fault.
+Not yet built: authentication and multi-user support (V2), editing completed
+workouts (ADR-0017 Stage 3), and history pagination (TD-010). See the roadmap and
+technical debt register.
 
 ## Documentation (read these first)
 
@@ -142,8 +141,12 @@ and passes everywhere else for reasons that are not understood; the script runs 
 at HEAD in a disposable worktree, which is a configuration known to pass. It tests
 committed content, so it warns when you have uncommitted changes. See TD-016.
 Tests run against a real PostgreSQL (faithful to the quoted-identifier schema and
-CHECK constraints). They are portable to Testcontainers on a Docker-capable machine
-via the `TEST_DB_*` env overrides in `src/test/resources/application.yml`.
+CHECK constraints), configured through the `TEST_DB_*` env overrides in
+`src/test/resources/application.yml`. CI uses the same overrides against a
+Postgres 17 service container, matching the Supabase major version in production.
+
+All three suites run automatically on every push and pull request
+(`.github/workflows/ci.yml`).
 
 ### Android
 Requires JDK 17 and the Android SDK (`ANDROID_HOME` / `local.properties`).

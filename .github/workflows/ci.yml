@@ -7,10 +7,10 @@ name: CI
 # how a wrong column type in a Room migration reached main on 2026-08-07, caught
 # by hand rather than by anything systematic.
 #
-# The backend suite is deliberately absent. It needs a live PostgreSQL, and it
-# also fails in a working copy for reasons nobody has explained (TD-016), so
-# adding it here would mean debugging that mystery inside CI. Run it locally with
-# backend/scripts/run-tests.sh. Adding it is tracked as future work in that entry.
+# The backend runs here too, against a PostgreSQL service container. Note that
+# TD-016, which makes the suite fail in a developer's working copy, does not
+# apply: a runner checks out a fresh clone, which is one of the configurations
+# where the suite passes. Locally, use backend/scripts/run-tests.sh.
 #
 # The Android suite is intermittently flaky (TD-015): a leaked coroutine still
 # using Dispatchers.Main makes roughly one run in four fail while the code is
@@ -75,6 +75,61 @@ jobs:
         with:
           name: android-test-report
           path: android/app/build/reports/tests/testDebugUnitTest/
+          retention-days: 7
+
+  backend:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      # Postgres 17 to match Supabase in production. The suite deliberately runs
+      # against real PostgreSQL rather than H2, so that quoted identifiers, CHECK
+      # constraints, enum storage and NUMERIC precision behave as they will in
+      # production (see src/test/resources/application.yml).
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: myfitnesslog_test
+          POSTGRES_USER: myfitnesslog
+          POSTGRES_PASSWORD: myfitnesslog
+        ports:
+          - 5432:5432
+        # Without a health check the job races the database and fails on a
+        # connection refused before Postgres has finished starting.
+        options: >-
+          --health-cmd "pg_isready -U myfitnesslog -d myfitnesslog_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v5
+
+      # JDK 21: pom.xml sets java.version to 21. This is not the Android
+      # module's 17.
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      # Flyway builds the schema on boot, so the empty database the service
+      # container provides is all this needs.
+      - name: Tests
+        working-directory: backend
+        env:
+          TEST_DB_URL: jdbc:postgresql://localhost:5432/myfitnesslog_test
+          TEST_DB_USERNAME: myfitnesslog
+          TEST_DB_PASSWORD: myfitnesslog
+        run: mvn -B clean test
+
+      - name: Upload test report
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: backend-test-report
+          path: backend/target/surefire-reports/
           retention-days: 7
 
   web:
