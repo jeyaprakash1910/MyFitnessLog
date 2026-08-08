@@ -7,16 +7,36 @@ the project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
-Test and delivery infrastructure. Nothing user-facing in the app changed, but the
-backend's error responses did, and that is a contract change for anything calling
-the API.
+The backend half of editable workout history, plus test and delivery
+infrastructure. Two contract changes for anything calling the API: the error
+statuses below, and corrections to a completed workout.
 
 ### Added
+
+- **A completed workout can be corrected** (ADR-0018, ADR-0017 Stage 3). The
+  backend now accepts set-level writes on a `COMPLETED` session: fix a mistyped
+  weight or rep count, add a set that was performed but never logged, delete one
+  logged by mistake. Until now a wrong number was permanent, which was a poor
+  answer for the one thing this application exists to record faithfully.
+
+  Deliberately narrower than "edit anything". The **planning snapshot stays
+  locked**: exercise name, order, target sets, target rep range and target rest
+  cannot change once a session is no longer in progress, and exercises cannot be
+  added or removed. Those fields record what the plan *was on the day*, and
+  rewriting them is the exact failure ADR-0004 exists to prevent. Correcting what
+  you performed is not the same act as rewriting what you intended.
+
+  A **discarded** workout stays immutable, because discarding is a deletion rather
+  than a record. Conflicts are last-write-wins on the server's `updatedAt`, needing
+  no new machinery: Stage 2's refresh already resolves the download direction and
+  uploads are idempotent upserts.
+
+  The phone cannot yet make such an edit. That screen is the next increment.
 
 - **Continuous integration.** Four jobs on every push and pull request: Android
   unit tests with lint and a release-variant compile, Android instrumented tests
   on an emulator, backend tests against a PostgreSQL 17 service container, and
-  the web suite with typecheck, lint and format. All 761 tests now run
+  the web suite with typecheck, lint and format. All 775 tests now run
   automatically; previously none did.
 - **The instrumented tests run for the first time.** Six of the seven cover Room
   migrations. They live in `androidTest/`, need a device, and until now nothing

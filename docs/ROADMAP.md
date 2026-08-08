@@ -172,13 +172,16 @@ milestone is Version 2 (authentication and multi-user), not yet planned.
 
 **Known outstanding work**, neither of which blocks release:
 
-* **ADR-0017 Stage 3** - editable workout history, plus the last-write-wins rule it
-  needs. Requires the backend to start returning `updatedAt` on reads, which no
-  endpoint does today.
-* **TD-015** - the Android ViewModel test classes fail on roughly one full-suite
-  run in four while the code is fine. Parked as a deliberate decision after two
-  reverted fix attempts; scheduled as the first step of Stage 3. Read the register
-  entry before attempting it.
+* **ADR-0017 Stage 3, Android half** - the edit surface for correcting a completed
+  workout. The backend contract is specified in ADR-0018 and implemented as of
+  2026-08-08: set-level corrections are accepted on a `COMPLETED` session, the
+  planning snapshot and `DISCARDED` sessions stay locked, and `updatedAt` is on
+  every read. The phone cannot yet make such an edit.
+* **TD-015** - the Android ViewModel test flake, down from roughly one full-suite
+  run in four to one in 40 on 2026-08-08. One of its two causes was a real defect in
+  `WorkoutViewModel` where an RPE tap could silently save nothing. A teardown race
+  remains. Nine approaches to it are recorded as measured failures; read the register
+  entry before attempting a tenth.
 
 Since **v1.2.0** an installed build updates itself over the air: the backend
 resolves the latest GitHub release with a server-side read-only token and streams
@@ -186,8 +189,8 @@ its APK to the app (ADR-0016). Verified end to end on the physical OnePlus
 CPH2717 on 6 Aug 2026 - a 1.2.0 install detected, downloaded and installed 1.3.0
 with no cable, preserving the local database (`firstInstallTime` unchanged).
 Test count: 491 automated Android tests (484 JVM/Robolectric + 7 instrumented)
-+ 137 backend tests (JUnit 5/MockMvc over real PostgreSQL) + 133 web tests
-(Vitest/RTL, 4 of them live-backend) = 761 total, of which 752 run by default.
++ 151 backend tests (JUnit 5/MockMvc over real PostgreSQL) + 133 web tests
+(Vitest/RTL, 4 of them live-backend) = 775 total, of which 766 run by default.
 All of them run on every push and pull request via GitHub Actions, the
 instrumented ones on an emulator in their own job since 2026-08-07.
 The nine live tests (five Android `LiveBackendSyncTest`, four web) drive the real

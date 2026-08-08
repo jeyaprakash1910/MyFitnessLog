@@ -274,6 +274,40 @@ POST	/workout-exercises/{id}/sets	Add set
 PUT	/workout-sets/{id}	Update set
 DELETE	/workout-sets/{id}	Delete set
 
+**When these are permitted, and why the exercise endpoints differ.**
+
+Set writes are accepted while the owning session is `IN_PROGRESS`, which is
+ordinary logging, and also while it is `COMPLETED`, which is a **correction**: a
+mistyped weight, a set marked complete that was not finished, a fourth set that
+was performed but never logged (ADR-0018). A `DISCARDED` session rejects all three
+with **409**, because discarding is a deletion rather than a record and there is
+nothing to correct.
+
+The Workout Exercise endpoints above are stricter and stay stricter: they require
+`IN_PROGRESS` and return **409** for anything else. Those fields are the planning
+snapshot, and they record what the plan *was on the day*. Correcting what was
+performed is a different act from rewriting what was intended, and only the first
+is permitted (ADR-0004, amended by ADR-0018).
+
+So on a completed workout:
+
+| Request | Result |
+|---|---|
+| Change a set's weight, reps, RPE, RIR, category or completion | **200** |
+| Add a set that was performed but never logged | **201** |
+| Delete a set logged by mistake | **204** |
+| Change an exercise's name, order, targets or rest | **409** |
+| Add or remove an exercise | **409** |
+| Any of the above on a `DISCARDED` session | **409** |
+
+**Conflicts.** Last-write-wins, arbitrated by the server's `updatedAt`. There is no
+version token to send and no 409 for a stale write: an edit that reaches the
+backend simply lands, and clients resolve staleness on read using the `updatedAt`
+described under Audit timestamps. A client's own unsent change is protected by its
+outbox, not by the server. This loses a concurrent edit silently, which is accepted
+for one user on one device at a time and is the thing to revisit for multi-user
+(ADR-0018).
+
 Health
 
 Method	Endpoint	Description

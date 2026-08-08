@@ -5,7 +5,7 @@
 Runs the backend test suite in a disposable git worktree.
 
 ```bash
-./scripts/run-tests.sh                    # whole suite (137 tests)
+./scripts/run-tests.sh                    # whole suite (151 tests)
 ./scripts/run-tests.sh -Dtest=FooTest     # extra args are passed to Maven
 ```
 

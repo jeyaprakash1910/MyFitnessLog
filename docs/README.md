@@ -65,6 +65,7 @@ build instructions, start with the [root README](../README.md).
 | [ADR-0015](ADR/0015-docker-deployment-on-render.md) | The backend deploys to Render as a Docker image. |
 | [ADR-0016](ADR/0016-in-app-update-delivery.md) | The backend delivers app updates from GitHub Releases. |
 | [ADR-0017](ADR/0017-backend-convergence-in-three-stages.md) | The backend becomes readable, in three stages. |
+| [ADR-0018](ADR/0018-correcting-a-completed-workout.md) | A completed workout may be corrected; the planning snapshot stays locked. |
 
 ## Releases
 

@@ -80,15 +80,15 @@ docs/      Product, architecture, database, API, sync, coding standards, ADRs
   and decimal precision is preserved from PostgreSQL `NUMERIC` to rendered text
   rather than being lost to JavaScript floats. Responsive from mobile to
   desktop with zero axe WCAG 2.1 A/AA violations.
-- **761 automated tests**, every one of them run on every push by CI: **491
+- **775 automated tests**, every one of them run on every push by CI: **491
   Android** (484 JVM/Robolectric + 7 instrumented on an emulator, verified
-  identical on physical hardware), **137 backend** (JUnit 5/MockMvc over real
+  identical on physical hardware), **151 backend** (JUnit 5/MockMvc over real
   PostgreSQL, incl. an end-to-end sync-graph idempotency proof), and **133 web**
   (Vitest + React Testing Library). Nine of them drive the real stack against a
   running backend; they skip unless one is named explicitly, and refuse to run
   against a backend that does not declare itself disposable, so a test can never
-  write to real data (TD-013). Counting them, the suite is 761 tests; by default
-  752 run and those nine skip.
+  write to real data (TD-013). Counting them, the suite is 775 tests; by default
+  766 run and those nine skip.
 
   The seven instrumented tests only began running automatically on 2026-08-07.
   Six of them are Room migration tests, and until then nothing executed them,
@@ -100,9 +100,9 @@ docs/      Product, architecture, database, API, sync, coding standards, ADRs
     change made anywhere reaches it. The backend wins for any row with no pending
     local change; anything the outbox still owns is left alone (ADR-0017).
 
-Not yet built: authentication and multi-user support (V2), editing completed
-workouts (ADR-0017 Stage 3), and history pagination (TD-010). See the roadmap and
-technical debt register.
+Not yet built: authentication and multi-user support (V2), the phone-side screen for
+correcting a completed workout (the backend contract for it is done, ADR-0018), and
+history pagination (TD-010). See the roadmap and technical debt register.
 
 ## Documentation (read these first)
 
@@ -138,7 +138,7 @@ a `myfitnesslog_test` database for tests).
 ```bash
 cd backend
 mvn spring-boot:run          # Flyway migrates on start; API at :8080/api/v1
-mvn test                     # 137 tests (JUnit 5 + MockMvc) against the test database
+mvn test                     # 151 tests (JUnit 5 + MockMvc) against the test database
 ```
 
 If you use VS Code with the Red Hat Java extension, keep

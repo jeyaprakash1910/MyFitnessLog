@@ -18,10 +18,24 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Default {@link WorkoutSetService}. Enforces the workout-history immutability
- * rule via the owning session's status: sets may be added/updated/deleted only
- * while that session is IN_PROGRESS; otherwise a {@link BusinessRuleException}
- * (409) is thrown.
+ * Default {@link WorkoutSetService}. Enforces the workout-history rules via the
+ * owning session's status.
+ *
+ * <p>Sets may be added, updated and deleted while the session is
+ * {@code IN_PROGRESS}, which is ordinary logging, and also while it is
+ * {@code COMPLETED}, which is a correction: a mistyped weight, a set marked
+ * complete that was not finished, a fourth set that was performed but never
+ * logged (ADR-0018).
+ *
+ * <p>A {@code DISCARDED} session is rejected with a {@link BusinessRuleException}
+ * (409). Discarding is a deletion rather than a record, so there is nothing to
+ * correct.
+ *
+ * <p>Note what is deliberately <em>not</em> relaxed here. The planning snapshot on
+ * {@code WorkoutExercise} stays immutable once a session leaves
+ * {@code IN_PROGRESS}, enforced in {@link WorkoutExerciseServiceImpl}. Correcting
+ * what was performed is a different act from rewriting what was planned, and only
+ * the first is permitted. That distinction is the whole of ADR-0004's guarantee.
  */
 @Service
 public class WorkoutSetServiceImpl implements WorkoutSetService {
@@ -41,11 +55,11 @@ public class WorkoutSetServiceImpl implements WorkoutSetService {
     public WorkoutSetSaveResult addSet(UUID workoutExerciseId, AddWorkoutSetRequest request) {
         WorkoutExercise workoutExercise = workoutExerciseRepository.findById(workoutExerciseId)
                 .orElseThrow(() -> new ResourceNotFoundException("Workout exercise not found."));
-        requireInProgress(workoutExercise);
+        requireEditable(workoutExercise);
 
         WorkoutSet existing = workoutSetRepository.findById(request.id()).orElse(null);
         if (existing != null) {
-            requireInProgress(existing.getWorkoutExercise());
+            requireEditable(existing.getWorkoutExercise());
             applyFields(existing, request.setNumber(), request.weight(), request.repetitions(),
                     request.setCategory(), request.startedAt(), request.finishedAt(),
                     request.rpe(), request.rir(), request.isCompleted());
@@ -66,7 +80,7 @@ public class WorkoutSetServiceImpl implements WorkoutSetService {
     public WorkoutSet updateSet(UUID id, UpdateWorkoutSetRequest request) {
         WorkoutSet workoutSet = workoutSetRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Workout set not found."));
-        requireInProgress(workoutSet.getWorkoutExercise());
+        requireEditable(workoutSet.getWorkoutExercise());
         applyFields(workoutSet, request.setNumber(), request.weight(), request.repetitions(),
                 request.setCategory(), request.startedAt(), request.finishedAt(),
                 request.rpe(), request.rir(), request.isCompleted());
@@ -77,7 +91,7 @@ public class WorkoutSetServiceImpl implements WorkoutSetService {
     @Transactional
     public void deleteSet(UUID id) {
         workoutSetRepository.findById(id).ifPresent(workoutSet -> {
-            requireInProgress(workoutSet.getWorkoutExercise());
+            requireEditable(workoutSet.getWorkoutExercise());
             workoutSetRepository.delete(workoutSet);
         });
     }
@@ -104,9 +118,17 @@ public class WorkoutSetServiceImpl implements WorkoutSetService {
         workoutSet.setCompleted(isCompleted);
     }
 
-    private void requireInProgress(WorkoutExercise workoutExercise) {
+    /**
+     * Permits set writes while a session is being logged, and afterwards as
+     * corrections to what was performed (ADR-0018).
+     *
+     * <p>Written as an allow-list rather than by excluding {@code DISCARDED}, so
+     * that a status added later is rejected until someone decides what it should
+     * mean. Silently inheriting "editable" is how an immutability guarantee erodes.
+     */
+    private void requireEditable(WorkoutExercise workoutExercise) {
         WorkoutStatus status = workoutExercise.getWorkoutSession().getStatus();
-        if (status != WorkoutStatus.IN_PROGRESS) {
+        if (status != WorkoutStatus.IN_PROGRESS && status != WorkoutStatus.COMPLETED) {
             throw new BusinessRuleException("Cannot modify a " + status.name().toLowerCase() + " workout.");
         }
     }

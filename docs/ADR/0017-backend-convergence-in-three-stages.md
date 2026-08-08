@@ -1,8 +1,9 @@
 # ADR-0017 - The backend becomes readable, in three stages
 
 Date: 2026-08-07
-Status: Accepted. Stages 1 and 2 implemented 2026-08-07; Stage 3 is committed in
-shape but not in detail.
+Status: Accepted. Stages 1 and 2 implemented 2026-08-07. Stage 3's contract is
+specified and implemented on the backend as of 2026-08-08 in ADR-0018; the Android
+edit surface is outstanding.
 Related: ADR-0001 (history is the source of truth), ADR-0002 (Room is the Android
 source of truth), ADR-0003 (backend is the system source of truth), ADR-0004
 (snapshot-based workout history), ADR-0007 (deletion tombstones), docs/SYNC.md,
@@ -149,14 +150,23 @@ deletion would wipe the workout the user is currently performing.
 **Stage 3 - Edit.** Allow completed workouts to be edited, and define what happens
 when two copies disagree.
 
-> **Start Stage 3 by fixing TD-015.** The Android ViewModel test classes fail on
-> about one full-suite run in four, and the affected files are exactly the ones
-> Stage 3 changes. This is the riskiest change on the roadmap - it makes immutable
-> history mutable - and it is the one that least tolerates a suite people have
-> learned to re-run rather than read. Two fix attempts are already recorded as
-> failures in the register; do not repeat them.
+> **Superseded in detail by ADR-0018**, which specifies what may be corrected and
+> what stays locked. Read that first; the paragraphs below record the intent this
+> stage was committed to, and two of the expectations in them turned out to be
+> wrong.
+>
+> **TD-015 was to be fixed first**, because the affected test files are the ones
+> Stage 3 changes. That was done far enough on 2026-08-08: the flake is down from
+> about one run in four to one in 40, and the cause that mattered here turned out to
+> be a real defect in `WorkoutViewModel` rather than a test problem. Read TD-015
+> before touching that file; nine approaches to the remainder are recorded as
+> measured failures.
 
-This stage, and only this stage, **amends ADR-0001 and ADR-0004**. History being
+This stage amends **ADR-0004 only**, not ADR-0001 as first expected: ADR-0001 is
+about not persisting derived recommendations, which editing history does not touch.
+ADR-0004 also turned out to have reserved this explicitly, in its implementation
+guidelines, so Stage 3 delivers a clause it left open rather than reversing it. See
+ADR-0018. History being
 an immutable snapshot is a deliberate decision, not an oversight: it is what makes
 "previous performance" a stable input and what keeps a completed session
 independent of later routine changes. Making it mutable is a real product change
@@ -165,8 +175,13 @@ refactor.
 
 The intended conflict policy is **last-write-wins on `updatedAt`, arbitrated by
 the backend**. Every entity already carries `createdAt` and `updatedAt` through
-JPA auditing (ADR-0006), so the required field exists on every row today. Two
-details matter and are recorded now so they are not rediscovered later:
+JPA auditing (ADR-0006), so the required field exists on every row today.
+
+In the event this needed **no new machinery at all**, which is worth recording
+because this paragraph implied it would. Stage 2's refresh already resolves the
+download direction, and the upload direction is an idempotent upsert keyed by id.
+Exposing `updatedAt` on read endpoints was the only missing piece. Two details
+matter and are recorded now so they are not rediscovered later:
 
 - **The server's `updatedAt` decides, not the device's clock.** Device clocks
   drift and can be set by the user. A device-authoritative timestamp would let a
