@@ -18,8 +18,21 @@ import java.util.UUID;
 
 /**
  * Default {@link WorkoutExerciseService}. Enforces the workout-history
- * immutability rule: exercises may be added/updated/deleted only while the parent
- * session is IN_PROGRESS; otherwise a {@link BusinessRuleException} (409) is thrown.
+ * immutability rule: exercises may be added, updated or deleted only while the
+ * parent session is IN_PROGRESS; otherwise a {@link BusinessRuleException} (409)
+ * is thrown.
+ *
+ * <p><b>This stays stricter than {@link WorkoutSetServiceImpl} on purpose.</b>
+ * ADR-0018 opened set-level writes on a COMPLETED session so that a mistyped
+ * weight can be corrected. The fields here are different in kind: exercise name,
+ * order, target sets, target rep range and target rest are the planning snapshot,
+ * and they record what the plan <em>was on the day</em>. Rewriting them is exactly
+ * the failure ADR-0004 was written to prevent, which is history quietly changing to
+ * match a later opinion. Correcting a performance is not the same act as rewriting
+ * an intention.
+ *
+ * <p>If a notes-only correction on a completed exercise is wanted later, add a
+ * narrow endpoint for the notes field rather than relaxing this guard.
  */
 @Service
 public class WorkoutExerciseServiceImpl implements WorkoutExerciseService {
@@ -98,6 +111,11 @@ public class WorkoutExerciseServiceImpl implements WorkoutExerciseService {
         workoutExercise.setNotes(request.notes());
     }
 
+    /**
+     * The planning snapshot is writable only while the workout is being performed.
+     * See the class comment for why this does not follow the set-level relaxation
+     * in ADR-0018.
+     */
     private void requireInProgress(WorkoutSession session) {
         if (session.getStatus() != WorkoutStatus.IN_PROGRESS) {
             throw new BusinessRuleException(

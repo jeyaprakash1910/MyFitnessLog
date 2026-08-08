@@ -154,4 +154,43 @@ class SyncGraphIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[?(@.id=='" + sessionId + "')].status").value("COMPLETED"));
     }
+
+    /**
+     * ADR-0018 end to end: a correction to a finished workout reaches the read
+     * model, which is the only part a user ever sees.
+     *
+     * <p>Asserting that the write returned 200 would not prove this. What proves it
+     * is that a later read of the workout detail reports the corrected number,
+     * because that read is what the history screen and the web viewer are built on
+     * (ADR-0011), and it is also what the phone downloads during a refresh.
+     */
+    @Test
+    void aCorrectionToACompletedWorkoutReachesTheReadModel() throws Exception {
+        submitGraph(status().isCreated());
+        mockMvc.perform(put("/api/v1/workout-sessions/{id}/complete", sessionId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"endedAt\":\"2026-07-20T10:00:00Z\",\"notes\":null}"))
+                .andExpect(status().isOk());
+
+        // 100kg was logged. It was actually 105, for 4 reps.
+        mockMvc.perform(put("/api/v1/workout-sets/{id}", workoutSetId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"setNumber\":1,\"weight\":105.00,\"repetitions\":4,"
+                                + "\"setCategory\":\"WORKING\",\"startedAt\":null,\"finishedAt\":null,"
+                                + "\"rpe\":9.0,\"rir\":null,\"isCompleted\":true}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/workout-sessions/{id}", sessionId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.exercises[0].sets[0].weight").value(105.00))
+                .andExpect(jsonPath("$.exercises[0].sets[0].repetitions").value(4))
+                .andExpect(jsonPath("$.exercises[0].sets[0].rpe").value(9.0))
+                // The planning snapshot is untouched by a performance correction.
+                .andExpect(jsonPath("$.exercises[0].exerciseName").value("Squat"))
+                .andExpect(jsonPath("$.exercises[0].targetSets").value(3));
+
+        // Still exactly one set: a correction edits, it does not accumulate.
+        assertThat(workoutSetRepository.count()).isEqualTo(1);
+    }
 }

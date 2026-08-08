@@ -3,6 +3,7 @@ package com.myfitnesslog.service;
 import com.myfitnesslog.dto.request.AddWorkoutExerciseRequest;
 import com.myfitnesslog.dto.request.AddWorkoutSetRequest;
 import com.myfitnesslog.dto.request.CompleteWorkoutSessionRequest;
+import com.myfitnesslog.dto.request.DiscardWorkoutSessionRequest;
 import com.myfitnesslog.dto.request.StartWorkoutSessionRequest;
 import com.myfitnesslog.dto.request.UpdateWorkoutSetRequest;
 import com.myfitnesslog.entity.SetCategory;
@@ -124,10 +125,44 @@ class WorkoutSetServiceImplTest {
         service.deleteSet(id); // no-op
     }
 
+    private void discardSession() {
+        sessionService.discardWorkout(sessionId,
+                new DiscardWorkoutSessionRequest(Instant.parse("2026-07-20T10:00:00Z"), null));
+    }
+
+    /**
+     * Corrections to a completed workout are permitted (ADR-0018): add a set that
+     * was performed but never logged, fix a mistyped value, remove a set that was
+     * logged by mistake.
+     *
+     * <p>This test asserted the opposite until 2026-08-08. The old rule made a
+     * wrong number permanent, which is a poor answer for the one thing this
+     * application exists to record faithfully.
+     */
     @Test
-    void mutationsRejectedOnceSessionCompleted() {
+    void correctionsArePermittedOnceSessionCompleted() {
         UUID id = addSet(1);
         completeSession();
+
+        service.addSet(workoutExerciseId, addRequest(UUID.randomUUID(), 2));
+        WorkoutSet corrected = service.updateSet(id,
+                new UpdateWorkoutSetRequest(1, new BigDecimal("85.00"), 6, SetCategory.WORKING,
+                        null, null, null, null, true));
+        assertThat(corrected.getWeight()).isEqualByComparingTo("85.00");
+        assertThat(corrected.getRepetitions()).isEqualTo(6);
+
+        service.deleteSet(id);
+        assertThat(workoutSetRepository.findById(id)).isEmpty();
+    }
+
+    /**
+     * A discarded workout stays immutable. Discarding is a deletion rather than a
+     * record, so there is nothing to correct.
+     */
+    @Test
+    void mutationsRejectedOnceSessionDiscarded() {
+        UUID id = addSet(1);
+        discardSession();
 
         assertThatThrownBy(() -> service.addSet(workoutExerciseId, addRequest(UUID.randomUUID(), 2)))
                 .isInstanceOf(BusinessRuleException.class);
