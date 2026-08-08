@@ -2,7 +2,7 @@
 
 Project: MyFitnessLog
 Version: 1.5
-Last Updated: August 8, 2026 (TD-015 reduced from ~1-in-4 to ~1-in-40, including a real WorkoutViewModel defect; eight approaches to the remainder now ruled out by measurement; TD-001 and TD-016 resolved; TD-014 resolved for ADR-0017 Stage 2)
+Last Updated: August 8, 2026 (TD-015 reduced from ~1-in-4 to ~1-in-40, including a real WorkoutViewModel defect; nine approaches to the remainder now ruled out by measurement; TD-001 and TD-016 resolved; TD-014 resolved for ADR-0017 Stage 2)
 
 This document records known, accepted technical debt: deliberate limitations that are not defects in the current milestone but must be addressed in a later milestone. Each item states the observation, why it is currently acceptable, the recommended future implementation, the documentation that must change first, and when it is scheduled.
 
@@ -13,7 +13,7 @@ This register holds debt that outlives a single task. Short-lived working items 
 > 40 runs on 2026-08-08. Two causes were found; one of them was a real defect in
 > `WorkoutViewModel`, where a tap could silently do nothing, not a test problem at
 > all. A residual `Dispatchers.Main` teardown race remains. Before attempting it,
-> read TD-015 in full: **eight** approaches are now recorded as measured failures,
+> read TD-015 in full: **nine** approaches are now recorded as measured failures,
 > including the one the wider community recommends, and the fingerprint for telling
 > this flake from a real failure is narrower than it was. Only a restructure of the
 > nine test classes onto `runTest` is left, and it is a day's work, not an
@@ -241,9 +241,9 @@ Full suite, `--rerun-tasks` between every run.
 | Cause 1 fixed only | 2 in 16 |
 | **Cause 1 + cause 2 fixed** | **1 in 40** |
 
-### Eight approaches now ruled out by measurement
+### Nine approaches now ruled out by measurement
 
-Read this before attempting anything. Five were added on 2026-08-08, three of them
+Read this before attempting anything. Six were added on 2026-08-08, four of them
 after checking what the wider community recommends: kotlinx.coroutines issue #3395
 confirms there is no upstream fix and that the exception deliberately reports only
 the writer's stack, and `SharingStarted.WhileSubscribed` is independently known as
@@ -293,6 +293,17 @@ and it closes this whole family off: the reader that collides is
 a scope whose children live on Main *is* a read of the Main delegate, so it races
 the write no matter where it sits relative to `close()`.
 
+**9. Winding the virtual clock past the `WhileSubscribed` timeout in teardown.**
+`advanceTimeBy(6_000)` on the Main test dispatcher, so the sharing coroutine expires
+its own stop timeout, drops the upstream Room flows and cleans itself up before
+`resetMain`. Bounded, unlike the `advanceUntilIdle` of approach 2, which never
+terminates because `oneSecondTicker` is a `while (true)` loop. Reasoning was sound
+and the result was **9 in 40**, nine times worse than leaving it alone, with the
+damage spreading to `RoutineEditViewModelTest`. Advancing the scheduler on Main is
+harmful no matter how it is bounded: the advance runs the pending work, and that
+work touches Main while teardown is about to replace it. Approaches 2 and 9 are the
+same mistake at different granularities.
+
 **8. Two dedicated, drainable Room executors, shut down and awaited before
 `resetMain`.** The most promising idea of the set: keep Room asynchronous, so
 invalidation still works, but on executors the test owns, so teardown can prove
@@ -307,8 +318,8 @@ combined with a restructure that stops the collectors first.
 
 ### Where a next attempt should start
 
-**Only one avenue is left, and it is a restructure rather than a patch.** Eight
-patches have now been measured; six made things worse and two helped. What every
+**Only one avenue is left, and it is a restructure rather than a patch.** Nine
+patches have now been measured; seven made things worse and two helped. What every
 failed attempt has in common is that it tried to make teardown safe while
 collectors were still live. The evidence says that cannot work: cancelling them
 reads the Main delegate, draining them dispatches on it, and stopping Room hard
