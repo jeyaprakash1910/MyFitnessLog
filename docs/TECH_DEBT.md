@@ -2,7 +2,7 @@
 
 Project: MyFitnessLog
 Version: 1.5
-Last Updated: August 8, 2026 (TD-015 reduced from ~1-in-4 to ~1-in-40, including a real WorkoutViewModel defect; TD-001 and TD-016 resolved; TD-014 resolved for ADR-0017 Stage 2)
+Last Updated: August 8, 2026 (TD-015 reduced from ~1-in-4 to ~1-in-40, including a real WorkoutViewModel defect; eight approaches to the remainder now ruled out by measurement; TD-001 and TD-016 resolved; TD-014 resolved for ADR-0017 Stage 2)
 
 This document records known, accepted technical debt: deliberate limitations that are not defects in the current milestone but must be addressed in a later milestone. Each item states the observation, why it is currently acceptable, the recommended future implementation, the documentation that must change first, and when it is scheduled.
 
@@ -13,9 +13,11 @@ This register holds debt that outlives a single task. Short-lived working items 
 > 40 runs on 2026-08-08. Two causes were found; one of them was a real defect in
 > `WorkoutViewModel`, where a tap could silently do nothing, not a test problem at
 > all. A residual `Dispatchers.Main` teardown race remains. Before attempting it,
-> read TD-015 in full: **five** approaches are now recorded as measured failures,
-> two of them made things dramatically worse, and the fingerprint for telling this
-> flake from a real failure is narrower than it was.
+> read TD-015 in full: **eight** approaches are now recorded as measured failures,
+> including the one the wider community recommends, and the fingerprint for telling
+> this flake from a real failure is narrower than it was. Only a restructure of the
+> nine test classes onto `runTest` is left, and it is a day's work, not an
+> afternoon's.
 
 ### Index
 
@@ -239,9 +241,14 @@ Full suite, `--rerun-tasks` between every run.
 | Cause 1 fixed only | 2 in 16 |
 | **Cause 1 + cause 2 fixed** | **1 in 40** |
 
-### Four approaches now ruled out by measurement
+### Eight approaches now ruled out by measurement
 
-Read this before attempting anything. Two were added on 2026-08-08.
+Read this before attempting anything. Five were added on 2026-08-08, three of them
+after checking what the wider community recommends: kotlinx.coroutines issue #3395
+confirms there is no upstream fix and that the exception deliberately reports only
+the writer's stack, and `SharingStarted.WhileSubscribed` is independently known as
+a source of test races. The commonly recommended remedy, cancelling the leaked
+scope, is approach 7 below and is measurably worse here.
 
 **1. A `ViewModelStore` per class, cleared in teardown.** Sound in principle;
 changed nothing measurable across the full suite (2 in 6).
@@ -270,19 +277,53 @@ must work. **10 in 20**, and it leaks: `WorkoutIndicatorContentTest` and
 `ExercisePickerViewModelTest` started failing because a test dispatcher stayed
 installed for later classes. `resetMain` is necessary.
 
+**6. Separate single-thread query and transaction executors, same-thread query.**
+Fixes the deadlock in approach 4 by giving the two executors different objects, and
+still fails: **6 failures on the first run**. Room posts the invalidation refresh
+to the query executor *expecting it to be asynchronous*, so that it runs after the
+write commits. Run inline it observes the pre-commit state, concludes nothing
+changed, and no emission is ever produced. Every delete and undo test times out.
+Room's invalidation cannot be made synchronous this way.
+
+**7. Cancel the scopes, then close the database, then reset.** The one ordering not
+covered by approaches 1 to 3, and the one the wider community recommends for a
+leaked `viewModelScope`. **3 failures on the first run.** The stack trace says why,
+and it closes this whole family off: the reader that collides is
+`TestMainDispatcher.isDispatchNeeded`, reached from cancellation itself. Cancelling
+a scope whose children live on Main *is* a read of the Main delegate, so it races
+the write no matter where it sits relative to `close()`.
+
+**8. Two dedicated, drainable Room executors, shut down and awaited before
+`resetMain`.** The most promising idea of the set: keep Room asynchronous, so
+invalidation still works, but on executors the test owns, so teardown can prove
+they have stopped before touching Main. Room's default pool comes from
+`ArchTaskExecutor` and cannot be joined, which is why there was no way to wait
+before. It compiles, runs, and **trades one failure mode for another**: draining
+the executors makes the close complete enough that the still-active collectors
+observe a closed database and throw, and the exception surfaces in the *next*
+class as `UncaughtExceptionsBeforeTest`. About one failure per run, so no better.
+Kept in the register because it is the right shape, and would probably work if
+combined with a restructure that stops the collectors first.
+
 ### Where a next attempt should start
 
-The residual is inherent to `Dispatchers.setMain`/`resetMain` while any other
-thread can touch Main, so the only complete fix is to stop Room using threads the
-test does not control. Approach 4 is the right idea and the wrong implementation:
-a same-thread **query** executor needs a transaction executor that is not
-same-thread and not the shared pool, or Room's flows need replacing with an
-explicitly-driven fake in these classes.
+**Only one avenue is left, and it is a restructure rather than a patch.** Eight
+patches have now been measured; six made things worse and two helped. What every
+failed attempt has in common is that it tried to make teardown safe while
+collectors were still live. The evidence says that cannot work: cancelling them
+reads the Main delegate, draining them dispatches on it, and stopping Room hard
+enough to silence them makes them throw instead.
 
-Cheaper and possibly sufficient: these classes use `runBlocking` with an
-unconfined Main. Moving them to `runTest` with one shared `StandardTestDispatcher`
-would give the test control of when work runs, so nothing is in flight at
-teardown. That is a restructure, not a patch.
+So the collectors have to be gone *before* teardown begins, which means the tests
+must control when ViewModel work runs. These classes use `runBlocking` with an
+unconfined Main, so coroutines run eagerly and whenever they like. Moving them to
+`runTest` with a single shared `StandardTestDispatcher`, and awaiting state through
+Turbine rather than a five-second wall-clock `withTimeout`, gives the test that
+control. Approach 8 above is probably a necessary companion to it rather than an
+alternative.
+
+Budget it as a day on nine test classes, not an afternoon, and expect to rewrite
+`awaitFirst` and every `runBlocking` in them.
 
 Verify with **at least 40 full-suite runs**. At the current 1-in-40 rate, twenty
 green runs happen by chance three times in five.
