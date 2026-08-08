@@ -50,6 +50,13 @@ the API.
 
 ### Fixed
 
+- **A tap on the RPE picker could silently do nothing.** `WorkoutViewModel` wrote
+  a row's weight and reps into one field and then read them back out of `uiState`,
+  which is a projection recomputed asynchronously. When it had not caught up the
+  set was not recorded and no rest timer started, with no error shown. Frames
+  normally elapse between typing values and picking an RPE, so this was rare in
+  the app; it is what made the test suite flaky (TD-015). The values are now read
+  from the field that owns them.
 - **The backend test suite runs in a working copy again** (TD-016). VS Code's
   Java language server was recompiling MapStruct's generated mappers into
   Maven's `target/classes` about a second after every build, and Eclipse's
@@ -65,6 +72,9 @@ the API.
 
 ### Documentation
 
+- TD-015 records both fixed causes, the measurements over 40 runs, and **five**
+  approaches now ruled out with data, two of which made the flake dramatically
+  worse. The flake rate is down from about 1 full-suite run in 4 to 1 in 40.
 - Corrected four passages stating the repository has no CI, three of which
   described as unenforced the migration guard that now runs on every push.
 - `docs/development/TESTING.md` gains a continuous-integration section.

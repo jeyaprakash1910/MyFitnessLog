@@ -275,7 +275,12 @@ class WorkoutViewModel @Inject constructor(
             // only carries the inline weight/reps text, so rebuilding SetInput from
             // those alone would drop an RPE the row already holds (e.g. one restored
             // by a prior undo).
-            val existing = row(exerciseId, rowKey)?.toInput() ?: SetInput.EMPTY
+            // From drafts, not uiState: an RPE restored by a prior undo is written
+            // to drafts, and reading it back through the projection can miss it.
+            // See currentInput.
+            val existing = currentInput(exerciseId, rowKey)
+                ?: row(exerciseId, rowKey)?.toInput()
+                ?: SetInput.EMPTY
             val input = existing.copy(
                 weight = weightText.trim().toBigDecimalOrNull(),
                 repetitions = repsText.trim().toIntOrNull(),
@@ -301,7 +306,8 @@ class WorkoutViewModel @Inject constructor(
      */
     fun onRpeSelected(exerciseId: UUID, rowKey: String, rpe: java.math.BigDecimal?) {
         val row = row(exerciseId, rowKey) ?: return
-        val input = SetInput(row.weight, row.repetitions, rpe, row.setCategory)
+        val base = currentInput(exerciseId, rowKey) ?: row.toInput()
+        val input = SetInput(base.weight, base.repetitions, rpe, base.setCategory)
         val draftKey = rowKey.draftKeyOrNull()
         if (draftKey != null) {
             val result = SetTransitions.complete(LoggedSetRow(row.setNumber, input, persistedId = null), input)
@@ -421,6 +427,33 @@ class WorkoutViewModel @Inject constructor(
 
     private fun row(exerciseId: UUID, rowKey: String): WorkoutSetRowUi? =
         activeExercise(exerciseId)?.rows?.firstOrNull { it.rowKey == rowKey }
+
+    /**
+     * A transient row's values read from [drafts], the field that owns them, rather
+     * than from [uiState].
+     *
+     * [uiState] is a projection: `combine` over Room flows and [drafts], shared
+     * through `stateIn` on [viewModelScope]. Writing to [drafts] and then reading
+     * the value back out of [uiState] in the same call stack is a read of stale
+     * data, because the projection has not necessarily recomputed yet.
+     *
+     * That is a real ordering bug, not only a test artefact. [onCommitRow] writes
+     * weight and reps into [drafts]; [onRpeSelected] then needs them to decide
+     * whether the row can be completed. Reading them back through [uiState] made
+     * the outcome depend on whether the pipeline happened to have caught up: when
+     * it had not, `isCompletable` was false, the transition returned
+     * [SetMutation.None] with [RestEffect.NONE], and the tap silently did nothing.
+     * In the app frames elapse between the two, so it almost always worked. Under
+     * test the two calls are adjacent, which is what made TD-015 flaky rather than
+     * broken.
+     *
+     * Returns null for a persisted row: those are owned by the database, and
+     * [uiState] is the correct place to read them from.
+     */
+    private fun currentInput(exerciseId: UUID, rowKey: String): SetInput? {
+        val draftKey = rowKey.draftKeyOrNull() ?: return null
+        return drafts.value[exerciseId]?.firstOrNull { it.key == draftKey }?.input
+    }
 
     private fun rowById(exerciseId: UUID, setId: UUID): WorkoutSetRowUi? =
         activeExercise(exerciseId)?.rows?.firstOrNull { it.rowKey == setKey(setId) }

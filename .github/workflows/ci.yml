@@ -12,10 +12,12 @@ name: CI
 # output; that is now resolved anyway, so locally plain `mvn test` works too.
 #
 # The Android suite is intermittently flaky (TD-015): a leaked coroutine still
-# using Dispatchers.Main makes roughly one run in four fail while the code is
-# fine. Three fix attempts were measured and reverted. Until the cause is found,
-# a failed test is retried once here and reported as FLAKY, configured in
-# android/app/build.gradle.kts.
+# using Dispatchers.Main makes about one run in forty fail while the code is fine.
+# That was one run in four until 2026-08-08, when two causes were fixed; one of
+# them was a real defect in WorkoutViewModel rather than a test problem. Five
+# approaches to the remainder are recorded as measured failures in TD-015, so read
+# it before trying a sixth. A failed test is retried once here and reported as
+# FLAKY, configured in android/app/build.gradle.kts.
 #
 # So a red Android job means a real failure, not the flake. Check the run summary
 # for FLAKY entries to see whether the flake is still occurring and how often.

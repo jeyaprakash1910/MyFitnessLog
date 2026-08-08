@@ -77,10 +77,36 @@ class WorkoutViewModelTest {
         Unit
     }
 
+    /**
+     * TD-015. Close the database **before** resetting Main, not after.
+     *
+     * The collision this avoids: Room dispatches queries and invalidation
+     * refreshes on its own background threads, so an emission can resume a
+     * coroutine that reads the `Dispatchers.Main` delegate at the very moment
+     * `resetMain()` replaces it, and kotlinx's concurrency check throws
+     * "Dispatchers.Main is used concurrently with setting it".
+     *
+     * The window is not the five seconds it looks like. `uiState` is shared with
+     * `SharingStarted.WhileSubscribed(5_000)`, and that stop timeout is a `delay`
+     * on the test dispatcher's **virtual** clock, which nothing here advances. So
+     * the timeout never expires and the Room flows underneath are still being
+     * collected on Main when teardown arrives, every time.
+     *
+     * Closing the database first shuts down Room's invalidation tracker and
+     * executors, so there is no longer anything that can touch Main. Reversing the
+     * two lines is the whole fix.
+     *
+     * What deliberately does **not** happen here is cancelling the ViewModel
+     * scopes or draining the dispatcher first. Both were measured and both made
+     * things worse, for the same reason: cancellation and draining are themselves
+     * work dispatched onto the dispatcher being removed, so the cleanup causes the
+     * collision it was meant to prevent. One took the flake from about one run in
+     * four to eight in eight.
+     */
     @After
     fun tearDown() {
-        Dispatchers.resetMain()
         database.close()
+        Dispatchers.resetMain()
     }
 
     private fun newRestTimer() = com.myfitnesslog.feature.workout.domain.RestTimer(
@@ -546,6 +572,41 @@ class WorkoutViewModelTest {
         vm.restTimer.awaitFirst { it is com.myfitnesslog.feature.workout.domain.RestTimerState.Running }
 
         assertTrue(vm.restTimer.value is com.myfitnesslog.feature.workout.domain.RestTimerState.Running)
+    }
+
+    /**
+     * TD-015. The regression test for the ordering bug behind the flake.
+     *
+     * `onCommitRow` writes weight and reps into the ViewModel's `drafts` field;
+     * `onRpeSelected` then needs them to decide whether the row can be completed.
+     * It used to read them back out of `uiState`, which is a `combine`/`stateIn`
+     * projection over Room and `drafts`, so the value it had just written was not
+     * reliably visible yet. When it was not, the transition returned `None` with
+     * `RestEffect.NONE`: nothing persisted, no timer, and the awaits in the two
+     * tests below timed out after five real seconds.
+     *
+     * This asserts the invariant directly rather than reproducing the race: with
+     * **no suspension point between the two calls**, the commit must still be
+     * visible to the RPE selection. There is deliberately no `awaitActive` in
+     * between, because that is exactly the yield that used to hide the bug.
+     */
+    @Test
+    fun rpeSelectionSeesAWeightCommittedImmediatelyBeforeIt() = runBlocking {
+        val vm = viewModel()
+        val ex = vm.awaitActive { it.exercises.firstOrNull()?.rows?.any { r -> !r.isCompleted } == true }
+            .exercises.first()
+        val plannedKey = ex.rows.first { !it.isCompleted }.rowKey
+
+        // Back to back, nothing in between. This is the whole point of the test.
+        vm.onCommitRow(ex.id, plannedKey, "80", "8")
+        vm.onRpeSelected(ex.id, plannedKey, BigDecimal("8"))
+
+        val row = vm.awaitActive { it.exercises.first().rows.any { r -> r.isCompleted } }
+            .exercises.first().rows.first { it.isCompleted }
+        assertEquals(BigDecimal("80"), row.weight)
+        assertEquals(8, row.repetitions)
+        assertEquals(BigDecimal("8"), row.rpe)
+        assertEquals(1, database.workoutSetDao().getByExercise(ex.id).size)
     }
 
     @Test

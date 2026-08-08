@@ -2,21 +2,20 @@
 
 Project: MyFitnessLog
 Version: 1.5
-Last Updated: August 7, 2026 (TD-001 and TD-016 resolved; TD-014 resolved for ADR-0017 Stage 2; TD-015 opened and parked)
+Last Updated: August 8, 2026 (TD-015 reduced from ~1-in-4 to ~1-in-40, including a real WorkoutViewModel defect; TD-001 and TD-016 resolved; TD-014 resolved for ADR-0017 Stage 2)
 
 This document records known, accepted technical debt: deliberate limitations that are not defects in the current milestone but must be addressed in a later milestone. Each item states the observation, why it is currently acceptable, the recommended future implementation, the documentation that must change first, and when it is scheduled.
 
 This register holds debt that outlives a single task. Short-lived working items live in the development TODO and are not duplicated here.
 
-> **Parked, not forgotten: TD-015.** The Android ViewModel test classes fail on
-> roughly one full-suite run in four, with the code under test working correctly.
-> It was diagnosed on 2026-08-07, two fixes were attempted and **both reverted**
-> (one made it four times worse), and it was then parked as a deliberate decision
-> rather than an oversight. Before touching it, read TD-015 in full: it records
-> which approach is already known to fail, and how to tell this flake apart from a
-> real test failure. The scheduled moment to fix it is the **first step of
-> ADR-0017 Stage 3**. CI now exists and contains this without hiding it: a failed
-> test is retried once and reported as FLAKY.
+> **Mostly fixed, still worth reading: TD-015.** The Android ViewModel test flake
+> is down from roughly one full-suite run in four to **one in 40**, measured over
+> 40 runs on 2026-08-08. Two causes were found; one of them was a real defect in
+> `WorkoutViewModel`, where a tap could silently do nothing, not a test problem at
+> all. A residual `Dispatchers.Main` teardown race remains. Before attempting it,
+> read TD-015 in full: **five** approaches are now recorded as measured failures,
+> two of them made things dramatically worse, and the fingerprint for telling this
+> flake from a real failure is narrower than it was.
 
 ### Index
 
@@ -36,7 +35,7 @@ This register holds debt that outlives a single task. Short-lived working items 
 | TD-012 | Reference data keeps referenced withdrawn rows | Open — note only | — |
 | TD-013 | Live sync tests write into the production database | ✅ Resolved 2026-07-22 (M12 Phase 3) | — |
 | TD-014 | WorkoutExercise removal during a workout is not propagated to the backend | ✅ Resolved 2026-08-07 (ADR-0017 Stage 2) | - |
-| TD-015 | ViewModel test classes are intermittently flaky (~1 run in 4) | **Open - parked deliberately** | ADR-0017 Stage 3 should fix it first |
+| TD-015 | ViewModel test classes are intermittently flaky | **Open - reduced to ~1 run in 40**; two causes fixed 2026-08-08 | - |
 | TD-016 | Backend suite failed in the working copy, passed elsewhere | ✅ Resolved 2026-08-07 (VS Code Java autobuild overwrote Maven's output) | - |
 
 ---
@@ -138,202 +137,176 @@ intermittent enough to mislead several investigations; delete it once the direct
 
 ## TD-015 - The ViewModel test classes are intermittently flaky
 
-Status: **Open - contained on CI, cause not fixed.** Three fix attempts, all
-measured and reverted. CI now retries a failed test once and reports it as FLAKY,
-so a red build means a real failure. Read "Attempts" before starting: two
-approaches are known to fail and one made it four times worse.
+Status: **Open - two causes found and fixed, one residual.** The rate is down from
+roughly **1 full-suite run in 4** to **1 in 40**, measured. One of the two causes
+was a genuine defect in `WorkoutViewModel`, not a test problem. CI still retries a
+failed test once and reports it as FLAKY, so a red build means a real failure.
 
 Milestone identified: ADR-0017 Stage 1 (2026-08-07)
-Last investigated: 2026-08-07
-Scheduled for: **the first step of ADR-0017 Stage 3** (editable history), not
-before. See "When to actually do this".
+Last investigated: 2026-08-08
+Scheduled for: unscheduled. It no longer blocks ADR-0017 Stage 3.
 
 ### What you see
 
-Running the full Android unit suite, roughly **one run in four** ends with two or
-three failures. Re-running usually passes. The code under test is not broken; the
-tests trip over each other.
-
-Affected classes, all of them ViewModel tests:
-
-* `WorkoutViewModelTest` (most often)
-* `ExercisePickerViewModelTest`
-* `WorkoutIndicatorViewModelTest`
-* occasionally `RoutineEditViewModelTest`, `RoutineDetailViewModelTest`
-
-Two failure shapes, both symptoms of one cause:
+Roughly **one full-suite run in 40** now ends with one or two failures in
+`WorkoutViewModelTest`, always the same shape:
 
     java.lang.IllegalStateException: Dispatchers.Main is used concurrently with setting it
-    kotlinx.coroutines.TimeoutCancellationException: Timed out waiting for 5000 ms
 
-A third, `UninitializedPropertyAccessException: lateinit property database has not
-been initialized`, is downstream noise: `setUp` threw before assigning `database`,
-so `tearDown` fails too.
+thrown from `Dispatchers.resetMain()` in that class's own `tearDown`. A
+`kotlin.UninitializedPropertyAccessException` on the line above is downstream
+noise: `setUp` threw, so `database` was never assigned.
+
+The `TimeoutCancellationException` signature this entry used to describe is
+**gone**, because its cause was found and fixed.
 
 ### Telling a flake from a real failure
 
-This matters more than the fix, because it is what stops the flake doing damage.
 **A failure is the known flake only if all of these hold:**
 
-1. it is in one of the classes listed above, **and**
-2. the message is `Dispatchers.Main is used concurrently with setting it`, or a
-   5000 ms timeout in that same class, **and**
+1. it is in `WorkoutViewModelTest`, **and**
+2. the message is `Dispatchers.Main is used concurrently with setting it`, **and**
 3. re-running the suite passes.
 
-**Anything else is a real failure.** In particular a genuine assertion failure
-("expected X but was Y") is never this bug. Do not re-run and move on.
+**Anything else is a real failure.** A genuine assertion failure ("expected X but
+was Y") is never this bug, and neither is a timeout any more. Do not re-run and
+move on.
 
-#### Rate measured on 2026-08-07
+### Cause 1, fixed: WorkoutViewModel read its own writes through a stale projection
 
-Eight full local runs while verifying unrelated work, **two of which failed**,
-which is the one-in-four this entry claims. Both matched the criteria above, and
-between them they showed both signatures:
+**This was a product defect, not a test defect**, and it accounted for every
+`TimeoutCancellationException`.
 
-| Failing test | Signature |
-|---|---|
-| `WorkoutViewModelTest.startingFromRoutineShowsSnapshottedExercises` and `.discardWorkoutEmitsEvent` | `Dispatchers.Main is used concurrently with setting it`, thrown from `resetMain()` in `tearDown` |
-| `WorkoutViewModelTest.completingViaRpeStartsTheRestTimer` | `TimeoutCancellationException` after 5000 ms waiting on a `StateFlow` |
+`onCommitRow` writes weight and reps into the private `drafts` `MutableStateFlow`.
+`onRpeSelected` then needs those values to decide whether the row can be
+completed. It read them back out of `uiState`, which is a `combine` over Room
+flows and `drafts`, shared through `stateIn` on `viewModelScope`. Writing to
+`drafts` and reading back through `uiState` in the same call stack is a read of
+stale data: the projection has not necessarily recomputed yet.
 
-Useful mainly as a baseline: any future attempt needs more than three green runs
-to claim an improvement, because three green runs happen by chance roughly two
-times in five at this rate. The earlier attempt that appeared to work and was
-later found to be worse failed exactly this way.
+When it had not, `SetInput.isCompletable` was false, `SetTransitions.complete`
+returned `SetMutation.None` with `RestEffect.NONE`, and **the tap silently did
+nothing**: no set persisted, no rest timer. The tests then waited five real
+seconds for a state that was never coming.
 
-### Root cause
+In the app this almost always worked, because frames elapse between typing values
+and picking an RPE. Under test the two calls are adjacent, which is what made this
+flaky rather than broken. The fix is `currentInput()`, which reads a transient
+row's values from `drafts`, the field that owns them. `onToggleComplete` had the
+same read and got the same treatment.
 
-An earlier version of this entry claimed one class was poisoning the next. **That
-was wrong**, and the correction matters for anyone attempting a fix. The stack
-trace shows the exception thrown from `Dispatchers.resetMain()` inside the failing
-class's **own** `tearDown`:
-
-    at kotlinx.coroutines.test.TestDispatchers.resetMain(TestDispatchers.kt:34)
-    at ...ExercisePickerViewModelTest.tearDown(ExercisePickerViewModelTest.kt:108)
-
-So a single class is still running work on `Dispatchers.Main` at the moment it
-resets it. The work is a `viewModelScope` coroutine: these tests construct
-ViewModels directly, nothing ever clears them, and a `viewModelScope` lives on
-Main until the ViewModel is cleared. Typically it is a Flow collector started by
-`stateIn`.
-
-### Deferral: two attempted fixes, both reverted
-
-Recorded in full because the obvious remedy is the wrong one.
-
-**Attempt 1 - give the tests ownership of their ViewModels.** A `ViewModelStore`
-per test class, `put` on construction, `clear()` in `tearDown` before `resetMain`,
-so the scopes are genuinely cancelled. Sound in principle, and it did stabilise a
-two-class run. Across the full suite it changed nothing measurable.
-
-**Attempt 2 - drain Main before resetting it.** Hold the `UnconfinedTestDispatcher`
-installed as Main and call `scheduler.advanceUntilIdle()` after clearing.
-**Dramatically worse.** Cancelling scopes and draining the scheduler are
-*themselves* work dispatched on Main, which is exactly what `resetMain`'s
-concurrency check objects to. The cleanup caused the collision it was meant to
-prevent.
-
-Measured, full suite, `--rerun-tasks` between each:
+Measured with the class in isolation, which reproduces this component reliably
+once a test removes the yield between the two calls:
 
 | Variant | Runs failing |
 |---|---|
-| Baseline | ~1 in 4 |
-| Attempt 1: ViewModelStore ownership | 2 in 6 |
-| Attempt 2: ownership + `advanceUntilIdle` | **8 in 8** |
-| Reverted to baseline | 1 in 6 |
+| Fix reverted | **4 in 6** |
+| Fix applied | **0 in 12** |
 
-**Attempt 3 - cancel the leaked rest-timer scopes.** The most promising lead, and
-the diagnosis still looks right. `RestTimer.start` launches a coroutine that ticks
-with `delay(1000)` for the whole rest period, and `WorkoutViewModelTest` builds
-each timer with `CoroutineScope(UnconfinedTestDispatcher())` that **nothing ever
-cancels**. The timer's `StateFlow` is observed by a ViewModel on Main, so a live
-timer keeps using Main indefinitely. Resetting Main does not stop it, because the
-scope is its own.
+Guarded by `WorkoutViewModelTest.rpeSelectionSeesAWeightCommittedImmediatelyBeforeIt`,
+which deliberately has no `awaitActive` between the two calls, because that yield
+is exactly what used to hide the bug.
 
-That explains every observation: only rest-timer tests failed, the damage often
-landed on a later class, clearing the ViewModels did not help, and draining the
-scheduler made it four times worse because advancing virtual time fired every
-pending tick at once, flooding Main precisely as it was reset.
+### Cause 2, fixed: teardown closed the database after resetting Main
 
-Cancelling those scopes in `tearDown` nonetheless produced **3 failures in 10
-runs**, indistinguishable from baseline. The remaining failures shifted from
-"Main is used concurrently" to `TimeoutCancellationException`, which may point at
-a genuine ordering race between `onCommitRow` and `onRpeSelected` in
-`WorkoutViewModel` rather than at the tests. Unproven, and reverted rather than
-kept, since an unproven change to this file is what caused attempt 2.
+Room dispatches queries and invalidation refreshes on its own background threads.
+An emission can therefore resume a coroutine that reads the `Dispatchers.Main`
+delegate at the moment `resetMain()` replaces it, and kotlinx's
+`NonConcurrentlyModifiable` check throws.
 
-All three reverted. No production or test code carries these changes.
+The window is far wider than it looks. `uiState` is shared with
+`SharingStarted.WhileSubscribed(5_000)`, and that stop timeout is a `delay` on the
+test dispatcher's **virtual** clock, which nothing in these tests advances. The
+timeout therefore never expires, so the Room flows underneath are still being
+collected on Main when teardown arrives, on every test, not for five seconds.
 
-### Containment: CI retries once and reports FLAKY
+The fix is to **close the database before resetting Main** rather than after, in
+all nine classes that install a test Main dispatcher. Closing it shuts down Room's
+invalidation tracker and executors, so there is nothing left that can touch Main.
 
-Since the cause resists three attempts, CI is made trustworthy instead. The Gradle
-`test-retry` plugin is configured in `android/app/build.gradle.kts`:
+This narrows the race sharply but does not close it: an emission already
+dispatched to Main before `close()` can still be in flight. Hence the residual
+1 in 40.
 
-* **`maxRetries` is 1 on CI and 0 locally.** A developer running `./gradlew test`
-  sees the truth, flake included, because that is where the fix gets worked on.
-* **A retried pass is reported as FLAKY, not green.** The point is to keep the
-  problem visible and countable rather than to hide it. Hiding it is what would
-  eventually let a real failure through.
-* **`maxFailures` is 5.** A suite failing that widely is broken, not flaky, so
-  retries stop and the build goes red.
+### Measurements
 
-Verified rather than assumed: with retry enabled, **6 of 6** runs went green while
-the flake still occurred and stayed recorded in three of them; and a deliberately
-planted real failure still failed the build, so retry rescues flakes and not
-regressions.
+Full suite, `--rerun-tasks` between every run.
 
-### Where the next attempt should start
+| Variant | Runs failing |
+|---|---|
+| Baseline, as documented previously | ~1 in 4 |
+| Baseline, re-measured 2026-08-08 | 1 in 10 |
+| Cause 1 fixed only | 2 in 16 |
+| **Cause 1 + cause 2 fixed** | **1 in 40** |
 
-**Do not** try "cancel the scopes, then reset". It does not work while an
-`UnconfinedTestDispatcher` is installed as Main, because the cleanup runs on the
-very dispatcher being removed. That path is closed; two variants of it were
-measured above.
+### Four approaches now ruled out by measurement
 
-The promising direction is to remove the need for teardown cleanup at all. These
-classes use `runBlocking` with an unconfined Main, so coroutines run eagerly and
-whenever they like. Moving them to `runTest` with a single shared
-`StandardTestDispatcher` gives the test explicit control of when work runs, so
-nothing is in flight when teardown arrives.
+Read this before attempting anything. Two were added on 2026-08-08.
 
-That is a restructure of the affected classes, not a patch. Budget accordingly and
-verify by **running the full suite at least eight times**; anything less cannot
-distinguish a fix from luck at a 1-in-4 base rate.
+**1. A `ViewModelStore` per class, cleared in teardown.** Sound in principle;
+changed nothing measurable across the full suite (2 in 6).
 
-### Why it is parked rather than fixed
+**2. Clearing, then `advanceUntilIdle()` before `resetMain`.** **8 in 8.**
+Cancelling scopes and draining a scheduler are themselves work dispatched on Main,
+which is precisely what `resetMain`'s check objects to. The cleanup caused the
+collision it was meant to prevent.
+
+**3. Cancelling the leaked rest-timer scopes in teardown.** 3 in 10, and
+re-confirmed on 2026-08-08 in a stronger form: tracking every `viewModelScope` and
+every timer scope and cancelling them all before `resetMain` made the class fail
+**on the first run**, for the same reason as approach 2. `viewModelScope.cancel()`
+is Main work.
+
+**4. Giving Room a same-thread query executor.** The obvious way to remove the
+background threads entirely, and it **deadlocks**. Room's suspending
+`withTransaction` occupies a thread from the *transaction* executor for the
+transaction's lifetime; running the invalidation refresh inline on that thread
+blocks behind the write lock. Every delete and undo test timed out, plus a class
+that had never failed before. Do not mix a same-thread query executor with a
+pooled transaction executor.
+
+**5. Not calling `resetMain` at all.** Removing the concurrent write looks like it
+must work. **10 in 20**, and it leaks: `WorkoutIndicatorContentTest` and
+`ExercisePickerViewModelTest` started failing because a test dispatcher stayed
+installed for later classes. `resetMain` is necessary.
+
+### Where a next attempt should start
+
+The residual is inherent to `Dispatchers.setMain`/`resetMain` while any other
+thread can touch Main, so the only complete fix is to stop Room using threads the
+test does not control. Approach 4 is the right idea and the wrong implementation:
+a same-thread **query** executor needs a transaction executor that is not
+same-thread and not the shared pool, or Room's flows need replacing with an
+explicitly-driven fake in these classes.
+
+Cheaper and possibly sufficient: these classes use `runBlocking` with an
+unconfined Main. Moving them to `runTest` with one shared `StandardTestDispatcher`
+would give the test control of when work runs, so nothing is in flight at
+teardown. That is a restructure, not a patch.
+
+Verify with **at least 40 full-suite runs**. At the current 1-in-40 rate, twenty
+green runs happen by chance three times in five.
+
+### Why the remainder is acceptable
 
 * **The failure mode is the safe one.** It makes tests fail when the code is fine.
-  It cannot make a test pass when the code is broken. False alarms, not false
-  reassurance.
-* **The workaround is one re-run**, and the fingerprint above tells you when it
-  applies.
-* **The fix is expensive and demonstrably risky.** It touches workout-logging test
-  files, the most important code in the app, and the first attempt made things
-  four times worse.
-* **CI contains it without hiding it.** Since 2026-08-07 the suite runs on every
-  push, and a failed test is retried once and reported as **FLAKY** rather than
-  green. So the flake costs a re-run inside the job rather than a blocked
-  pipeline, and stays visible and countable. (This bullet previously read
-  "nothing runs these tests automatically", which was true when it was written.)
+  It cannot make a test pass when the code is broken.
+* **The workaround is one re-run**, and the fingerprint above says when it applies.
+* **CI contains it without hiding it.** A failed test is retried once and reported
+  as **FLAKY**, never green, so the flake stays visible and countable while a real
+  regression still fails the build.
+* **It no longer blocks Stage 3.** The reason this was scheduled as Stage 3's first
+  step was that the affected files are the ones Stage 3 changes and the suite could
+  not be trusted. The defect in those files is now fixed and covered by a
+  regression test.
 
 ### The real risk
 
 Flaky tests train people to dismiss failures, and eventually a genuine one is
-waved through as "just the flake". The fingerprint rule above is the mitigation.
-If that rule ever starts being applied loosely, fix this immediately regardless of
-cost.
+waved through as "just the flake". The fingerprint rule above is the mitigation,
+and it is now narrower: one class, one message. If it ever starts being applied
+loosely, finish this off regardless of cost.
 
-### When to actually do this
-
-**As the first step of ADR-0017 Stage 3** (editable workout history). That change
-amends ADR-0001 and ADR-0004, makes immutable history mutable, and lands squarely
-in these test files. It is the riskiest change on the roadmap and the one that
-most needs a suite you can trust. You will be in this code anyway.
-
-**CI arrived first, on 2026-08-07**, which was the other trigger this entry named.
-It did not force the issue the way this section predicted, because the retry
-contains the flake: a failed test is retried once and reported as FLAKY, so a red
-build still means a real failure. The prediction that CI was worth more than this
-fix on its own held. What has changed is that the flake is now counted rather than
-estimated, so the next attempt has a measured baseline to beat rather than an
-impression.
 
 ---
 

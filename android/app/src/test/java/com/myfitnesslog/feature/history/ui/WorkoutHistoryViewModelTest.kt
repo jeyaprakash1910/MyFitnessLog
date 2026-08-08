@@ -62,8 +62,13 @@ class WorkoutHistoryViewModelTest {
 
     @After
     fun tearDown() {
-        Dispatchers.resetMain()
+        // Close the database before resetting Main, not after: Room's background
+        // threads can otherwise resume a coroutine that reads the Main delegate
+        // while resetMain replaces it, which throws "Dispatchers.Main is used
+        // concurrently with setting it". TD-015, explained in full in
+        // WorkoutViewModelTest.
         database.close()
+        Dispatchers.resetMain()
     }
 
     private suspend fun startRoutineWorkout(): UUID {
