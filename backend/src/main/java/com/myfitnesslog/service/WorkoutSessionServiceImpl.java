@@ -93,6 +93,8 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
                 session.getStartedAt(),
                 session.getEndedAt(),
                 session.getNotes(),
+                session.getCreatedAt(),
+                session.getUpdatedAt(),
                 exercises);
     }
 
@@ -111,6 +113,8 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
                 exercise.getMaxTargetReps(),
                 exercise.getTargetRestSeconds(),
                 exercise.getNotes(),
+                exercise.getCreatedAt(),
+                exercise.getUpdatedAt(),
                 sets);
     }
 

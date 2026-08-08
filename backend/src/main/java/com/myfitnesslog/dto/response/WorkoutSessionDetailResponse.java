@@ -17,6 +17,9 @@ public record WorkoutSessionDetailResponse(
         Instant startedAt,
         Instant endedAt,
         String notes,
+        /** Server-assigned audit timestamps (ADR-0006); see RoutineResponse. */
+        Instant createdAt,
+        Instant updatedAt,
         List<WorkoutExerciseDetailResponse> exercises
 ) {
 }

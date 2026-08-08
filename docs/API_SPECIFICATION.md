@@ -148,6 +148,33 @@ GET	/exercises/search	Search exercises (query parameter: q — case-insensitive 
 
 ⸻
 
+Audit timestamps
+
+Every response for **user-owned data** carries `createdAt` and `updatedAt`, both
+ISO-8601 instants in UTC. That is routines, routine exercises, workout sessions,
+workout exercises and workout sets, at the top level and inside the nested detail
+shapes.
+
+**The server assigns them.** A client that sends `createdAt` or `updatedAt` in a
+request body has those values ignored, and this is deliberate rather than
+incidental: ADR-0017 resolves edit conflicts by last-write-wins on `updatedAt`,
+and device clocks drift and can be set by the user. A device-authoritative
+timestamp would let a phone with a fast clock win every conflict forever.
+
+`updatedAt` advances whenever the row changes; `createdAt` never moves. A client
+may rely on both.
+
+**Reference data does not carry them.** `ExerciseResponse` and
+`ExerciseCategoryResponse` omit both fields, because the catalogue is read-only to
+clients and so never participates in conflict resolution. Adding them there would
+be contract surface with no caller.
+
+Added 2026-08-08 as the prerequisite for ADR-0017 Stage 3. Before it no read
+endpoint returned either field, so the Android restore path had to stamp restored
+rows with the time of the restore instead of their real history.
+
+⸻
+
 Routines
 
 Method	Endpoint	Description
@@ -159,17 +186,21 @@ DELETE	/routines/{id}	Soft delete routine
 POST	/routines/{id}/duplicate	Duplicate routine
 
 `GET /routines` returns `RoutineResponse` summaries (`id`, `name`, `description`,
-`displayOrder`). `GET /routines/{id}` returns those same fields **plus an
-`exercises` array** of `RoutineExerciseResponse`, in `exerciseOrder`.
+`displayOrder`, `createdAt`, `updatedAt`). `GET /routines/{id}` returns those same
+fields **plus an `exercises` array** of `RoutineExerciseResponse`, in
+`exerciseOrder`.
 
 ```json
 {
   "id": "…", "name": "Push A", "description": "chest day", "displayOrder": 0,
+  "createdAt": "2026-08-08T06:49:26.501849Z",
+  "updatedAt": "2026-08-08T06:49:27.625462Z",
   "exercises": [
     {
       "id": "…", "exerciseId": "…", "exerciseOrder": 0,
       "targetSets": 3, "minTargetReps": 8, "maxTargetReps": 12,
-      "targetRestSeconds": 90, "notes": null
+      "targetRestSeconds": 90, "notes": null,
+      "createdAt": "…", "updatedAt": "…"
     }
   ]
 }

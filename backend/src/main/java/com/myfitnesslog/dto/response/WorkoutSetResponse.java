@@ -20,6 +20,9 @@ public record WorkoutSetResponse(
         Instant finishedAt,
         BigDecimal rpe,
         BigDecimal rir,
-        boolean isCompleted
+        boolean isCompleted,
+        /** Server-assigned audit timestamps (ADR-0006); see RoutineResponse. */
+        Instant createdAt,
+        Instant updatedAt
 ) {
 }

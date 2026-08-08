@@ -29,25 +29,29 @@ import java.util.UUID
  *    entity default) would make restore immediately re-upload the entire history
  *    it just downloaded.
  *
- * 2. **`createdAt` and `updatedAt` are supplied by the caller**, because no read
- *    endpoint returns them. Restore passes the restore instant. This is harmless
- *    today, since nothing compares those values, and it is exactly what Stage 3's
- *    last-write-wins will need the backend to start sending.
+ * 2. **`createdAt` and `updatedAt` come from the server when it sends them**, and
+ *    fall back to the restore instant when it does not. The backend began
+ *    returning both on 2026-08-08; before that, restored rows were all stamped
+ *    with the moment of the restore, losing their real history. The fallback is
+ *    not defensive clutter: the phone talks to whatever backend is deployed, and
+ *    a build newer than the server must still restore rather than crash.
+ *
+ *    These are the values ADR-0017 Stage 3 arbitrates last-write-wins on, and
+ *    they are the *server's*, never the device's. Nothing compares them yet.
  *
  * 3. **Unknown enum values fall back rather than throwing.** A newer backend may
  *    send a status or set category this build has never heard of, and one
  *    unrecognised word must not abort the restore of a decade of training.
  */
 
-/** Instants for restored rows, since the backend does not report the originals. */
 internal fun routineEntity(dto: RoutineDetailResponseDto, restoredAt: Instant) =
     RoutineEntity(
         id = UUID.fromString(dto.id),
         name = dto.name,
         // description and displayOrder exist on the backend but not in Room
         // (TD-009), so they are dropped rather than silently invented here.
-        createdAt = restoredAt,
-        updatedAt = restoredAt,
+        createdAt = dto.createdAt ?: restoredAt,
+        updatedAt = dto.updatedAt ?: restoredAt,
         isDeleted = false,
         syncStatus = SyncStatus.SYNCED,
     )
@@ -66,8 +70,8 @@ internal fun routineExerciseEntity(
     maxTargetReps = dto.maxTargetReps,
     targetRestSeconds = dto.targetRestSeconds,
     notes = dto.notes,
-    createdAt = restoredAt,
-    updatedAt = restoredAt,
+    createdAt = dto.createdAt ?: restoredAt,
+    updatedAt = dto.updatedAt ?: restoredAt,
     isDeleted = false,
     syncStatus = SyncStatus.SYNCED,
 )
@@ -80,8 +84,8 @@ internal fun workoutSessionEntity(dto: WorkoutSessionDetailResponseDto, restored
         startedAt = dto.startedAt,
         endedAt = dto.endedAt,
         notes = dto.notes,
-        createdAt = restoredAt,
-        updatedAt = restoredAt,
+        createdAt = dto.createdAt ?: restoredAt,
+        updatedAt = dto.updatedAt ?: restoredAt,
         syncStatus = SyncStatus.SYNCED,
     )
 
@@ -100,8 +104,8 @@ internal fun workoutExerciseEntity(
     maxTargetReps = dto.maxTargetReps,
     targetRestSeconds = dto.targetRestSeconds,
     notes = dto.notes,
-    createdAt = restoredAt,
-    updatedAt = restoredAt,
+    createdAt = dto.createdAt ?: restoredAt,
+    updatedAt = dto.updatedAt ?: restoredAt,
     syncStatus = SyncStatus.SYNCED,
 )
 
@@ -121,8 +125,8 @@ internal fun workoutSetEntity(
     rpe = dto.rpe,
     rir = dto.rir,
     isCompleted = dto.isCompleted,
-    createdAt = restoredAt,
-    updatedAt = restoredAt,
+    createdAt = dto.createdAt ?: restoredAt,
+    updatedAt = dto.updatedAt ?: restoredAt,
     syncStatus = SyncStatus.SYNCED,
 )
 

@@ -255,6 +255,53 @@ class RestoreManagerImplTest {
     }
 
     @Test
+    fun `the server's audit timestamps are preserved, not replaced by the restore instant`() = runTest {
+        // Before the backend exposed these (2026-08-08), every restored row was
+        // stamped with the moment of the restore, so a workout logged last year
+        // came back looking like it was created today. Stage 3 arbitrates
+        // last-write-wins on updatedAt, so a restore that overwrites it would
+        // make a freshly restored device win every conflict against the server.
+        val realCreated = Instant.parse("2026-03-01T08:00:00Z")
+        val realUpdated = Instant.parse("2026-04-15T19:30:00Z")
+        routineApi.detail = routineApi.detail.copy(
+            createdAt = realCreated,
+            updatedAt = realUpdated,
+            exercises = routineApi.detail.exercises.map {
+                it.copy(createdAt = realCreated, updatedAt = realUpdated)
+            },
+        )
+
+        restoreManager.restoreIfEmpty()
+
+        val routine = database.routineDao().getById(routineId)!!
+        assertEquals(realCreated, routine.createdAt)
+        assertEquals(realUpdated, routine.updatedAt)
+
+        val exercise = database.routineExerciseDao().getByRoutine(routineId).first()
+        assertEquals(realCreated, exercise.createdAt)
+        assertEquals(realUpdated, exercise.updatedAt)
+    }
+
+    @Test
+    fun `a backend that does not send timestamps still restores, using the restore instant`() = runTest {
+        // The phone talks to whatever backend is deployed. A build newer than the
+        // server must degrade to the old behaviour rather than fail to restore a
+        // decade of training over two absent fields.
+        routineApi.detail = routineApi.detail.copy(
+            createdAt = null,
+            updatedAt = null,
+            exercises = routineApi.detail.exercises.map { it.copy(createdAt = null, updatedAt = null) },
+        )
+
+        val outcome = restoreManager.restoreIfEmpty()
+
+        assertEquals(RestoreOutcome.Restored(routines = 1, sessions = 1), outcome)
+        val routine = database.routineDao().getById(routineId)!!
+        assertEquals(restoredAt, routine.createdAt)
+        assertEquals(restoredAt, routine.updatedAt)
+    }
+
+    @Test
     fun `a database with existing data is left completely alone`() = runTest {
         // The dangerous case. A device with a real training log must never have it
         // replaced by whatever the server happens to hold.
