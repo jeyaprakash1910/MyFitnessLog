@@ -1,5 +1,6 @@
 package com.myfitnesslog.dto.response;
 
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -17,6 +18,9 @@ public record RoutineExerciseResponse(
         int minTargetReps,
         int maxTargetReps,
         Integer targetRestSeconds,
-        String notes
+        String notes,
+        /** Server-assigned audit timestamps (ADR-0006); see RoutineResponse. */
+        Instant createdAt,
+        Instant updatedAt
 ) {
 }

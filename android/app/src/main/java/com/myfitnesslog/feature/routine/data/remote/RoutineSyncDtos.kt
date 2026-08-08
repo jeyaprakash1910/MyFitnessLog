@@ -1,6 +1,8 @@
 package com.myfitnesslog.feature.routine.data.remote
 
+import com.myfitnesslog.core.data.remote.InstantSerializer
 import kotlinx.serialization.Serializable
+import java.time.Instant
 
 /**
  * Network models for the routine upload endpoints, mirroring the backend's
@@ -67,6 +69,14 @@ data class RoutineExerciseResponseDto(
     val maxTargetReps: Int,
     val targetRestSeconds: Int? = null,
     val notes: String? = null,
+    // Server-assigned audit timestamps (ADR-0006), the input to Stage 3's
+    // last-write-wins. Nullable with a default on purpose: the phone talks to
+    // whatever backend is deployed, and a build newer than the server must not
+    // fail to deserialise a response that predates these fields.
+    @Serializable(with = InstantSerializer::class)
+    val createdAt: Instant? = null,
+    @Serializable(with = InstantSerializer::class)
+    val updatedAt: Instant? = null,
 )
 
 /**
@@ -84,4 +94,8 @@ data class RoutineDetailResponseDto(
     val description: String? = null,
     val displayOrder: Int = 0,
     val exercises: List<RoutineExerciseResponseDto> = emptyList(),
+    @Serializable(with = InstantSerializer::class)
+    val createdAt: Instant? = null,
+    @Serializable(with = InstantSerializer::class)
+    val updatedAt: Instant? = null,
 )

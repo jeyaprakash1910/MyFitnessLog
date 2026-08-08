@@ -1,5 +1,6 @@
 package com.myfitnesslog.dto.response;
 
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -11,6 +12,15 @@ public record RoutineResponse(
         UUID id,
         String name,
         String description,
-        int displayOrder
+        int displayOrder,
+        /**
+         * Audit timestamps, server-assigned (ADR-0006). {@code updatedAt} is the
+         * field ADR-0017 Stage 3 arbitrates last-write-wins on, and it is
+         * deliberately the *server's* value: device clocks drift and can be set
+         * by the user, so a device-authoritative timestamp would let a phone with
+         * a fast clock win every conflict forever.
+         */
+        Instant createdAt,
+        Instant updatedAt
 ) {
 }

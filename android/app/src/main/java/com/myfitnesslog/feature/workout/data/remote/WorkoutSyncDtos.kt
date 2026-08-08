@@ -149,6 +149,10 @@ data class WorkoutSetResponseDto(
     @Serializable(with = BigDecimalSerializer::class)
     val rir: BigDecimal? = null,
     val isCompleted: Boolean,
+    @Serializable(with = InstantSerializer::class)
+    val createdAt: Instant? = null,
+    @Serializable(with = InstantSerializer::class)
+    val updatedAt: Instant? = null,
 )
 
 /**
@@ -170,6 +174,10 @@ data class WorkoutSessionDetailResponseDto(
     val endedAt: Instant? = null,
     val notes: String? = null,
     val exercises: List<WorkoutExerciseDetailResponseDto> = emptyList(),
+    @Serializable(with = InstantSerializer::class)
+    val createdAt: Instant? = null,
+    @Serializable(with = InstantSerializer::class)
+    val updatedAt: Instant? = null,
 )
 
 /**
@@ -190,4 +198,8 @@ data class WorkoutExerciseDetailResponseDto(
     val targetRestSeconds: Int? = null,
     val notes: String? = null,
     val sets: List<WorkoutSetResponseDto> = emptyList(),
+    @Serializable(with = InstantSerializer::class)
+    val createdAt: Instant? = null,
+    @Serializable(with = InstantSerializer::class)
+    val updatedAt: Instant? = null,
 )

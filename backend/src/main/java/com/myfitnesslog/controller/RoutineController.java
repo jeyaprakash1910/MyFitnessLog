@@ -70,6 +70,8 @@ public class RoutineController {
                 routine.getName(),
                 routine.getDescription(),
                 routine.getDisplayOrder(),
+                routine.getCreatedAt(),
+                routine.getUpdatedAt(),
                 routineExerciseMapper.toResponseList(routineExerciseService.getExercises(id)));
     }
 
