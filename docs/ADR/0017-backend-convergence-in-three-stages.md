@@ -1,9 +1,9 @@
 # ADR-0017 - The backend becomes readable, in three stages
 
 Date: 2026-08-07
-Status: Accepted. Stages 1 and 2 implemented 2026-08-07. Stage 3's contract is
-specified and implemented on the backend as of 2026-08-08 in ADR-0018; the Android
-edit surface is outstanding.
+Status: Accepted, and complete. Stages 1 and 2 implemented 2026-08-07. Stage 3 is
+specified in ADR-0018, with the backend contract implemented 2026-08-08 and the
+Android edit surface 2026-08-09.
 Related: ADR-0001 (history is the source of truth), ADR-0002 (Room is the Android
 source of truth), ADR-0003 (backend is the system source of truth), ADR-0004
 (snapshot-based workout history), ADR-0007 (deletion tombstones), docs/SYNC.md,

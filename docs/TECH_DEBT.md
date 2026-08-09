@@ -174,6 +174,30 @@ The `TimeoutCancellationException` signature this entry used to describe is
 was Y") is never this bug, and neither is a timeout any more. Do not re-run and
 move on.
 
+### A separate, rarer failure seen on 2026-08-09, which is NOT this flake
+
+Recorded here because the fingerprint above would otherwise get it waved through,
+and the fingerprint explicitly says a genuine assertion failure is never TD-015.
+
+`WorkoutViewModelTest.completeWorkoutEmitsEventAndBecomesReadOnly` failed once with
+an `AssertionError`, in one full-suite run out of nine. It did not recur.
+
+    val job = launch(Dispatchers.Main) { vm.events.collect(events::add) }
+    vm.completeWorkout()
+    ...
+    assertTrue(events.contains(WorkoutViewModel.Event.COMPLETED))
+
+`events` is a `SharedFlow` with no replay, so the collector has to be subscribed
+before `completeWorkout` emits. The `launch` normally gets there first on an
+unconfined dispatcher, but nothing guarantees it, and a missed emission is
+unrecoverable. This is a defect in the test, not in the ViewModel, and it is
+independent of the teardown race: it produces a plain assertion failure with no
+`Dispatchers.Main` message and no timeout.
+
+Not fixed here, because the fix belongs with the `runTest` restructure the section
+below describes rather than as a tenth patch to this file. The likely shape is to
+await the event rather than assert on a list that may not have been filled yet.
+
 ### Cause 1, fixed: WorkoutViewModel read its own writes through a stale projection
 
 **This was a product defect, not a test defect**, and it accounted for every

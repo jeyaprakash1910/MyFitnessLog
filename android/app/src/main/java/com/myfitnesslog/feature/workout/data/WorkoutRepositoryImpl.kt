@@ -101,9 +101,7 @@ class WorkoutRepositoryImpl @Inject constructor(
         rir: BigDecimal?,
     ): UUID = withContext(ioDispatcher) {
         validate(weight, repetitions, rpe, rir)
-        val exercise = exerciseDao.getById(workoutExerciseId)
-            ?: error("Workout exercise $workoutExerciseId not found")
-        requireInProgress(exercise.workoutSessionId)
+        requireCorrectableForSet(workoutExerciseId)
 
         val now = clock.instant()
         val nextNumber = (setDao.getByExercise(workoutExerciseId).maxOfOrNull { it.setNumber } ?: 0) + 1
@@ -138,7 +136,7 @@ class WorkoutRepositoryImpl @Inject constructor(
     ) = withContext(ioDispatcher) {
         validate(weight, repetitions, rpe, rir)
         val existing = setDao.getById(setId) ?: error("Set $setId not found")
-        requireInProgressForSet(existing.workoutExerciseId)
+        requireCorrectableForSet(existing.workoutExerciseId)
         setDao.upsert(
             existing.copy(
                 weight = weight,
@@ -156,7 +154,7 @@ class WorkoutRepositoryImpl @Inject constructor(
 
     override suspend fun deleteSet(setId: UUID) = withContext(ioDispatcher) {
         val existing = setDao.getById(setId) ?: return@withContext
-        val session = requireInProgressForSet(existing.workoutExerciseId)
+        val session = requireCorrectableForSet(existing.workoutExerciseId)
         // A set is hard-deleted, so nothing would be left to upload. The
         // tombstone is what the backend is told about (ADR-0007); it is written
         // in the same transaction as the delete so the two cannot diverge.
@@ -273,13 +271,40 @@ class WorkoutRepositoryImpl @Inject constructor(
             syncTrigger.requestSync()
         }
 
-    private suspend fun requireInProgressForSet(workoutExerciseId: UUID): WorkoutSessionEntity {
+    /**
+     * The guard for **set** writes, which are permitted both while a workout is
+     * being logged and afterwards as a correction (ADR-0018).
+     *
+     * Mirrors the backend rule exactly, because the phone and the server have to
+     * agree about what is writable: a correction the phone accepts and the backend
+     * rejects would sit in the outbox failing forever.
+     */
+    private suspend fun requireCorrectableForSet(workoutExerciseId: UUID): WorkoutSessionEntity {
         val exercise = exerciseDao.getById(workoutExerciseId)
             ?: error("Workout exercise $workoutExerciseId not found")
-        return requireInProgress(exercise.workoutSessionId)
+        val session = sessionDao.getById(exercise.workoutSessionId)
+            ?: error("Workout session ${exercise.workoutSessionId} not found")
+        // An allow-list, not "everything except DISCARDED": a status added later
+        // should be rejected until someone decides what it means, rather than
+        // silently inheriting permission to rewrite history.
+        check(
+            session.status == WorkoutStatus.IN_PROGRESS ||
+                session.status == WorkoutStatus.COMPLETED,
+        ) {
+            "Workout ${session.status} is immutable and cannot be modified"
+        }
+        return session
     }
 
-    /** Returns the session iff it is IN_PROGRESS; otherwise rejects the mutation. */
+    /**
+     * The guard for everything else: session lifecycle, and the planning snapshot
+     * on an exercise.
+     *
+     * Stays stricter than [requireCorrectableForSet] on purpose. Exercise name,
+     * order and targets record what the plan *was on the day*, and rewriting them
+     * is the failure ADR-0004 exists to prevent. Correcting what was performed is
+     * a different act from rewriting what was intended (ADR-0018).
+     */
     private suspend fun requireInProgress(sessionId: UUID): WorkoutSessionEntity {
         val session = sessionDao.getById(sessionId) ?: error("Workout session $sessionId not found")
         check(session.status == WorkoutStatus.IN_PROGRESS) {

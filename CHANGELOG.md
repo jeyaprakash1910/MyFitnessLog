@@ -31,12 +31,19 @@ statuses below, and corrections to a completed workout.
   no new machinery: Stage 2's refresh already resolves the download direction and
   uploads are idempotent upserts.
 
-  The phone cannot yet make such an edit. That screen is the next increment.
+- **Correct a set from the workout history screen.** Tap any set on a finished
+  workout to fix its weight, reps or RPE. The exercise name appears as a heading in
+  that dialog rather than as a field, which is how the screen shows what is not
+  editable instead of failing with an error afterwards. Clearing the RPE field
+  removes an effort score entered by mistake.
+
+  The correction is queued like any other change, so it uploads in the background
+  and cannot be overwritten by the server before it does.
 
 - **Continuous integration.** Four jobs on every push and pull request: Android
   unit tests with lint and a release-variant compile, Android instrumented tests
   on an emulator, backend tests against a PostgreSQL 17 service container, and
-  the web suite with typecheck, lint and format. All 775 tests now run
+  the web suite with typecheck, lint and format. All 796 tests now run
   automatically; previously none did.
 - **The instrumented tests run for the first time.** Six of the seven cover Room
   migrations. They live in `androidTest/`, need a device, and until now nothing
