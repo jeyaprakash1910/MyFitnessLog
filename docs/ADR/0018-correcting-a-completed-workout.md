@@ -1,7 +1,7 @@
 # ADR-0018 - Correcting a completed workout
 
 Date: 2026-08-08
-Status: Accepted
+Status: Accepted. Backend implemented 2026-08-08; Android edit surface 2026-08-09.
 Amends: ADR-0004 (snapshot-based workout history)
 Related: ADR-0003 (backend is the system source of truth), ADR-0006 (timestamp
 auditing), ADR-0007 (deletion tombstones), ADR-0011 (read-only workout
@@ -149,6 +149,17 @@ projections would all have to learn about it.
   writes keep requiring `IN_PROGRESS`.
 * `DISCARDED` must be rejected explicitly rather than by omission, so that a new
   status added later does not silently become editable.
-* The Android edit surface is a separate increment. This ADR and the backend
-  contract land first, so the client is built against a contract that already
-  exists and is tested, rather than the two being designed against each other.
+* The Android edit surface landed on 2026-08-09, one increment after the backend
+  contract, so the client was built against a contract that already existed and was
+  tested rather than the two being designed against each other. It is a dialog on
+  the history detail screen offering weight, reps and RPE. The exercise name is a
+  heading in that dialog rather than a field, which is how the screen says "this
+  part is not editable" without waiting for an error.
+* The correction is written through `WorkoutRepository`, not the history
+  repository, so history stays a read-only projection (ADR-0011) and the edit gets
+  the outbox for free: the row is marked pending and a sync requested, and Stage 2's
+  refresh leaves pending rows alone, so a correction cannot be overwritten by the
+  backend before it uploads.
+* Adding or deleting a set from the history screen is permitted by the contract and
+  by the Android repository, but no UI offers it yet. Both need an affordance and a
+  confirmation, and neither is the correction people actually asked for.

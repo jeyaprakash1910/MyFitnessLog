@@ -58,10 +58,15 @@ docs/      Product, architecture, database, API, sync, coding standards, ADRs
   - Workout logging: start/resume a workout from a routine (immutable snapshot of
     the routine) **or a manual/ad-hoc workout** (no routine); log sets,
     complete/discard, workout + rest timers. Completed workouts are immutable.
-  - Workout history: read-only list of completed workouts (date, derived
-    duration, routine/manual indicator, exercise count, notes preview) and a
-    read-only detail screen (metadata + every snapshotted exercise and set),
-    served by a dedicated read-only repository over the snapshot tables.
+  - Workout history: a list of completed workouts (date, derived duration,
+    routine/manual indicator, exercise count, notes preview) and a detail screen
+    (metadata + every snapshotted exercise and set), read through a dedicated
+    read-only repository over the snapshot tables.
+  - Correcting a finished workout: tap any set on the detail screen to fix its
+    weight, reps or RPE. Deliberately narrow, so a wrong number can be fixed while
+    the record still means something: the planning snapshot (exercise name, order,
+    targets) stays locked, and a discarded workout cannot be edited at all
+    (ADR-0018).
   - In-app updates: on launch the app asks the backend for the latest published
     release and, when a newer one exists, shows a dismissible banner (suppressed
     during a workout). The update screen shows the release notes and download
@@ -80,15 +85,15 @@ docs/      Product, architecture, database, API, sync, coding standards, ADRs
   and decimal precision is preserved from PostgreSQL `NUMERIC` to rendered text
   rather than being lost to JavaScript floats. Responsive from mobile to
   desktop with zero axe WCAG 2.1 A/AA violations.
-- **775 automated tests**, every one of them run on every push by CI: **491
-  Android** (484 JVM/Robolectric + 7 instrumented on an emulator, verified
+- **796 automated tests**, every one of them run on every push by CI: **512
+  Android** (505 JVM/Robolectric + 7 instrumented on an emulator, verified
   identical on physical hardware), **151 backend** (JUnit 5/MockMvc over real
   PostgreSQL, incl. an end-to-end sync-graph idempotency proof), and **133 web**
   (Vitest + React Testing Library). Nine of them drive the real stack against a
   running backend; they skip unless one is named explicitly, and refuse to run
   against a backend that does not declare itself disposable, so a test can never
-  write to real data (TD-013). Counting them, the suite is 775 tests; by default
-  766 run and those nine skip.
+  write to real data (TD-013). Counting them, the suite is 796 tests; by default
+  787 run and those nine skip.
 
   The seven instrumented tests only began running automatically on 2026-08-07.
   Six of them are Room migration tests, and until then nothing executed them,
@@ -100,9 +105,8 @@ docs/      Product, architecture, database, API, sync, coding standards, ADRs
     change made anywhere reaches it. The backend wins for any row with no pending
     local change; anything the outbox still owns is left alone (ADR-0017).
 
-Not yet built: authentication and multi-user support (V2), the phone-side screen for
-correcting a completed workout (the backend contract for it is done, ADR-0018), and
-history pagination (TD-010). See the roadmap and technical debt register.
+Not yet built: authentication and multi-user support (V2), and history pagination
+(TD-010). See the roadmap and technical debt register.
 
 ## Documentation (read these first)
 

@@ -17,6 +17,8 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import org.junit.After
 import org.junit.Assert.assertEquals
+import com.myfitnesslog.core.data.local.SyncStatus
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -260,18 +262,77 @@ class WorkoutRepositoryImplTest {
         assertNull(repository.observeActiveSession().first())
     }
 
+    /**
+     * A completed workout accepts corrections to what was performed (ADR-0018),
+     * and the corrected row is queued for upload so the backend learns about it.
+     *
+     * This test asserted the opposite until 2026-08-09. The lifecycle is still
+     * sealed: a completed workout cannot be completed or discarded again.
+     */
     @Test
-    fun completedWorkoutIsImmutable() = runBlocking {
+    fun completedWorkoutAcceptsSetCorrections() = runBlocking {
         val setId = addWorkingSet()
         repository.completeWorkout(sessionId)
 
-        assertThrows(IllegalStateException::class.java) { runBlocking { addWorkingSet() } }
+        repository.updateSet(setId, BigDecimal("90.00"), 5, SetCategory.WORKING, null, null, true)
+
+        val corrected = database.workoutSetDao().getById(setId)!!
+        assertEquals(BigDecimal("90.00"), corrected.weight)
+        // Pending, or the correction would never reach the backend, and Stage 2's
+        // refresh would be free to overwrite it with the stale server copy.
+        assertEquals(SyncStatus.PENDING, corrected.syncStatus)
+
+        // A set performed but never logged can be added afterwards.
+        val added = repository.addSet(workoutExerciseId, BigDecimal("60.00"), 12)
+        assertNotNull(database.workoutSetDao().getById(added))
+
+        // And one logged by mistake removed.
+        repository.deleteSet(setId)
+        assertNull(database.workoutSetDao().getById(setId))
+    }
+
+    /** The session lifecycle stays sealed: only the performance is correctable. */
+    @Test
+    fun completedWorkoutCannotBeCompletedOrDiscardedAgain() = runBlocking {
+        addWorkingSet()
+        repository.completeWorkout(sessionId)
+
+        assertThrows(IllegalStateException::class.java) { runBlocking { repository.completeWorkout(sessionId) } }
+        assertThrows(IllegalStateException::class.java) { runBlocking { repository.discardWorkout(sessionId) } }
+        Unit
+    }
+
+    /**
+     * The planning snapshot stays locked. Correcting what was performed is a
+     * different act from rewriting what was intended (ADR-0004, ADR-0018).
+     */
+    @Test
+    fun completedWorkoutRejectsPlanningSnapshotChanges() = runBlocking {
+        repository.completeWorkout(sessionId)
+
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking { repository.addExercise(sessionId, RoutineTestData.benchId, "Bench Press") }
+        }
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking { repository.removeExercise(workoutExerciseId) }
+        }
+        Unit
+    }
+
+    /**
+     * A discarded workout stays immutable. Discarding is a deletion rather than a
+     * record, so there is nothing to correct.
+     */
+    @Test
+    fun discardedWorkoutRejectsCorrections() = runBlocking {
+        val setId = addWorkingSet()
+        repository.discardWorkout(sessionId)
+
         assertThrows(IllegalStateException::class.java) {
             runBlocking { repository.updateSet(setId, BigDecimal("90.00"), 5, SetCategory.WORKING, null, null, true) }
         }
         assertThrows(IllegalStateException::class.java) { runBlocking { repository.deleteSet(setId) } }
-        assertThrows(IllegalStateException::class.java) { runBlocking { repository.completeWorkout(sessionId) } }
-        assertThrows(IllegalStateException::class.java) { runBlocking { repository.discardWorkout(sessionId) } }
+        assertThrows(IllegalStateException::class.java) { runBlocking { addWorkingSet() } }
         Unit
     }
 

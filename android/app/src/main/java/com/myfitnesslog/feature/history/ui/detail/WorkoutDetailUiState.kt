@@ -1,14 +1,33 @@
 package com.myfitnesslog.feature.history.ui.detail
 
+import com.myfitnesslog.core.data.local.SetCategory
+import java.math.BigDecimal
 import java.util.UUID
 
-/** Presentation model for one performed set on the detail screen (read-only). */
+/**
+ * Presentation model for one performed set on the detail screen.
+ *
+ * Carries the raw [weight], [repetitions] and [rpe] alongside their formatted
+ * text because the correction dialog has to pre-fill the fields with what was
+ * recorded. Parsing them back out of [weightReps] would be a formatter working in
+ * reverse, which breaks the first time the format changes.
+ */
 data class WorkoutDetailSetRow(
     val id: UUID,
     val setNumber: Int,
     val weightReps: String,
     val category: String,
     val rpe: String?,
+    val weight: BigDecimal,
+    val repetitions: Int,
+    val rpeValue: BigDecimal?,
+    /**
+     * Carried so a correction can preserve the fields the dialog does not offer.
+     * Sending back a default would quietly reclassify a warm-up set as working, or
+     * drop an RIR the user recorded.
+     */
+    val setCategory: SetCategory,
+    val rir: BigDecimal?,
 )
 
 /** Presentation model for one snapshotted exercise and its sets (read-only). */
@@ -18,6 +37,23 @@ data class WorkoutDetailExerciseRow(
     val name: String,
     val notes: String?,
     val sets: List<WorkoutDetailSetRow>,
+)
+
+/**
+ * A set the user is correcting, with the text currently in the fields.
+ *
+ * The text is held as typed rather than parsed on every keystroke, so a partially
+ * entered number such as "8." is not thrown away mid-edit. [error] is set only
+ * when a save is attempted with something unusable.
+ */
+data class SetCorrection(
+    val setId: UUID,
+    val setNumber: Int,
+    val exerciseName: String,
+    val weight: String,
+    val repetitions: String,
+    val rpe: String,
+    val error: String? = null,
 )
 
 /** Immutable state for the workout detail screen. */
@@ -33,5 +69,7 @@ sealed interface WorkoutDetailUiState {
         val typeLabel: String,
         val notes: String?,
         val exercises: List<WorkoutDetailExerciseRow>,
+        /** Non-null while a correction dialog is open (ADR-0018). */
+        val correction: SetCorrection? = null,
     ) : WorkoutDetailUiState
 }
