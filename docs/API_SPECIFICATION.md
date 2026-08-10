@@ -3,7 +3,7 @@ API Specification
 Project: MyFitnessLog
 Version: 1.0
 Status: Approved — as released in Version 1.0.0 (22 July 2026)
-Last Updated: July 22, 2026 (M12 Phase 3 — health `disposable` field)
+Last Updated: August 10, 2026 (health `commit` field, for post-deploy verification)
 
 ⸻
 
@@ -313,11 +313,22 @@ Health
 Method	Endpoint	Description
 GET	/health	Liveness, and whether this backend's data is disposable
 
-Response fields: `status`, `disposable`.
+Response fields: `status`, `disposable`, `commit`.
 
 ```json
-{ "status": "UP", "disposable": false }
+{ "status": "UP", "disposable": false, "commit": "de59771..." }
 ```
+
+`commit` is the git SHA this instance was built from, taken from Render's
+`RENDER_GIT_COMMIT`, and is an empty string anywhere else including locally. It
+exists because **reachability is not evidence of freshness**: on 2026-08-06 a
+request issued during a deploy reached the previous container, where the route did
+not yet exist, and the error was investigated as a code defect until timestamps
+showed which container had answered. The `post-deploy` workflow polls this field
+until it matches the pushed commit, so a deploy is confirmed rather than assumed.
+
+The field is always present, never absent, so a caller can distinguish "not that
+commit" from "this backend cannot tell me".
 
 `disposable` tells an automated test whether this instance may be written to. It
 is `true` only under the `livetest` Spring profile, which runs on port 8081

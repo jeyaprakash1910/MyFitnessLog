@@ -1,0 +1,96 @@
+name: Post-deploy check
+
+# Confirms that the backend actually deployed, rather than assuming it did.
+#
+# Render redeploys from main on every push, and until now nothing checked the
+# result. That is not a theoretical gap. On 2026-08-06 a request issued during a
+# deploy reached the *previous* container, where the route did not yet exist, and
+# the 500 that came back was investigated as a code defect until the timestamps
+# showed which container had answered it.
+#
+# The fix for that specific confusion was TD-001, which turned the 500 into a 404.
+# This is the other half: something that says out loud whether the new build is
+# serving.
+#
+# The check is deliberately narrow. It reads /api/v1/health, which is public and
+# needs no API key, and waits for its `commit` field to match the commit that was
+# just pushed. Render sets RENDER_GIT_COMMIT automatically, so that field is the
+# deployed build's identity rather than a guess. Anything richer would need the
+# API key as a secret and would be testing the application, which CI already does.
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch: {}
+
+# Never run two of these at once: a newer push supersedes an older deploy, and
+# waiting for the old commit would fail for the right reason but the wrong deploy.
+concurrency:
+  group: post-deploy
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Deployed backend serves this commit
+    runs-on: ubuntu-latest
+    # Generous, because a free Render instance cold-starts (100.8s observed) and a
+    # Docker build from cold takes minutes. Failing early would just be a flaky
+    # check that trains people to ignore it.
+    timeout-minutes: 25
+    steps:
+      - name: Wait for the deploy, then prove it is this commit
+        env:
+          BASE: https://myfitnesslog-kp5o.onrender.com/api/v1
+        run: |
+          set -uo pipefail
+          echo "Waiting for $GITHUB_SHA to be serving at $BASE"
+
+          deadline=$(( SECONDS + 20 * 60 ))
+          attempt=0
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            attempt=$(( attempt + 1 ))
+            # --max-time 180: the first request after a quiet period is what wakes
+            # the instance, and it is expected to be slow rather than broken.
+            body=$(curl -sS --max-time 180 "$BASE/health" || true)
+            # jq -r with // "" so a response without the field, which is any build
+            # from before this check existed, reads as empty rather than "null".
+            deployed=$(printf '%s' "$body" | jq -r '.commit // ""' 2>/dev/null || echo "")
+
+            if [ "$deployed" = "$GITHUB_SHA" ]; then
+              echo "::notice::Deployed commit matches after $attempt attempt(s)"
+              echo "$body"
+              exit 0
+            fi
+
+            echo "attempt $attempt: serving '${deployed:-<no commit field>}', want '$GITHUB_SHA'"
+            sleep 30
+          done
+
+          echo "::error::Timed out after 20 minutes. The deployed backend never reported $GITHUB_SHA."
+          echo "Last response: ${body:-<none>}"
+          echo ""
+          echo "This means one of:"
+          echo "  * Render's deploy failed or was never triggered. Check the Render dashboard."
+          echo "  * The deploy succeeded but is still building. Re-run this job."
+          echo "  * The service is down. /api/v1/health did not answer at all."
+          exit 1
+
+      - name: Confirm it still declares itself non-disposable
+        if: '!cancelled()'
+        env:
+          BASE: https://myfitnesslog-kp5o.onrender.com/api/v1
+        run: |
+          set -euo pipefail
+          # Cheap, and guards the property that matters most about this instance:
+          # it is the system of record, and no automated test may write to it.
+          # TD-013 put 71 test routines into production when that was assumed
+          # rather than declared.
+          disposable=$(curl -sS --max-time 120 "$BASE/health" | jq -r '.disposable')
+          echo "disposable=$disposable"
+          if [ "$disposable" != "false" ]; then
+            echo "::error::Production reported disposable=$disposable. It must be false."
+            exit 1
+          fi
