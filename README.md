@@ -149,8 +149,7 @@ If you use VS Code with the Red Hat Java extension, keep
 `"java.autobuild.enabled": false` (already set in `.vscode/settings.json`). With
 autobuild on, the language server recompiles MapStruct's generated mappers into
 Maven's `target/classes` after every build and breaks the suite. That was TD-016,
-resolved 2026-08-07; `backend/scripts/run-tests.sh` was the workaround and is no
-longer needed.
+resolved 2026-08-07.
 
 Tests run against a real PostgreSQL (faithful to the quoted-identifier schema and
 CHECK constraints), configured through the `TEST_DB_*` env overrides in
