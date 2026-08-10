@@ -88,7 +88,7 @@ statuses below, and corrections to a completed workout.
 - **Continuous integration.** Four jobs on every push and pull request: Android
   unit tests with lint and a release-variant compile, Android instrumented tests
   on an emulator, backend tests against a PostgreSQL 17 service container, and
-  the web suite with typecheck, lint and format. All 796 tests now run
+  the web suite with typecheck, lint and format. All 804 tests now run
   automatically; previously none did.
 - **The instrumented tests run for the first time.** Six of the seven cover Room
   migrations. They live in `androidTest/`, need a device, and until now nothing
@@ -97,11 +97,12 @@ statuses below, and corrections to a completed workout.
   URL and personal training history, which had none.
 - Coverage for the exercise endpoints, which had none. This is the catalogue a
   fresh install downloads when rebuilding itself from the backend.
-- **Flake containment on CI.** A failed Android test is retried once and
-  reported as **FLAKY** rather than green, so TD-015 costs a retry inside the job
-  instead of a blocked pipeline while staying visible and countable. Capped, so a
-  broadly broken suite still fails outright. Local runs are untouched and show
-  the truth.
+- **Flake containment on CI.** A failed Android test is retried once and reported
+  as **FLAKY** rather than green, so a flake costs a retry inside the job instead
+  of a blocked pipeline while staying visible and countable. Capped, so a broadly
+  broken suite still fails outright. Local runs are untouched and show the truth.
+  Added as containment for TD-015 and kept after it was fixed, because it hides
+  nothing.
 
 ### Changed
 
@@ -144,9 +145,11 @@ statuses below, and corrections to a completed workout.
 
 ### Documentation
 
-- TD-015 records both fixed causes, the measurements over 40 runs, and **five**
-  approaches now ruled out with data, two of which made the flake dramatically
-  worse. The flake rate is down from about 1 full-suite run in 4 to 1 in 40.
+- TD-015 records all three causes, the measurements, and the **nine** approaches
+  ruled out with data along the way, six of which made the flake worse. Kept in
+  full after the fix, because the reason it resisted for so long is more useful
+  than the fix itself: the exception names the writer, and the cause names the
+  reader.
 - Corrected four passages stating the repository has no CI, three of which
   described as unenforced the migration guard that now runs on every push.
 - `docs/development/TESTING.md` gains a continuous-integration section.

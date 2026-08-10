@@ -33,7 +33,7 @@ This register holds debt that outlives a single task. Short-lived working items 
 | TD-012 | Reference data keeps referenced withdrawn rows | Open — note only | — |
 | TD-013 | Live sync tests write into the production database | ✅ Resolved 2026-07-22 (M12 Phase 3) | — |
 | TD-014 | WorkoutExercise removal during a workout is not propagated to the backend | ✅ Resolved 2026-08-07 (ADR-0017 Stage 2) | - |
-| TD-015 | ViewModel test classes are intermittently flaky | ✅ Resolved 2026-08-10 (three causes; verified over 100 runs) | - |
+| TD-015 | ViewModel test classes were intermittently flaky | ✅ Resolved 2026-08-10 (three causes; verified over 100 runs) | - |
 | TD-016 | Backend suite failed in the working copy, passed elsewhere | ✅ Resolved 2026-08-07 (VS Code Java autobuild overwrote Maven's output) | - |
 
 ---

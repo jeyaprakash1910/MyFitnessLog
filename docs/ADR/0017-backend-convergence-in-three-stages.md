@@ -156,11 +156,9 @@ when two copies disagree.
 > wrong.
 >
 > **TD-015 was to be fixed first**, because the affected test files are the ones
-> Stage 3 changes. That was done far enough on 2026-08-08: the flake is down from
-> about one run in four to one in 40, and the cause that mattered here turned out to
-> be a real defect in `WorkoutViewModel` rather than a test problem. Read TD-015
-> before touching that file; nine approaches to the remainder are recorded as
-> measured failures.
+> Stage 3 changes. Partly done on 2026-08-08, when the cause that mattered here
+> turned out to be a real defect in `WorkoutViewModel` rather than a test problem,
+> and fully resolved on 2026-08-10.
 
 This stage amends **ADR-0004 only**, not ADR-0001 as first expected: ADR-0001 is
 about not persisting derived recommendations, which editing history does not touch.

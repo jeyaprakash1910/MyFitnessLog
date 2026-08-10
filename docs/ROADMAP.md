@@ -215,9 +215,9 @@ restore on a fresh install, which retries next launch. Spending the entire month
 allowance to remove a delay nobody experiences is not a trade worth making. Revisit
 only if something user-facing ever has to block on a network read, which the
 offline-first design exists to prevent.
-Test count: 512 automated Android tests (505 JVM/Robolectric + 7 instrumented)
+Test count: 520 automated Android tests (513 JVM/Robolectric + 7 instrumented)
 + 151 backend tests (JUnit 5/MockMvc over real PostgreSQL) + 133 web tests
-(Vitest/RTL, 4 of them live-backend) = 796 total, of which 787 run by default.
+(Vitest/RTL, 4 of them live-backend) = 804 total, of which 795 run by default.
 All of them run on every push and pull request via GitHub Actions, the
 instrumented ones on an emulator in their own job since 2026-08-07.
 The nine live tests (five Android `LiveBackendSyncTest`, four web) drive the real

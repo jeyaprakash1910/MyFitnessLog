@@ -346,13 +346,10 @@ tasks.matching { it.name == "preReleaseBuild" || it.name == "mergeReleaseResourc
  * as green, so the next flake is counted here instead of being discovered by
  * someone re-running a red build by hand.
  *
- * WorkoutViewModelTest, and whichever class happens to run after it, fail roughly
- * one run in four while the code is correct: a leaked coroutine is still using
- * `Dispatchers.Main` when a test class installs or resets it. Two attempts to fix
- * the cause were measured and reverted, one of which made it four times worse.
- * docs/TECH_DEBT.md TD-015 has the detail and the dead ends.
+ * docs/TECH_DEBT.md TD-015 has the history: three causes, nine failed attempts,
+ * and why the exception pointed at the wrong code for so long.
  *
- * This is containment, and the part that matters is that it hides nothing. A test
+ * The part that matters is that this hides nothing. A test
  * that fails and then passes is reported as **FLAKY**, not as green, so the
  * problem stays visible and countable rather than turning into a habit of
  * re-running red builds. `maxFailures` still fails the build outright when the
