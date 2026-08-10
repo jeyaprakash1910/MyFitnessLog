@@ -22,6 +22,8 @@ import org.junit.Before
 import org.junit.Test
 import java.io.IOException
 import java.util.UUID
+import com.myfitnesslog.feature.routine.closeAndDrain
+import com.myfitnesslog.feature.routine.tracked
 
 /**
  * Unit tests for [ExerciseListViewModel] using fake repositories.
@@ -62,7 +64,7 @@ class ExerciseListViewModelTest {
         val exercises = FakeExerciseRepository(emptyList()).apply {
             refreshGate = CompletableDeferred()
         }
-        val viewModel = ExerciseListViewModel(exercises, FakeCategoryRepository())
+        val viewModel = ExerciseListViewModel(exercises, FakeCategoryRepository()).tracked()
 
         backgroundScope.launch { viewModel.uiState.collect {} }
         runCurrent()
@@ -72,7 +74,7 @@ class ExerciseListViewModelTest {
 
     @Test
     fun reachesEmptyWhenRefreshSucceedsWithNoData() = runTest {
-        val viewModel = ExerciseListViewModel(FakeExerciseRepository(emptyList()), FakeCategoryRepository())
+        val viewModel = ExerciseListViewModel(FakeExerciseRepository(emptyList()), FakeCategoryRepository()).tracked()
 
         backgroundScope.launch { viewModel.uiState.collect {} }
         runCurrent()
@@ -85,7 +87,7 @@ class ExerciseListViewModelTest {
         val exercises = FakeExerciseRepository(emptyList()).apply {
             refreshError = IOException("network down")
         }
-        val viewModel = ExerciseListViewModel(exercises, FakeCategoryRepository())
+        val viewModel = ExerciseListViewModel(exercises, FakeCategoryRepository()).tracked()
 
         backgroundScope.launch { viewModel.uiState.collect {} }
         runCurrent()
@@ -98,7 +100,7 @@ class ExerciseListViewModelTest {
         val exercises = FakeExerciseRepository(listOf(bench)).apply {
             refreshError = IOException("network down")
         }
-        val viewModel = ExerciseListViewModel(exercises, FakeCategoryRepository())
+        val viewModel = ExerciseListViewModel(exercises, FakeCategoryRepository()).tracked()
 
         backgroundScope.launch { viewModel.uiState.collect {} }
         runCurrent()
@@ -116,7 +118,7 @@ class ExerciseListViewModelTest {
                 ExerciseCategoryEntity(backId, "Back"),
             ),
         )
-        val viewModel = ExerciseListViewModel(FakeExerciseRepository(listOf(bench)), categories)
+        val viewModel = ExerciseListViewModel(FakeExerciseRepository(listOf(bench)), categories).tracked()
 
         backgroundScope.launch { viewModel.uiState.collect {} }
         runCurrent()

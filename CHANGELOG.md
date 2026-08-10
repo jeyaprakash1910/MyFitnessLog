@@ -7,6 +7,28 @@ the project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The intermittently failing Android tests are fixed** (TD-015). The suite used
+  to fail roughly one run in four with no fault in the code under test, and it took
+  nine failed attempts over three days to close.
+
+  It resisted because the exception pointed at the wrong place. kotlinx's guard on
+  `Dispatchers.Main` records a fault during a *read* and throws it at the next
+  *write*, so the trace always named whichever teardown happened to run next rather
+  than the code responsible. The actual reader was in the exception's cause, which
+  nobody had inspected: `combine` calls `yield()` on every emission, `yield()` reads
+  the Main delegate, and with an unconfined dispatcher that read happens on Room's
+  background thread.
+
+  Three causes, all fixed: a real defect in `WorkoutViewModel` where an RPE tap
+  could silently save nothing; a teardown that wrote `Dispatchers.Main` while Room's
+  threads were still reading it, now solved by giving each test database executors
+  the suite owns and can wait for; and a missed `SharedFlow` emission in one test.
+
+  Verified over **100 consecutive full-suite runs**, against a same-day baseline
+  that failed on runs 4 and 5.
+
 ## [1.6.1] - 2026-08-10
 
 ### Fixed

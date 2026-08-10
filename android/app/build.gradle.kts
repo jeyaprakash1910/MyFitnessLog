@@ -338,7 +338,13 @@ tasks.matching { it.name == "preReleaseBuild" || it.name == "mergeReleaseResourc
     .configureEach { dependsOn(generateReleaseNetworkSecurityConfig) }
 
 /**
- * Retry a failed test once, but only on CI (TD-015).
+ * Retry a failed test once, but only on CI.
+ *
+ * This was containment for TD-015, which was resolved on 2026-08-10 and verified
+ * over 100 consecutive full-suite runs. It is kept deliberately rather than
+ * removed: it hides nothing, because a retried pass is reported as FLAKY and never
+ * as green, so the next flake is counted here instead of being discovered by
+ * someone re-running a red build by hand.
  *
  * WorkoutViewModelTest, and whichever class happens to run after it, fail roughly
  * one run in four while the code is correct: a leaked coroutine is still using

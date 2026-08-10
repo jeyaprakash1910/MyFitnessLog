@@ -22,6 +22,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.util.UUID
+import com.myfitnesslog.feature.routine.closeAndDrain
+import com.myfitnesslog.feature.routine.tracked
 
 @RunWith(RobolectricTestRunner::class)
 class RoutineDetailViewModelTest {
@@ -44,14 +46,14 @@ class RoutineDetailViewModelTest {
         // while resetMain replaces it, which throws "Dispatchers.Main is used
         // concurrently with setting it". TD-015, explained in full in
         // WorkoutViewModelTest.
-        database.close()
+        database.closeAndDrain()
         Dispatchers.resetMain()
     }
 
     private fun viewModelFor(routineId: UUID) = RoutineDetailViewModel(
         savedStateHandle = SavedStateHandle(mapOf(RoutineRoutes.ARG_ROUTINE_ID to routineId.toString())),
         repository = repository,
-    )
+    ).tracked()
 
     @Test
     fun showsRoutineNameAndOrderedExercises() = runBlocking {

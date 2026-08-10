@@ -2,22 +2,18 @@
 
 Project: MyFitnessLog
 Version: 1.5
-Last Updated: August 8, 2026 (TD-015 reduced from ~1-in-4 to ~1-in-40, including a real WorkoutViewModel defect; nine approaches to the remainder now ruled out by measurement; TD-001 and TD-016 resolved; TD-014 resolved for ADR-0017 Stage 2)
+Last Updated: August 10, 2026 (TD-015 resolved after nine failed attempts; TD-001 and TD-016 resolved; TD-014 resolved for ADR-0017 Stage 2)
 
 This document records known, accepted technical debt: deliberate limitations that are not defects in the current milestone but must be addressed in a later milestone. Each item states the observation, why it is currently acceptable, the recommended future implementation, the documentation that must change first, and when it is scheduled.
 
 This register holds debt that outlives a single task. Short-lived working items live in the development TODO and are not duplicated here.
 
-> **Mostly fixed, still worth reading: TD-015.** The Android ViewModel test flake
-> is down from roughly one full-suite run in four to **one in 40**, measured over
-> 40 runs on 2026-08-08. Two causes were found; one of them was a real defect in
-> `WorkoutViewModel`, where a tap could silently do nothing, not a test problem at
-> all. A residual `Dispatchers.Main` teardown race remains. Before attempting it,
-> read TD-015 in full: **nine** approaches are now recorded as measured failures,
-> including the one the wider community recommends, and the fingerprint for telling
-> this flake from a real failure is narrower than it was. Only a restructure of the
-> nine test classes onto `runTest` is left, and it is a day's work, not an
-> afternoon's.
+> **TD-015 is resolved.** The Android ViewModel test flake is fixed, verified over
+> 100 consecutive full-suite runs against a same-day baseline that failed on runs 4
+> and 5. It took nine failed attempts because everyone read the wrong stack trace:
+> kotlinx's guard records a fault during a *read* and throws it at the next
+> *write*, so the exception always pointed at an innocent teardown. The reader was
+> in the cause all along. Worth reading TD-015 for that alone.
 
 ### Index
 
@@ -37,7 +33,7 @@ This register holds debt that outlives a single task. Short-lived working items 
 | TD-012 | Reference data keeps referenced withdrawn rows | Open — note only | — |
 | TD-013 | Live sync tests write into the production database | ✅ Resolved 2026-07-22 (M12 Phase 3) | — |
 | TD-014 | WorkoutExercise removal during a workout is not propagated to the backend | ✅ Resolved 2026-08-07 (ADR-0017 Stage 2) | - |
-| TD-015 | ViewModel test classes are intermittently flaky | **Open - reduced to ~1 run in 40**; two causes fixed 2026-08-08 | - |
+| TD-015 | ViewModel test classes are intermittently flaky | ✅ Resolved 2026-08-10 (three causes; verified over 100 runs) | - |
 | TD-016 | Backend suite failed in the working copy, passed elsewhere | ✅ Resolved 2026-08-07 (VS Code Java autobuild overwrote Maven's output) | - |
 
 ---
@@ -137,251 +133,153 @@ intermittent enough to mislead several investigations; delete it once the direct
 
 ---
 
-## TD-015 - The ViewModel test classes are intermittently flaky
+## TD-015 - The ViewModel test classes were intermittently flaky
 
-Status: **Open - two causes found and fixed, one residual.** The rate is down from
-roughly **1 full-suite run in 4** to **1 in 40**, measured. One of the two causes
-was a genuine defect in `WorkoutViewModel`, not a test problem. CI still retries a
-failed test once and reports it as FLAKY, so a red build means a real failure.
+Status: **Resolved 2026-08-10.** Three causes, all found and fixed. Verified over
+**100 consecutive full-suite runs** against a same-day baseline that failed on runs
+4 and 5.
 
 Milestone identified: ADR-0017 Stage 1 (2026-08-07)
-Last investigated: 2026-08-08
-Scheduled for: unscheduled. It no longer blocks ADR-0017 Stage 3.
+Resolved: 2026-08-10, after nine failed attempts
 
-### What you see
+### Why it took nine attempts
 
-Roughly **one full-suite run in 40** now ends with one or two failures in
-`WorkoutViewModelTest`, always the same shape:
+Everyone, including every attempt recorded below, read the wrong stack trace.
 
-    java.lang.IllegalStateException: Dispatchers.Main is used concurrently with setting it
+kotlinx's guard is `NonConcurrentlyModifiable`, and its own comment says what
+matters: *"The read operations never throw. Instead, the failures detected inside
+them will be remembered and thrown on the next modification."* It fires only on a
+**write**, meaning `setMain` or `resetMain`. So the exception's own stack always
+points at whichever teardown happened to be next, and never at the code that
+caused it.
 
-thrown from `Dispatchers.resetMain()` in that class's own `tearDown`. A
-`kotlin.UninitializedPropertyAccessException` on the line above is downstream
-noise: `setUp` threw, so `database` was never assigned.
+The reader is attached as the **cause**. Nobody looked until 2026-08-10:
 
-The `TimeoutCancellationException` signature this entry used to describe is
-**gone**, because its cause was found and fixed.
+    Caused by: java.lang.Throwable: reader location
+        at YieldKt.yield(Yield.kt:36)
+        at CombineKt$combineInternal$2$1$1.emit(Combine.kt:30)
+        at androidx.room.CoroutinesRoom$Companion$execute$4$job$1.invokeSuspend
 
-### Telling a flake from a real failure
+That is the whole answer. `combine` calls `yield()` on **every emission**, `yield()`
+reads the `Dispatchers.Main` delegate, and because Main is an *unconfined* test
+dispatcher the continuation resumes inline **on Room's background thread**. So the
+read happened on a thread the test did not control, and could overlap the test
+thread's write.
 
-**A failure is the known flake only if all of these hold:**
+Two consequences follow, and both had been reasoned about incorrectly before:
 
-1. it is in `WorkoutViewModelTest`, **and**
-2. the message is `Dispatchers.Main is used concurrently with setting it`, **and**
-3. re-running the suite passes.
+* **The failing test is not necessarily the guilty one.** A fault recorded during
+  one class's read surfaces at the next class's write. An early version of this
+  entry proposed exactly that and was talked out of it on the grounds that "the
+  trace shows the failing class's own tearDown" - which is true, and irrelevant,
+  because the trace shows the writer.
+* **`uiState` is a combine over Room flows, and a directly-constructed ViewModel is
+  never cleared.** Every test left one collecting for the rest of the class.
+  `WorkoutViewModelTest` has 33 tests, so it performed 66 writes against a growing
+  pile of readers.
 
-**Anything else is a real failure.** A genuine assertion failure ("expected X but
-was Y") is never this bug, and neither is a timeout any more. Do not re-run and
-move on.
+### Cause 1, fixed: a real defect in WorkoutViewModel
 
-### A separate, rarer failure seen on 2026-08-09, which is NOT this flake
+**Not a test problem**, and it accounted for every `TimeoutCancellationException`.
 
-Recorded here because the fingerprint above would otherwise get it waved through,
-and the fingerprint explicitly says a genuine assertion failure is never TD-015.
+`onCommitRow` wrote weight and reps into the private `drafts` flow;
+`onRpeSelected` read them back out of `uiState`, a `combine`/`stateIn` projection
+that had not necessarily recomputed. When it was stale, `isCompletable` was false,
+the transition returned `None` with `RestEffect.NONE`, and **the tap silently did
+nothing**: no set saved, no rest timer, no error.
 
-`WorkoutViewModelTest.completeWorkoutEmitsEventAndBecomesReadOnly` failed once with
-an `AssertionError`, in one full-suite run out of nine. It did not recur.
+In the app frames elapse between typing and tapping, so it almost always worked.
+Fixed by `currentInput()`, which reads from the field that owns the values.
+Measured in isolation: 4 of 6 runs failed with the fix reverted, 0 of 12 with it
+applied. Guarded by
+`WorkoutViewModelTest.rpeSelectionSeesAWeightCommittedImmediatelyBeforeIt`.
 
-    val job = launch(Dispatchers.Main) { vm.events.collect(events::add) }
-    vm.completeWorkout()
-    ...
-    assertTrue(events.contains(WorkoutViewModel.Event.COMPLETED))
+### Cause 2, fixed: teardown wrote Main while Room's threads were still reading it
 
-`events` is a `SharedFlow` with no replay, so the collector has to be subscribed
-before `completeWorkout` emits. The `launch` normally gets there first on an
-unconfined dispatcher, but nothing guarantees it, and a missed emission is
-unrecoverable. This is a defect in the test, not in the ViewModel, and it is
-independent of the teardown race: it produces a plain assertion failure with no
-`Dispatchers.Main` message and no timeout.
+Room's default executors come from `ArchTaskExecutor`. That pool is shared and
+**cannot be joined**, so no teardown could ever wait for it, which is why every
+attempt to make teardown safe failed.
 
-Not fixed here, because the fix belongs with the `runTest` restructure the section
-below describes rather than as a tenth patch to this file. The likely shape is to
-await the event rather than assert on a list that may not have been filled yet.
+`newInMemoryDatabase()` now gives each test database **two dedicated
+single-thread executors**, and `closeAndDrain()` does three things in an order
+that each earlier attempt got partly right:
 
-### Cause 1, fixed: WorkoutViewModel read its own writes through a stale projection
+1. **Cancel** the tracked ViewModels' scopes, so nothing new is collected and
+   nothing observes a database that is about to close.
+2. **Close**, then **wait** for those executors to terminate. This is the step
+   nothing before had, because it was not possible with the shared pool.
+3. Only then may the caller write `Dispatchers.resetMain()`.
 
-**This was a product defect, not a test defect**, and it accounted for every
-`TimeoutCancellationException`.
+Both constraints on the executors were learned by breaking them: they must be
+**different objects**, because `RoomDatabase.Builder.build()` copies the query
+executor into the transaction executor when only the former is given
+(RoomDatabase.kt:1252, Room 2.6.1) and SQLite transactions are thread-bound; and
+**neither may be same-thread**, because Room posts the invalidation refresh to the
+query executor expecting it to run after the write commits.
 
-`onCommitRow` writes weight and reps into the private `drafts` `MutableStateFlow`.
-`onRpeSelected` then needs those values to decide whether the row can be
-completed. It read them back out of `uiState`, which is a `combine` over Room
-flows and `drafts`, shared through `stateIn` on `viewModelScope`. Writing to
-`drafts` and reading back through `uiState` in the same call stack is a read of
-stale data: the projection has not necessarily recomputed yet.
+Pinned by `TestDatabaseTeardownTest`, which asserts the executors are terminated
+after `closeAndDrain` and *not* terminated after a plain `close()`. Mutation
+checked: removing the wait fails it.
 
-When it had not, `SetInput.isCompletable` was false, `SetTransitions.complete`
-returned `SetMutation.None` with `RestEffect.NONE`, and **the tap silently did
-nothing**: no set persisted, no rest timer. The tests then waited five real
-seconds for a state that was never coming.
+### Cause 3, fixed: a missed SharedFlow emission
 
-In the app this almost always worked, because frames elapse between typing values
-and picking an RPE. Under test the two calls are adjacent, which is what made this
-flaky rather than broken. The fix is `currentInput()`, which reads a transient
-row's values from `drafts`, the field that owns them. `onToggleComplete` had the
-same read and got the same treatment.
-
-Measured with the class in isolation, which reproduces this component reliably
-once a test removes the yield between the two calls:
-
-| Variant | Runs failing |
-|---|---|
-| Fix reverted | **4 in 6** |
-| Fix applied | **0 in 12** |
-
-Guarded by `WorkoutViewModelTest.rpeSelectionSeesAWeightCommittedImmediatelyBeforeIt`,
-which deliberately has no `awaitActive` between the two calls, because that yield
-is exactly what used to hide the bug.
-
-### Cause 2, fixed: teardown closed the database after resetting Main
-
-Room dispatches queries and invalidation refreshes on its own background threads.
-An emission can therefore resume a coroutine that reads the `Dispatchers.Main`
-delegate at the moment `resetMain()` replaces it, and kotlinx's
-`NonConcurrentlyModifiable` check throws.
-
-The window is far wider than it looks. `uiState` is shared with
-`SharingStarted.WhileSubscribed(5_000)`, and that stop timeout is a `delay` on the
-test dispatcher's **virtual** clock, which nothing in these tests advances. The
-timeout therefore never expires, so the Room flows underneath are still being
-collected on Main when teardown arrives, on every test, not for five seconds.
-
-The fix is to **close the database before resetting Main** rather than after, in
-all nine classes that install a test Main dispatcher. Closing it shuts down Room's
-invalidation tracker and executors, so there is nothing left that can touch Main.
-
-This narrows the race sharply but does not close it: an emission already
-dispatched to Main before `close()` can still be in flight. Hence the residual
-1 in 40.
+`completeWorkoutEmitsEventAndBecomesReadOnly` collected `events`, a `SharedFlow`
+with no replay, in a launched job and then asserted on the list. A collector that
+had not started before `completeWorkout` emitted missed the value permanently.
+Seen once in nine runs on 2026-08-09, recorded here at the time as *not* matching
+the flake fingerprint, and fixed by awaiting the event with `async` so there is no
+window between subscribing and emitting.
 
 ### Measurements
 
 Full suite, `--rerun-tasks` between every run.
 
-| Variant | Runs failing |
+| Variant | Result |
 |---|---|
-| Baseline, as documented previously | ~1 in 4 |
+| Baseline, as originally documented | ~1 in 4 |
 | Baseline, re-measured 2026-08-08 | 1 in 10 |
 | Cause 1 fixed only | 2 in 16 |
-| **Cause 1 + cause 2 fixed** | **1 in 40** |
+| Cause 1 + close-before-reset | 1 in 40 |
+| **Baseline re-measured 2026-08-10, same machine** | **failed on runs 4 and 5** |
+| **All three causes fixed** | **0 in 100** |
 
-### Nine approaches now ruled out by measurement
+At the measured 1-in-5 baseline, 100 consecutive passes by chance has probability
+about 2 in 10 billion.
 
-Read this before attempting anything. Six were added on 2026-08-08, four of them
-after checking what the wider community recommends: kotlinx.coroutines issue #3395
-confirms there is no upstream fix and that the exception deliberately reports only
-the writer's stack, and `SharingStarted.WhileSubscribed` is independently known as
-a source of test races. The commonly recommended remedy, cancelling the leaked
-scope, is approach 7 below and is measurably worse here.
+### Nine approaches that failed, kept for the record
 
-**1. A `ViewModelStore` per class, cleared in teardown.** Sound in principle;
-changed nothing measurable across the full suite (2 in 6).
+Every one of them tried to make teardown safe while the collectors were still
+live, which the cause trace shows is impossible: cancelling reads the Main
+delegate, draining dispatches on it, and stopping Room hard enough to silence it
+makes the collectors throw.
 
-**2. Clearing, then `advanceUntilIdle()` before `resetMain`.** **8 in 8.**
-Cancelling scopes and draining a scheduler are themselves work dispatched on Main,
-which is precisely what `resetMain`'s check objects to. The cleanup caused the
-collision it was meant to prevent.
+1. A `ViewModelStore` per class, cleared in teardown. No measurable change.
+2. Clearing, then `advanceUntilIdle()`. **8 in 8.** Draining is itself work on the
+   dispatcher being removed.
+3. Cancelling the leaked rest-timer scopes. 3 in 10.
+4. A same-thread Room query executor. **Deadlocks**: it also becomes the
+   transaction executor.
+5. Not calling `resetMain` at all. **10 in 20**, and it leaked a dispatcher into
+   later classes.
+6. Separate single-thread query and transaction executors, query same-thread.
+   6 failures on the first run: invalidation runs before the commit and never
+   emits.
+7. Cancel, then close, then reset, with no wait. 3 failures on the first run.
+8. Drainable executors without cancelling first. Live collectors observe a closed
+   database and throw into the next class.
+9. `advanceTimeBy` past the `WhileSubscribed` timeout. **9 in 40.** Bounded or
+   not, advancing the scheduler runs pending work that touches Main.
 
-**3. Cancelling the leaked rest-timer scopes in teardown.** 3 in 10, and
-re-confirmed on 2026-08-08 in a stronger form: tracking every `viewModelScope` and
-every timer scope and cancelling them all before `resetMain` made the class fail
-**on the first run**, for the same reason as approach 2. `viewModelScope.cancel()`
-is Main work.
+Approaches 4, 6 and 8 were each *half* of what finally worked. The missing half
+was always cancelling and waiting together.
 
-**4. Giving Room a same-thread query executor.** The obvious way to remove the
-background threads entirely, and it **deadlocks**. Room's suspending
-`withTransaction` occupies a thread from the *transaction* executor for the
-transaction's lifetime; running the invalidation refresh inline on that thread
-blocks behind the write lock. Every delete and undo test timed out, plus a class
-that had never failed before. Do not mix a same-thread query executor with a
-pooled transaction executor.
+### What is deliberately kept
 
-**5. Not calling `resetMain` at all.** Removing the concurrent write looks like it
-must work. **10 in 20**, and it leaks: `WorkoutIndicatorContentTest` and
-`ExercisePickerViewModelTest` started failing because a test dispatcher stayed
-installed for later classes. `resetMain` is necessary.
-
-**6. Separate single-thread query and transaction executors, same-thread query.**
-Fixes the deadlock in approach 4 by giving the two executors different objects, and
-still fails: **6 failures on the first run**. Room posts the invalidation refresh
-to the query executor *expecting it to be asynchronous*, so that it runs after the
-write commits. Run inline it observes the pre-commit state, concludes nothing
-changed, and no emission is ever produced. Every delete and undo test times out.
-Room's invalidation cannot be made synchronous this way.
-
-**7. Cancel the scopes, then close the database, then reset.** The one ordering not
-covered by approaches 1 to 3, and the one the wider community recommends for a
-leaked `viewModelScope`. **3 failures on the first run.** The stack trace says why,
-and it closes this whole family off: the reader that collides is
-`TestMainDispatcher.isDispatchNeeded`, reached from cancellation itself. Cancelling
-a scope whose children live on Main *is* a read of the Main delegate, so it races
-the write no matter where it sits relative to `close()`.
-
-**9. Winding the virtual clock past the `WhileSubscribed` timeout in teardown.**
-`advanceTimeBy(6_000)` on the Main test dispatcher, so the sharing coroutine expires
-its own stop timeout, drops the upstream Room flows and cleans itself up before
-`resetMain`. Bounded, unlike the `advanceUntilIdle` of approach 2, which never
-terminates because `oneSecondTicker` is a `while (true)` loop. Reasoning was sound
-and the result was **9 in 40**, nine times worse than leaving it alone, with the
-damage spreading to `RoutineEditViewModelTest`. Advancing the scheduler on Main is
-harmful no matter how it is bounded: the advance runs the pending work, and that
-work touches Main while teardown is about to replace it. Approaches 2 and 9 are the
-same mistake at different granularities.
-
-**8. Two dedicated, drainable Room executors, shut down and awaited before
-`resetMain`.** The most promising idea of the set: keep Room asynchronous, so
-invalidation still works, but on executors the test owns, so teardown can prove
-they have stopped before touching Main. Room's default pool comes from
-`ArchTaskExecutor` and cannot be joined, which is why there was no way to wait
-before. It compiles, runs, and **trades one failure mode for another**: draining
-the executors makes the close complete enough that the still-active collectors
-observe a closed database and throw, and the exception surfaces in the *next*
-class as `UncaughtExceptionsBeforeTest`. About one failure per run, so no better.
-Kept in the register because it is the right shape, and would probably work if
-combined with a restructure that stops the collectors first.
-
-### Where a next attempt should start
-
-**Only one avenue is left, and it is a restructure rather than a patch.** Nine
-patches have now been measured; seven made things worse and two helped. What every
-failed attempt has in common is that it tried to make teardown safe while
-collectors were still live. The evidence says that cannot work: cancelling them
-reads the Main delegate, draining them dispatches on it, and stopping Room hard
-enough to silence them makes them throw instead.
-
-So the collectors have to be gone *before* teardown begins, which means the tests
-must control when ViewModel work runs. These classes use `runBlocking` with an
-unconfined Main, so coroutines run eagerly and whenever they like. Moving them to
-`runTest` with a single shared `StandardTestDispatcher`, and awaiting state through
-Turbine rather than a five-second wall-clock `withTimeout`, gives the test that
-control. Approach 8 above is probably a necessary companion to it rather than an
-alternative.
-
-Budget it as a day on nine test classes, not an afternoon, and expect to rewrite
-`awaitFirst` and every `runBlocking` in them.
-
-Verify with **at least 40 full-suite runs**. At the current 1-in-40 rate, twenty
-green runs happen by chance three times in five.
-
-### Why the remainder is acceptable
-
-* **The failure mode is the safe one.** It makes tests fail when the code is fine.
-  It cannot make a test pass when the code is broken.
-* **The workaround is one re-run**, and the fingerprint above says when it applies.
-* **CI contains it without hiding it.** A failed test is retried once and reported
-  as **FLAKY**, never green, so the flake stays visible and countable while a real
-  regression still fails the build.
-* **It no longer blocks Stage 3.** The reason this was scheduled as Stage 3's first
-  step was that the affected files are the ones Stage 3 changes and the suite could
-  not be trusted. The defect in those files is now fixed and covered by a
-  regression test.
-
-### The real risk
-
-Flaky tests train people to dismiss failures, and eventually a genuine one is
-waved through as "just the flake". The fingerprint rule above is the mitigation,
-and it is now narrower: one class, one message. If it ever starts being applied
-loosely, finish this off regardless of cost.
+**The CI retry stays**, configured in `android/app/build.gradle.kts`. It no longer
+exists for this entry, and it hides nothing: a retried pass is reported as
+**FLAKY**, never green, and `maxFailures` still fails a broadly broken suite
+outright. Keeping it means a future flake is counted rather than discovered by
+someone re-running a red build by hand.
 
 
 ---

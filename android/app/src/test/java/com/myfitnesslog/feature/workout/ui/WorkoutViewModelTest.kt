@@ -7,6 +7,8 @@ import com.myfitnesslog.core.sync.testing.RecordingSyncTrigger
 import com.myfitnesslog.feature.routine.RoutineTestData
 import com.myfitnesslog.feature.routine.awaitFirst
 import com.myfitnesslog.feature.routine.data.RoutineRepositoryImpl
+import com.myfitnesslog.feature.routine.closeAndDrain
+import com.myfitnesslog.feature.routine.tracked
 import com.myfitnesslog.feature.routine.newInMemoryDatabase
 import com.myfitnesslog.feature.routine.newRepository
 import com.myfitnesslog.feature.routine.seedExercises
@@ -23,6 +25,9 @@ import java.time.ZoneId
 import java.time.ZoneOffset
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -78,39 +83,58 @@ class WorkoutViewModelTest {
     }
 
     /**
-     * TD-015. Close the database **before** resetting Main, not after.
+     * Everything this class starts on Main, so teardown can stop it. TD-015.
      *
-     * The collision this avoids: Room dispatches queries and invalidation
-     * refreshes on its own background threads, so an emission can resume a
-     * coroutine that reads the `Dispatchers.Main` delegate at the very moment
-     * `resetMain()` replaces it, and kotlinx's concurrency check throws
-     * "Dispatchers.Main is used concurrently with setting it".
+     * ## What the flake actually was
      *
-     * The window is not the five seconds it looks like. `uiState` is shared with
-     * `SharingStarted.WhileSubscribed(5_000)`, and that stop timeout is a `delay`
-     * on the test dispatcher's **virtual** clock, which nothing here advances. So
-     * the timeout never expires and the Room flows underneath are still being
-     * collected on Main when teardown arrives, every time.
+     * `Dispatchers.Main is used concurrently with setting it`, thrown from
+     * `resetMain`. kotlinx's guard fires only on a **write**, meaning setMain or
+     * resetMain; reads never throw on their own, they record a fault for the next
+     * write to raise.
      *
-     * Closing the database first shuts down Room's invalidation tracker and
-     * executors, so there is no longer anything that can touch Main. Reversing the
-     * two lines is the whole fix.
+     * The reader went unidentified through nine attempts because everyone read the
+     * exception's own stack, which is always the writer. The cause carries the
+     * reader, and on 2026-08-10 it said:
      *
-     * What deliberately does **not** happen here is cancelling the ViewModel
-     * scopes or draining the dispatcher first. Both were measured and both made
-     * things worse, for the same reason: cancellation and draining are themselves
-     * work dispatched onto the dispatcher being removed, so the cleanup causes the
-     * collision it was meant to prevent. One took the flake from about one run in
-     * four to eight in eight.
+     *     at YieldKt.yield(Yield.kt:36)
+     *     at CombineKt${'$'}combineInternal${'$'}2${'$'}1${'$'}1.emit(Combine.kt:30)
+     *     at androidx.room.CoroutinesRoom${'$'}Companion${'$'}execute${'$'}4${'$'}job${'$'}1
+     *
+     * `combine` calls `yield()` on every emission and `yield()` reads the Main
+     * delegate. Main here is *unconfined*, so the continuation resumes inline on
+     * **Room's background thread**, which puts that read on a different thread from
+     * the test's write. `uiState` is a combine over Room flows, and a
+     * directly-constructed ViewModel is never cleared, so each test leaves one
+     * collecting for the rest of the class.
+     *
+     * ## Why the three steps, in this order
+     *
+     *  1. **Cancel** the scopes. Nothing new is collected, and nothing observes a
+     *     database that is about to close.
+     *  2. **Drain** Room's executors, in `closeAndDrain`. Cancellation is not
+     *     instantaneous and Room work already in flight still resumes on Room's
+     *     threads, which are the readers. This is the step every earlier attempt
+     *     was missing: cancelling without waiting simply moved the race.
+     *  3. **Then** reset Main, with no thread left that can read it.
+     *
+     * Cancel-then-reset without the drain was measured and was worse. So was
+     * draining without cancelling, which left live collectors observing a closed
+     * database and throwing into the next class. Both are in TD-015.
      */
+    /** Rest-timer scopes, which are this class's own and not owned by a ViewModel. */
+    private val startedScopes = mutableListOf<kotlinx.coroutines.CoroutineScope>()
+
     @After
     fun tearDown() {
-        database.close()
+        startedScopes.forEach { it.cancel() }
+        // Cancels every tracked ViewModel, then closes, then waits for Room's
+        // threads. Only after that is it safe to write Dispatchers.Main.
+        database.closeAndDrain()
         Dispatchers.resetMain()
     }
 
     private fun newRestTimer() = com.myfitnesslog.feature.workout.domain.RestTimer(
-        kotlinx.coroutines.CoroutineScope(UnconfinedTestDispatcher()),
+        kotlinx.coroutines.CoroutineScope(UnconfinedTestDispatcher()).also { startedScopes += it },
     )
 
     private fun viewModel(
@@ -127,7 +151,7 @@ class WorkoutViewModelTest {
         startWorkout = startWorkout,
         clock = clock,
         restTimerController = restTimer,
-    )
+    ).tracked()
 
     /** Minimal in-memory [SettingsRepository] for choosing the PREVIOUS strategy under test. */
     private class FakeSettingsRepository(strategy: PreviousWorkoutValues) : SettingsRepository {
@@ -365,15 +389,24 @@ class WorkoutViewModelTest {
     fun completeWorkoutEmitsEventAndBecomesReadOnly() = runBlocking {
         val vm = viewModel()
         vm.awaitActive { it.exercises.isNotEmpty() }
-        val events = mutableListOf<WorkoutViewModel.Event>()
-        val job = launch(Dispatchers.Main) { vm.events.collect(events::add) }
+
+        // Await the event rather than collecting into a list and asserting on it
+        // afterwards. `events` is a SharedFlow with no replay, so a collector that
+        // has not started by the time completeWorkout emits misses the value
+        // permanently, and the assertion then fails for a reason that has nothing
+        // to do with the ViewModel. Observed once in nine full-suite runs on
+        // 2026-08-09 and recorded in TD-015 before being fixed here.
+        //
+        // async starts the collector eagerly and suspends until the event arrives,
+        // so there is no window between subscribing and emitting.
+        val completed = async(Dispatchers.Main) {
+            vm.events.first { it == WorkoutViewModel.Event.COMPLETED }
+        }
 
         vm.completeWorkout()
 
-        val readOnly = vm.awaitActive { it.isReadOnly }
-        assertTrue(readOnly.isReadOnly)
-        assertTrue(events.contains(WorkoutViewModel.Event.COMPLETED))
-        job.cancel()
+        assertEquals(WorkoutViewModel.Event.COMPLETED, completed.await())
+        assertTrue(vm.awaitActive { it.isReadOnly }.isReadOnly)
     }
 
     @Test

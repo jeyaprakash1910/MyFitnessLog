@@ -30,6 +30,8 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import com.myfitnesslog.feature.routine.closeAndDrain
+import com.myfitnesslog.feature.routine.tracked
 
 @RunWith(RobolectricTestRunner::class)
 class WorkoutDetailViewModelTest {
@@ -73,7 +75,7 @@ class WorkoutDetailViewModelTest {
         // while resetMain replaces it, which throws "Dispatchers.Main is used
         // concurrently with setting it". TD-015, explained in full in
         // WorkoutViewModelTest.
-        database.close()
+        database.closeAndDrain()
         Dispatchers.resetMain()
     }
 
@@ -81,7 +83,7 @@ class WorkoutDetailViewModelTest {
         savedStateHandle = SavedStateHandle(mapOf(WorkoutHistoryRoutes.ARG_SESSION_ID to sessionId.toString())),
         repository = repository,
         workoutRepository = workoutRepository,
-    )
+    ).tracked()
 
     /** Starts a routine workout with one squat exercise; returns the session id. */
     private suspend fun startRoutineWorkout(): UUID {
