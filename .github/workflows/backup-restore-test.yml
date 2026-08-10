@@ -1,0 +1,132 @@
+name: Backup restore test
+
+# Restores the newest nightly dump into a throwaway PostgreSQL and checks that it
+# is actually usable.
+#
+# The release checklist has said it for months: "an unverified backup is a belief,
+# not a backup." Until now the only thing verifying one was a human doing it by
+# hand at release time, which is exactly the kind of step that quietly stops
+# happening.
+#
+# The nightly Database Backup workflow already guards against an empty dump by
+# checking its size. Size is not restorability. This restores the file and then
+# asks the restored database questions.
+#
+# Weekly rather than nightly, deliberately. What this catches is the dump format
+# becoming unrestorable, which changes when Postgres or Supabase change, not
+# daily. A nightly run would mostly re-prove the same thing and add noise to a
+# repository where a red check is supposed to mean something.
+
+on:
+  schedule:
+    - cron: "41 3 * * 1"      # Mondays at 03:41 UTC, after the 02:17 nightly dump
+  workflow_dispatch: {}
+
+concurrency:
+  group: backup-restore-test
+  cancel-in-progress: false
+
+permissions:
+  contents: read              # only reads the backups branch
+
+jobs:
+  restore:
+    name: Newest dump restores and is intact
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      # Same major version as production, so the restore is exercised against the
+      # engine the dump came from rather than a near-enough one.
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: restore_check
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d restore_check"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Check out the backups branch
+        uses: actions/checkout@v5
+        with:
+          ref: backups
+          # Only the newest dump is restored, so there is no reason to fetch the
+          # history of every one that came before it.
+          fetch-depth: 1
+
+      - name: Restore the newest dump
+        run: |
+          set -euo pipefail
+          latest=$(ls -1 dumps/*.sql.gz | sort | tail -1)
+          if [ -z "$latest" ]; then
+            echo "::error::No dumps found on the backups branch."; exit 1
+          fi
+          echo "Restoring $latest"
+          age_days=$(( ( $(date -u +%s) - $(date -u -d "$(basename "$latest" | sed -E 's/myfitnesslog-(.*)\.sql\.gz/\1/; s/T/ /; s/-([0-9]{2})-([0-9]{2})Z/:\1:\2/')" +%s) ) / 86400 ))
+          echo "Dump is ${age_days} day(s) old"
+          if [ "$age_days" -gt 3 ]; then
+            echo "::error::Newest dump is ${age_days} days old. The nightly backup has stopped running."
+            exit 1
+          fi
+
+          gunzip -c "$latest" > /tmp/restore.sql
+          # ON_ERROR_STOP is deliberately off. A Supabase dump carries that
+          # platform's own schemas and extensions, and some do not exist on stock
+          # Postgres. Those are irrelevant to whether the training data came back,
+          # which is what the next step actually checks.
+          PGPASSWORD=postgres psql -h localhost -U postgres -d restore_check \
+            -v ON_ERROR_STOP=0 -f /tmp/restore.sql > /tmp/restore.out 2> /tmp/restore.err || true
+          echo "psql reported $(grep -c '^ERROR' /tmp/restore.err || echo 0) error line(s)"
+          grep '^ERROR' /tmp/restore.err | head -20 || true
+
+      - name: The training data came back, and is internally consistent
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          q() { psql -h localhost -U postgres -d restore_check -At -c "$1"; }
+
+          # Seeded reference data is the floor. If Flyway's migrations restored,
+          # these are present regardless of how much training has been logged, so
+          # they distinguish "restored" from "restored an empty shell".
+          exercises=$(q "select count(*) from public.exercise")
+          categories=$(q "select count(*) from public.exercise_category")
+          migrations=$(q "select count(*) from public.flyway_schema_history")
+          echo "exercise=$exercises exercise_category=$categories flyway=$migrations"
+
+          [ "$exercises"  -ge 300 ] || { echo "::error::Only $exercises exercises restored; the seeded catalogue is 313."; exit 1; }
+          [ "$categories" -ge 14  ] || { echo "::error::Only $categories categories restored; expected at least 14."; exit 1; }
+          [ "$migrations" -ge 7   ] || { echo "::error::Only $migrations migrations recorded; expected at least 7."; exit 1; }
+
+          # Deliberately no floor on routines or workouts. Those are the user's own
+          # data and a legitimate value is zero; asserting a minimum would make this
+          # check fail for the wrong reason the first time a database is reset.
+          echo "routine=$(q 'select count(*) from public.routine')" \
+               "workout_session=$(q 'select count(*) from public.workout_session')" \
+               "workout_set=$(q 'select count(*) from public.workout_set')"
+
+          # Integrity matters more than counts. A dump that restores rows but loses
+          # the relationships between them is worse than one that fails outright,
+          # because it looks like a backup.
+          orphans=$(q "
+            select
+              (select count(*) from public.workout_set ws
+                 left join public.workout_exercise we on we.id = ws.workout_exercise_id
+                 where we.id is null)
+            + (select count(*) from public.workout_exercise we
+                 left join public.workout_session s on s.id = we.workout_session_id
+                 where s.id is null)
+            + (select count(*) from public.routine_exercise re
+                 left join public.routine r on r.id = re.routine_id
+                 where r.id is null)")
+          echo "orphaned rows: $orphans"
+          [ "$orphans" -eq 0 ] || { echo "::error::$orphans orphaned rows in the restored database."; exit 1; }
+
+          echo "::notice::Restore verified: $exercises exercises, $migrations migrations, no orphans."
