@@ -208,10 +208,20 @@ Two things about that diagnosis are worth keeping, because both were nearly miss
   later. So a second attempt half a minute after the first would have succeeded,
   which is worth telling a user rather than only saying "it is warm now".
 
-Verified working from the device on 10 Aug 2026 once the instance was held warm.
-The permanent remedy is 1.6.1, which raises the client's read timeout past the
-cold start; a keep-alive that stops the instance sleeping at all is an open
-option, not yet taken.
+Verified working from the device on 10 Aug 2026, and 1.6.1 installed over the air
+the same day. That is the remedy: the client now waits past the cold start rather
+than the server being kept awake.
+
+**A keep-alive was considered and declined on 10 Aug 2026.** Pinging the instance
+every ten minutes would stop it sleeping, and Render's free tier would just cover
+it (roughly 720 hours needed against 750 allowed). It was rejected because a slow
+wake-up costs the user nothing: Room is the single source of truth on the device
+(ADR-0002), so every screen reads locally and nothing waits on the network. The
+backend is only needed for background sync, which WorkManager retries, and for
+restore on a fresh install, which retries next launch. Spending the entire monthly
+allowance to remove a delay nobody experiences is not a trade worth making. Revisit
+only if something user-facing ever has to block on a network read, which the
+offline-first design exists to prevent.
 Test count: 512 automated Android tests (505 JVM/Robolectric + 7 instrumented)
 + 151 backend tests (JUnit 5/MockMvc over real PostgreSQL) + 133 web tests
 (Vitest/RTL, 4 of them live-backend) = 796 total, of which 787 run by default.
