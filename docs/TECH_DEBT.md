@@ -113,7 +113,7 @@ from `target/classes`.
 
 ### What this corrects in the earlier write-up
 
-The previous version of this entry, and the header of
+The previous version of this entry, and the header of the since-deleted
 `backend/scripts/run-tests.sh`, both listed **class-file contents** as ruled out by
 measurement. That was wrong, and it was the one place the answer was sitting. A
 single `cmp` between a passing and a failing build would have ended the
@@ -126,10 +126,11 @@ now ruled out properly, against a deterministic reproducer.
 
 ### Follow-up
 
-`backend/scripts/run-tests.sh` still works and is harmless, but is no longer
-required. It is being kept briefly as a fallback because the failure was
-intermittent enough to mislead several investigations; delete it once the direct
-`mvn test` path has been trusted for a while.
+`backend/scripts/run-tests.sh`, the worktree workaround, was **deleted on
+2026-08-10** after three days of the direct `mvn test` path working. It was kept
+that long deliberately, because this failure was intermittent enough to mislead
+four investigations and a quick deletion would have been the same overconfidence
+that caused them.
 
 ---
 

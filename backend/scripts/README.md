@@ -1,32 +1,32 @@
 # Scripts
 
-## run-tests.sh
+## Running the backend tests
 
-Runs the backend test suite in a disposable git worktree.
+There is no script. Use Maven directly:
 
 ```bash
-./scripts/run-tests.sh                    # whole suite (151 tests)
-./scripts/run-tests.sh -Dtest=FooTest     # extra args are passed to Maven
+cd backend
+mvn test
 ```
 
-**Prefer plain `mvn test`.** This script worked around TD-016, which was resolved
-on 2026-08-07: VS Code's Java language server was overwriting Maven's
-`target/classes`, and `"java.autobuild.enabled": false` fixed it. The script is
-kept only as a short-term fallback and should be deleted once the direct path has
-been trusted for a while. See TD-016 in `docs/TECH_DEBT.md`.
+`run-tests.sh` used to live here, running the suite in a disposable git worktree
+to work around TD-016. That was resolved on 2026-08-07 (VS Code's Java language
+server was overwriting Maven's `target/classes`), and the script was deleted on
+2026-08-10 after the direct path had been trusted for three days. It was always the
+weaker option anyway: a worktree checks out committed content, so uncommitted
+changes were never tested.
 
-It is also the weaker option day to day, because a worktree checks out committed
-content, so **uncommitted changes are not tested**. The script warns when it
-detects any.
+**If your PostgreSQL is not on 5432**, export the connection first or the run fails
+with `Connection to localhost:5432 refused`. The script used to default this to
+5433 and it is the one thing lost with it:
 
-The one thing it still does for you is default the connection to port **5433**.
-Plain `mvn test` uses the 5432 default from `src/test/resources/application.yml`,
-so on this machine export `TEST_DB_URL`, `TEST_DB_USERNAME` and `TEST_DB_PASSWORD`
-first (see the backend section of the root README).
+```bash
+export TEST_DB_URL=jdbc:postgresql://localhost:5433/myfitnesslog_test
+export TEST_DB_USERNAME=myfitnesslog
+export TEST_DB_PASSWORD=myfitnesslog
+```
 
-Requires JDK 21 (found automatically via `java_home` if needed) and a PostgreSQL
-holding `myfitnesslog_test`. Override the connection with `TEST_DB_URL`,
-`TEST_DB_USERNAME` and `TEST_DB_PASSWORD`; it defaults to port **5433**.
+Requires JDK 21 and a PostgreSQL holding `myfitnesslog_test`.
 
 ## run-prod-local.sh
 
