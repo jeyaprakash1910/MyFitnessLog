@@ -17,6 +17,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
+import java.net.SocketTimeoutException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -78,6 +79,16 @@ class AppUpdateRepositoryImpl @Inject constructor(
 
         val response = try {
             api.getLatestVersion()
+        } catch (e: SocketTimeoutException) {
+            // Distinguished from a general network failure because the cause is
+            // usually neither the phone nor a broken server: the free Render
+            // instance sleeps, and the first request after a quiet period waits
+            // for a container to boot (100.8s observed, 2026-08-05). Telling the
+            // user to try again is actionable; "could not reach the server"
+            // sounds like something is broken and invites no second attempt.
+            return@withContext UpdateStatus.Unavailable(
+                "The server is waking up. Try again in a moment.",
+            )
         } catch (e: IOException) {
             return@withContext UpdateStatus.Unavailable("Could not reach the server.")
         } catch (e: RuntimeException) {
