@@ -182,7 +182,18 @@ Since **v1.2.0** an installed build updates itself over the air: the backend
 resolves the latest GitHub release with a server-side read-only token and streams
 its APK to the app (ADR-0016). Verified end to end on the physical OnePlus
 CPH2717 on 6 Aug 2026 - a 1.2.0 install detected, downloaded and installed 1.3.0
-with no cable, preserving the local database (`firstInstallTime` unchanged).
+with no cable, preserving the local database (`firstInstallTime` unchanged), and
+again on 10 Aug 2026 for **1.5.0 to 1.6.0**.
+
+That second run found a real defect first. The check reported "could not reach the
+server" while the server was healthy: it was asleep. The free Render instance spins
+down after inactivity and the first request waits for a container to boot, and the
+client allowed OkHttp's default 10 seconds for everything. The update check runs
+once on launch with no retry, so it was the first place this could show; background
+sync had been hiding the same fault for months because WorkManager retried and the
+second attempt found a warm server. Fixed in `NetworkModule` and pinned by
+`OkHttpTimeoutTest`. `DEPLOYMENT.md` had predicted this and deferred it pending
+evidence, which is what arrived.
 Test count: 512 automated Android tests (505 JVM/Robolectric + 7 instrumented)
 + 151 backend tests (JUnit 5/MockMvc over real PostgreSQL) + 133 web tests
 (Vitest/RTL, 4 of them live-backend) = 796 total, of which 787 run by default.
