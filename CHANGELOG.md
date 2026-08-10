@@ -7,8 +7,10 @@ the project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
-The backend half of editable workout history, plus test and delivery
-infrastructure. Two contract changes for anything calling the API: the error
+## [1.6.0] - 2026-08-10
+
+Editable workout history, plus the test and delivery infrastructure built
+alongside it. Two contract changes for anything calling the API: the error
 statuses below, and corrections to a completed workout.
 
 ### Added
@@ -270,7 +272,8 @@ backend on a private network. See the full
 - Synchronization is one-way: the backend is the durable copy but cannot repopulate a
   device, so a phone that loses its database does not get its history back.
 
-[Unreleased]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.2.0...v1.3.0
