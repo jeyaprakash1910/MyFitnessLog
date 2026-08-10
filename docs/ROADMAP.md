@@ -185,7 +185,8 @@ CPH2717 on 6 Aug 2026 - a 1.2.0 install detected, downloaded and installed 1.3.0
 with no cable, preserving the local database (`firstInstallTime` unchanged), and
 again on 10 Aug 2026 for **1.5.0 to 1.6.0**.
 
-That second run found a real defect first. The check reported "could not reach the
+That second run found a real defect first, and it took three attempts to pin down
+because the obvious reading was wrong twice. The check reported "could not reach the
 server" while the server was healthy: it was asleep. The free Render instance spins
 down after inactivity and the first request waits for a container to boot, and the
 client allowed OkHttp's default 10 seconds for everything. The update check runs
@@ -194,6 +195,23 @@ sync had been hiding the same fault for months because WorkManager retried and t
 second attempt found a warm server. Fixed in `NetworkModule` and pinned by
 `OkHttpTimeoutTest`. `DEPLOYMENT.md` had predicted this and deferred it pending
 evidence, which is what arrived.
+
+Two things about that diagnosis are worth keeping, because both were nearly missed:
+
+* **The phone had already proved its network was fine**, by downloading 8.7 MB
+  through the same host minutes earlier. That single fact ruled out DNS, TLS, the
+  API key and connectivity in one go, and turned "why can't the phone reach the
+  server" into "what is different about *this* request". The answer was that
+  nothing was: the container had gone back to sleep.
+* **A failed check leaves the container booting.** The request that times out at
+  10s is what starts the wake-up, and the instance is up roughly three seconds
+  later. So a second attempt half a minute after the first would have succeeded,
+  which is worth telling a user rather than only saying "it is warm now".
+
+Verified working from the device on 10 Aug 2026 once the instance was held warm.
+The permanent remedy is 1.6.1, which raises the client's read timeout past the
+cold start; a keep-alive that stops the instance sleeping at all is an open
+option, not yet taken.
 Test count: 512 automated Android tests (505 JVM/Robolectric + 7 instrumented)
 + 151 backend tests (JUnit 5/MockMvc over real PostgreSQL) + 133 web tests
 (Vitest/RTL, 4 of them live-backend) = 796 total, of which 787 run by default.
