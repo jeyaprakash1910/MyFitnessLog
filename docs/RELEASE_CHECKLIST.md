@@ -342,7 +342,9 @@ each one is here because its absence has already cost this project something.
       after. This is the property TD-013 violated for months while every test
       passed.
 - [ ] **Production database backup taken _and restored_**, with row counts
-      compared. An unverified dump is a belief.
+      compared. An unverified dump is a belief. The nightly dump is separately
+      restore-tested every Monday by `backup-restore-test.yml`, but that checks
+      the *nightly* dump; this line is about the one taken for this release.
 - [ ] **Test databases isolated** — backend tests on `myfitnesslog_test`, live
       tests on `myfitnesslog_livetest`; neither on `myfitnesslog`.
 - [ ] **Keystore backup verified** in at least one location that survives this

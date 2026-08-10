@@ -87,16 +87,47 @@ git clone --depth 1 --branch backups <repo-url> bk && cp bk/dumps/$(ls bk/dumps 
 That is the difference between "GitHub has my backups" and "I have my backups." For a
 10-year horizon, do it.
 
-## Verification procedure (do this once, then yearly)
+## Verification, now automated
 
-1. Trigger the workflow manually (**Run workflow**); confirm a new file appears on the
-   `backups` branch.
-2. Restore that dump into a scratch database using the steps above.
-3. Confirm `workout_set` and `flyway_schema_history` counts look right.
-4. Drop the scratch database.
+An untested backup is a hope, not a backup. Since 2026-08-10 that is checked by
+machine rather than remembered by a person.
 
-An untested backup is a hope, not a backup. The restore path above was exercised on
-2026-07-29 with a real dump/restore roundtrip.
+`.github/workflows/backup-restore-test.yml` runs every **Monday at 03:41 UTC**,
+after the nightly dump, and can be triggered by hand. It:
+
+1. takes the newest dump from the `backups` branch and **fails if it is more than
+   three days old**, which is how a silently stopped nightly backup gets noticed,
+2. restores it into a throwaway PostgreSQL 17 service container, the same major
+   version as production,
+3. asserts the seeded reference data came back (at least 300 exercises, 14
+   categories, 7 Flyway migrations), and
+4. asserts **no orphaned rows** across sets, workout exercises and routine
+   exercises.
+
+Two of those choices are deliberate:
+
+* **No floor on routines or workouts.** Those are the user's own data and zero is a
+  legitimate value, so requiring a minimum would fail for the wrong reason the
+  first time a database is reset. The seeded catalogue is the floor instead,
+  because it distinguishes "restored" from "restored an empty shell".
+* **Integrity is checked, not just counts.** A dump that restores rows but loses
+  the relationships between them is worse than one that fails outright, because it
+  looks like a backup.
+
+The restore itself runs with `ON_ERROR_STOP` off. A Supabase dump carries that
+platform's own schemas and extensions, some of which do not exist on stock
+Postgres, and those failures say nothing about whether the training data survived.
+Measured on 2026-08-10 against a real dump: **zero errors**, 313 exercises, 7
+migrations, no orphans.
+
+**Weekly rather than nightly, on purpose.** What this catches is the dump format
+becoming unrestorable, which changes when Postgres or Supabase change, not daily.
+A nightly run would mostly re-prove the same thing and add noise to a repository
+where a red check is meant to mean something.
+
+The manual procedure below still applies for a real disaster, and the restore path
+was last exercised by hand on 2026-07-29 and again on 2026-08-10 while cutting
+1.6.0.
 
 ## Future improvements (not needed now)
 
