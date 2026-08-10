@@ -19,6 +19,9 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import okhttp3.OkHttpClient
+import okhttp3.mockwebserver.SocketPolicy
+import java.time.Duration
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 
@@ -49,10 +52,14 @@ class AppUpdateRepositoryImplTest {
         server.shutdown()
     }
 
-    private fun repository(installedVersion: String = "1.1.0"): AppUpdateRepositoryImpl {
+    private fun repository(
+        installedVersion: String = "1.1.0",
+        readTimeout: Duration = Duration.ofSeconds(10),
+    ): AppUpdateRepositoryImpl {
         val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
         val api = Retrofit.Builder()
             .baseUrl(server.url("/api/v1/"))
+            .client(OkHttpClient.Builder().readTimeout(readTimeout).build())
             .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
             .build()
             .create(AppUpdateApi::class.java)
@@ -138,6 +145,36 @@ class AppUpdateRepositoryImplTest {
         repository.check()
 
         assertTrue(repository.status.value is UpdateStatus.Unavailable)
+    }
+
+    /**
+     * The 2026-08-10 failure: a phone on 1.5.0 reported "could not reach the
+     * server" and could not see the 1.6.0 release.
+     *
+     * The backend was not unreachable. It was asleep. The free Render instance
+     * spins down after inactivity and the first request waits for a container to
+     * boot, 100.8s in the deploy log of 2026-08-05, while OkHttp defaults every
+     * timeout to 10 seconds. Simulated here with a server that accepts the
+     * connection and never answers, which is exactly what a sleeping instance
+     * does.
+     *
+     * The wording matters as much as the status. "Could not reach the server"
+     * reads as something broken and invites no second attempt; the whole remedy
+     * here is to try again once the container is up.
+     */
+    @Test
+    fun `a sleeping backend says it is waking up, not that it is unreachable`() = runTest {
+        server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.NO_RESPONSE))
+
+        val repository = repository(readTimeout = Duration.ofMillis(200))
+        repository.check()
+
+        val status = repository.status.value
+        assertTrue(status is UpdateStatus.Unavailable)
+        assertTrue(
+            "expected a wake-up hint, was: ${(status as UpdateStatus.Unavailable).reason}",
+            status.reason.contains("waking up", ignoreCase = true),
+        )
     }
 
     @Test

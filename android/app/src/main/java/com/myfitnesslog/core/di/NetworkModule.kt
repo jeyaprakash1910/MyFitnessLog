@@ -13,6 +13,7 @@ import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import javax.inject.Singleton
+import java.util.concurrent.TimeUnit
 
 /**
  * Provides the Retrofit/OkHttp networking stack.
@@ -38,6 +39,32 @@ object NetworkModule {
     @Singleton
     fun provideOkHttpClient(): OkHttpClient {
         val builder = OkHttpClient.Builder()
+        // Timeouts sized for the deployment, not for OkHttp's defaults.
+        //
+        // The backend runs on a free Render instance that spins down after
+        // inactivity, so the first request after a quiet period waits for a
+        // container to boot: 22s measured on 2026-08-10, and 100.8s in the deploy
+        // log of 2026-08-05. OkHttp defaults every timeout to 10 seconds, so that
+        // first request could not succeed. The update check is where it showed,
+        // because it runs once on launch with no retry and reports "could not
+        // reach the server" to the user, while background sync merely burned a
+        // WorkManager attempt and recovered on the next one.
+        //
+        // DEPLOYMENT.md predicted exactly this and left it alone pending evidence:
+        // "no client timeout/retry change until real usage shows it is needed".
+        // Real usage showed it on 2026-08-10, when a phone on 1.5.0 could not see
+        // the 1.6.0 release.
+        builder.connectTimeout(15, TimeUnit.SECONDS)
+        // Read covers the cold start. It applies between bytes rather than to the
+        // whole response, so a slow APK download is not affected by the size of
+        // this number.
+        builder.readTimeout(120, TimeUnit.SECONDS)
+        builder.writeTimeout(30, TimeUnit.SECONDS)
+        // Deliberately no callTimeout. That one caps an entire call including the
+        // response body, and the 8.7 MB APK for an in-app update streams through
+        // this same client (ADR-0016). A ceiling generous enough for that download
+        // on a poor connection would be too generous to be a useful ceiling.
+        //
         // Authenticate every request first, so the X-API-Key header is present in
         // the chain (and visible to the logging interceptor below when enabled).
         builder.addInterceptor(ApiKeyInterceptor(BuildConfig.API_KEY))

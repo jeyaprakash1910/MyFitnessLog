@@ -172,10 +172,24 @@ when convenient.
 may notice and mistake for problems:
 
 - **Free-tier cold start.** Render spins the free instance down after inactivity, so the
-  first request after a quiet period cold-starts the container (order of ~1–2 min based
-  on the 2026-07-30 boot). Subsequent requests are fast. OkHttp's default 10s timeout can
-  trip on that first call; a retry succeeds once warm. Left unchanged deliberately — no
-  client timeout/retry change until real usage shows it is needed.
+  first request after a quiet period cold-starts the container (order of ~1-2 min based
+  on the 2026-07-30 boot; 100.8s in the 2026-08-05 deploy log, 22s measured 2026-08-10).
+  Subsequent requests are fast.
+
+  This paragraph used to end "OkHttp's default 10s timeout can trip on that first call
+  ... left unchanged deliberately, no client timeout/retry change until real usage shows
+  it is needed." **Real usage showed it on 2026-08-10**: a phone running 1.5.0 reported
+  "could not reach the server" and could not see the 1.6.0 release at all, because the
+  update check runs once on launch with no retry. Background sync had been hiding the
+  same fault, because WorkManager retried and the second attempt found a warm server.
+
+  The client now allows **120s to read and 15s to connect** (`NetworkModule`), pinned by
+  `OkHttpTimeoutTest`. Connect stays short so a genuinely dead network still fails fast;
+  it is the read that has to be patient, because a sleeping instance accepts the
+  connection immediately and only then starts booting. There is deliberately **no
+  `callTimeout`**, because the in-app update streams an 8.7 MB APK through the same
+  client. A timeout is also now reported as "the server is waking up, try again in a
+  moment" rather than as unreachable, since trying again is the entire remedy.
 - **First Docker build is slow.** The first build downloads all Maven dependencies;
   later builds reuse Render's cached layers.
 - **Generated URL suffix.** The service URL carries a Render-generated suffix (e.g.
