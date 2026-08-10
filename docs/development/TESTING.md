@@ -93,8 +93,10 @@ migration with a wrong column type reached `main` and was caught by hand. Migrat
 defects are the worst thing this project can ship, because synchronisation is one-way
 (ADR-0003) and a corrupted local database cannot be rebuilt from the backend.
 
-A failed Android unit test is retried once and reported as **FLAKY** rather than green,
-which contains TD-015 without hiding it. Anything else red is a real failure.
+A failed Android unit test is retried once and reported as **FLAKY** rather than
+green. TD-015 was resolved on 2026-08-10, so this no longer contains a known flake;
+it is kept so a future one is counted here rather than discovered by someone
+re-running a red build by hand. Anything red is a real failure.
 
 ## Integration and live-stack tests
 
