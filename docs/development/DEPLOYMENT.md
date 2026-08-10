@@ -171,6 +171,13 @@ when convenient.
 **5e. Known operational characteristics (not defects).** Behaviours a future maintainer
 may notice and mistake for problems:
 
+- **Deploys are verified, not assumed.** The `post-deploy` workflow runs on every
+  push to main and polls `GET /api/v1/health` until its `commit` field matches the
+  pushed SHA, then confirms the instance still reports `disposable: false`. Render
+  sets `RENDER_GIT_COMMIT` automatically, so that field is the deployed build's
+  identity rather than a guess. If the job times out, the deploy did not happen or
+  is still building: check the Render dashboard before assuming the code is wrong.
+
 - **Free-tier cold start.** Render spins the free instance down after inactivity, so the
   first request after a quiet period cold-starts the container (order of ~1-2 min based
   on the 2026-07-30 boot; 100.8s in the 2026-08-05 deploy log, 22s measured 2026-08-10).
