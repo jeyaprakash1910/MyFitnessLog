@@ -7,6 +7,27 @@ the project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-08-10
+
+### Fixed
+
+- **Checking for updates no longer fails while the server is waking up.** The
+  backend runs on a free instance that sleeps after inactivity, and the first
+  request afterwards waits for it to boot: 22 seconds measured, and 100.8 seconds
+  in one deploy log. The app allowed 10 seconds for every request, which is
+  OkHttp's default and was never changed, so that first request could not succeed.
+  It surfaced on the update check because that runs once on launch with no retry;
+  background sync had been hiding the same fault for months, since WorkManager
+  retries and the second attempt finds a warm server.
+
+  The client now allows 120 seconds to read and 15 to connect. Connect stays short
+  so a genuinely dead network still fails quickly. There is deliberately no overall
+  call timeout, because an in-app update streams an 8.7 MB APK through the same
+  client.
+
+  A timeout now reports "the server is waking up, try again in a moment" rather
+  than "could not reach the server", since trying again is the entire remedy.
+
 ## [1.6.0] - 2026-08-10
 
 Editable workout history, plus the test and delivery infrastructure built
@@ -272,7 +293,8 @@ backend on a private network. See the full
 - Synchronization is one-way: the backend is the durable copy but cannot repopulate a
   device, so a phone that loses its database does not get its history back.
 
-[Unreleased]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.6.1...HEAD
+[1.6.1]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.3.0...v1.4.0
