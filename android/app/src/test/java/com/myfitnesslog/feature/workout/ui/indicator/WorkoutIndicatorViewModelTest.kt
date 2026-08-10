@@ -26,6 +26,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.util.UUID
+import com.myfitnesslog.feature.routine.closeAndDrain
+import com.myfitnesslog.feature.routine.tracked
 
 @RunWith(RobolectricTestRunner::class)
 class WorkoutIndicatorViewModelTest {
@@ -71,12 +73,12 @@ class WorkoutIndicatorViewModelTest {
         // while resetMain replaces it, which throws "Dispatchers.Main is used
         // concurrently with setting it". TD-015, explained in full in
         // WorkoutViewModelTest.
-        database.close()
+        database.closeAndDrain()
         Dispatchers.resetMain()
     }
 
     private fun viewModel() =
-        WorkoutIndicatorViewModel(workoutRepository, routineRepository, RoutineTestData.clock)
+        WorkoutIndicatorViewModel(workoutRepository, routineRepository, RoutineTestData.clock).tracked()
 
     @Test
     fun hiddenWhenNoActiveWorkout() = runBlocking {

@@ -1,5 +1,7 @@
 package com.myfitnesslog.feature.routine
 
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.myfitnesslog.core.data.local.MyFitnessLogDatabase
@@ -11,7 +13,11 @@ import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
 import java.util.UUID
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -28,11 +34,95 @@ internal object RoutineTestData {
     val clock: Clock = Clock.fixed(Instant.ofEpochMilli(1_700_000_000_000L), ZoneOffset.UTC)
 }
 
-internal fun newInMemoryDatabase(): MyFitnessLogDatabase =
-    Room.inMemoryDatabaseBuilder(
+/**
+ * Room's executors for each test database, so [closeAndDrain] can wait for them.
+ * Emptied as databases close, so nothing accumulates across a class.
+ */
+private val testDatabaseExecutors =
+    java.util.Collections.synchronizedMap(mutableMapOf<MyFitnessLogDatabase, List<ExecutorService>>())
+
+/**
+ * An in-memory database on executors this test owns. TD-015.
+ *
+ * Room's default pool comes from `ArchTaskExecutor`, is shared, and cannot be
+ * joined, so there is no way to know when its threads have finished. Two dedicated
+ * executors can be shut down and awaited, which is what [closeAndDrain] does and
+ * what the teardown race needs.
+ *
+ * They must be **different objects**: `RoomDatabase.Builder.build()` copies the
+ * query executor into the transaction executor when only the former is supplied
+ * (RoomDatabase.kt:1252 in Room 2.6.1), and SQLite transactions are thread-bound,
+ * so sharing one deadlocks. Neither may be a same-thread executor either: Room
+ * posts the invalidation refresh to the query executor expecting it to run after
+ * the write commits, and inline it observes the pre-commit state and never emits.
+ */
+internal fun newInMemoryDatabase(): MyFitnessLogDatabase {
+    val query = Executors.newSingleThreadExecutor { r ->
+        Thread(r, "room-test-query").apply { isDaemon = true }
+    }
+    val transaction = Executors.newSingleThreadExecutor { r ->
+        Thread(r, "room-test-transaction").apply { isDaemon = true }
+    }
+    val database = Room.inMemoryDatabaseBuilder(
         ApplicationProvider.getApplicationContext(),
         MyFitnessLogDatabase::class.java,
-    ).build()
+    )
+        .setQueryExecutor(query)
+        .setTransactionExecutor(transaction)
+        .build()
+    testDatabaseExecutors[database] = listOf(query, transaction)
+    return database
+}
+
+/**
+ * Closes the database and waits for its threads to stop.
+ *
+ * Call this instead of `close()` from any test that installs a test Main
+ * dispatcher, **after cancelling whatever was collecting**, and before
+ * `Dispatchers.resetMain()`.
+ *
+ * The order matters and each step earns its place. Cancelling stops the
+ * collectors so they never observe a closed database; draining waits for Room's
+ * threads, which are the ones that read `Dispatchers.Main` while resuming a
+ * `combine`; only then is it safe to write Main.
+ */
+/**
+ * ViewModels a test constructed, so teardown can cancel their scopes.
+ *
+ * A ViewModel built directly is never cleared, so its `viewModelScope` outlives
+ * the test and keeps collecting Room flows on `Dispatchers.Main`. Those collectors
+ * are the readers in TD-015; see [closeAndDrain].
+ *
+ * Robolectric gives each test class its own environment and Gradle runs classes
+ * sequentially within a worker, so a module-level list is safe here. It is cleared
+ * on every cancel so nothing carries between tests.
+ */
+private val trackedViewModels = mutableListOf<ViewModel>()
+
+/** Registers a ViewModel for cancellation at teardown. See [closeAndDrain]. */
+internal fun <T : ViewModel> T.tracked(): T = also { trackedViewModels += it }
+
+/**
+ * This database's own executors, for tests that need to assert on teardown.
+ *
+ * Returned rather than scanned by thread name, because every test database in the
+ * JVM names its threads the same way and a global scan sees other classes' too.
+ */
+internal fun MyFitnessLogDatabase.testExecutors(): List<ExecutorService> =
+    testDatabaseExecutors[this].orEmpty()
+
+internal fun MyFitnessLogDatabase.closeAndDrain() {
+    // Cancel first: a collector that is still running when the database closes
+    // observes a closed database and throws, and that exception surfaces in the
+    // *next* class as UncaughtExceptionsBeforeTest. Measured on 2026-08-10.
+    trackedViewModels.forEach { it.viewModelScope.cancel() }
+    trackedViewModels.clear()
+    close()
+    testDatabaseExecutors.remove(this)?.forEach { executor ->
+        executor.shutdown()
+        executor.awaitTermination(5, TimeUnit.SECONDS)
+    }
+}
 
 internal suspend fun MyFitnessLogDatabase.seedExercises() {
     exerciseCategoryDao().upsert(ExerciseCategoryEntity(RoutineTestData.categoryId, "Legs"))

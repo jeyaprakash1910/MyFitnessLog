@@ -170,13 +170,6 @@ pushed and published on GitHub (commit `4f80e76`), with the signed release APK
 verified on physical hardware. Every milestone M1–M13 is complete. The next
 milestone is Version 2 (authentication and multi-user), not yet planned.
 
-**Known outstanding work**, which does not block release:
-
-* **TD-015** - the Android ViewModel test flake, down from roughly one full-suite
-  run in four to one in 40 on 2026-08-08. One of its two causes was a real defect in
-  `WorkoutViewModel` where an RPE tap could silently save nothing. A teardown race
-  remains. Nine approaches to it are recorded as measured failures; read the register
-  entry before attempting a tenth.
 
 Since **v1.2.0** an installed build updates itself over the air: the backend
 resolves the latest GitHub release with a server-side read-only token and streams

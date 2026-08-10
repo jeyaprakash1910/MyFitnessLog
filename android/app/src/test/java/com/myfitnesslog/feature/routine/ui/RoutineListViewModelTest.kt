@@ -21,6 +21,8 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import com.myfitnesslog.feature.routine.closeAndDrain
+import com.myfitnesslog.feature.routine.tracked
 
 @RunWith(RobolectricTestRunner::class)
 class RoutineListViewModelTest {
@@ -35,7 +37,7 @@ class RoutineListViewModelTest {
         database = newInMemoryDatabase()
         runBlocking { database.seedExercises() }
         repository = database.newRepository()
-        viewModel = RoutineListViewModel(repository)
+        viewModel = RoutineListViewModel(repository).tracked()
     }
 
     @After
@@ -45,7 +47,7 @@ class RoutineListViewModelTest {
         // while resetMain replaces it, which throws "Dispatchers.Main is used
         // concurrently with setting it". TD-015, explained in full in
         // WorkoutViewModelTest.
-        database.close()
+        database.closeAndDrain()
         Dispatchers.resetMain()
     }
 
