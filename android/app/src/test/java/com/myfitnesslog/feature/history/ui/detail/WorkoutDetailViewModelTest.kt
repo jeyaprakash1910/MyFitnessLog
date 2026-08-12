@@ -167,6 +167,26 @@ class WorkoutDetailViewModelTest {
         it is WorkoutDetailUiState.Success && predicate(it)
     } as WorkoutDetailUiState.Success
 
+    /**
+     * Awaits the dialog being open, rather than sampling whatever state is current.
+     *
+     * `awaitSuccess()` with no predicate returns the *first* Success it sees, which
+     * may still be the one from before the action under test. `correction` is a
+     * separate flow combined into `uiState`, so opening a dialog is not visible in
+     * the combined state until it recomputes, and reading `.correction!!` straight
+     * after the call is a race that throws NPE when it loses. It lost on CI on
+     * 2026-08-12 having passed locally and on the previous CI run.
+     *
+     * Every assertion about a dialog therefore waits for the property it is about.
+     */
+    private suspend fun WorkoutDetailViewModel.awaitCorrection(
+        predicate: (SetCorrection) -> Boolean = { true },
+    ) = awaitSuccess { it.correction?.let(predicate) == true }.correction!!
+
+    /** Awaits the dialog being closed, for the same reason. */
+    private suspend fun WorkoutDetailViewModel.awaitNoCorrection() =
+        awaitSuccess { it.correction == null }
+
     private fun WorkoutDetailUiState.Success.set(setId: UUID) =
         exercises.flatMap { it.sets }.first { it.id == setId }
 
@@ -178,7 +198,7 @@ class WorkoutDetailViewModelTest {
 
         vm.onCorrectSet(setId)
 
-        val correction = vm.awaitSuccess().correction!!
+        val correction = vm.awaitCorrection()
         assertEquals("100", correction.weight)
         assertEquals("5", correction.repetitions)
         assertEquals("8", correction.rpe)
@@ -211,7 +231,7 @@ class WorkoutDetailViewModelTest {
         assertEquals(0, BigDecimal("105").compareTo(stored.weight))
         assertEquals(4, stored.repetitions)
         assertEquals(SyncStatus.PENDING, stored.syncStatus)
-        assertNull("the dialog should close on success", vm.awaitSuccess().correction)
+        assertNull("the dialog should close on success", vm.awaitNoCorrection().correction)
     }
 
     /** An RPE entered by mistake is removed by clearing the field. */
@@ -267,9 +287,9 @@ class WorkoutDetailViewModelTest {
         vm.onCorrectionRepsChange("0")
         vm.onCorrectionSaved()
 
-        val correction = vm.awaitSuccess().correction
+        val correction = vm.awaitCorrection { it.error != null }
         assertNotNull("dialog must stay open", correction)
-        assertNotNull("and say why", correction!!.error)
+        assertNotNull("and say why", correction.error)
         // Nothing was written.
         assertEquals(5, database.workoutSetDao().getById(setId)!!.repetitions)
     }
@@ -284,7 +304,7 @@ class WorkoutDetailViewModelTest {
         vm.onCorrectionRpeChange("11")
         vm.onCorrectionSaved()
 
-        assertNotNull(vm.awaitSuccess().correction?.error)
+        assertNotNull(vm.awaitCorrection { it.error != null }.error)
         assertEquals(0, BigDecimal("8").compareTo(database.workoutSetDao().getById(setId)!!.rpe!!))
     }
 
@@ -324,7 +344,7 @@ class WorkoutDetailViewModelTest {
 
         vm.onAddSet(exerciseId)
 
-        val correction = vm.awaitSuccess().correction!!
+        val correction = vm.awaitCorrection()
         assertEquals(2, correction.setNumber)
         assertEquals("Squat", correction.exerciseName)
         assertNull("a new set has no row yet", correction.setId)
@@ -346,9 +366,9 @@ class WorkoutDetailViewModelTest {
         // Reps left empty.
         vm.onCorrectionSaved()
 
-        val correction = vm.awaitSuccess().correction
+        val correction = vm.awaitCorrection { it.error != null }
         assertNotNull("dialog must stay open", correction)
-        assertNotNull("and say why", correction!!.error)
+        assertNotNull("and say why", correction.error)
         assertEquals(1, database.workoutSetDao().getByExercise(exerciseId).size)
     }
 
@@ -425,7 +445,7 @@ class WorkoutDetailViewModelTest {
         vm.awaitSuccess { it.exercises.single().sets.size == 1 }
         vm.onAddSet(squat)
 
-        assertEquals(2, vm.awaitSuccess().correction!!.setNumber)
+        assertEquals(2, vm.awaitCorrection().setNumber)
     }
 
     /** A single tap must not destroy a record: delete asks first. */
@@ -438,7 +458,7 @@ class WorkoutDetailViewModelTest {
         vm.onCorrectSet(setId)
         vm.onDeleteRequested()
 
-        assertEquals(true, vm.awaitSuccess().correction!!.confirmingDelete)
+        assertEquals(true, vm.awaitCorrection { it.confirmingDelete }.confirmingDelete)
         assertNotNull("nothing is deleted until confirmed", database.workoutSetDao().getById(setId))
     }
 
@@ -452,7 +472,7 @@ class WorkoutDetailViewModelTest {
         vm.onDeleteRequested()
         vm.onDeleteCancelled()
 
-        val correction = vm.awaitSuccess().correction!!
+        val correction = vm.awaitCorrection { !it.confirmingDelete }
         assertEquals(false, correction.confirmingDelete)
         assertNotNull(database.workoutSetDao().getById(setId))
     }
@@ -467,7 +487,7 @@ class WorkoutDetailViewModelTest {
         vm.onCorrectionWeightChange("999")
         vm.onCorrectionDismissed()
 
-        assertNull(vm.awaitSuccess().correction)
+        assertNull(vm.awaitNoCorrection().correction)
         assertEquals(0, BigDecimal("100.0").compareTo(database.workoutSetDao().getById(setId)!!.weight))
     }
 }

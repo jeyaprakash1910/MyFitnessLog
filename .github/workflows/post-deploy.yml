@@ -2,11 +2,11 @@ name: Post-deploy check
 
 # Confirms that the backend actually deployed, rather than assuming it did.
 #
-# Render redeploys from main on every push, and until now nothing checked the
-# result. That is not a theoretical gap. On 2026-08-06 a request issued during a
-# deploy reached the *previous* container, where the route did not yet exist, and
-# the 500 that came back was investigated as a code defect until the timestamps
-# showed which container had answered it.
+# Render redeploys from main when the backend changes, and until now nothing
+# checked the result. That is not a theoretical gap. On 2026-08-06 a request
+# issued during a deploy reached the *previous* container, where the route did not
+# yet exist, and the 500 that came back was investigated as a code defect until
+# the timestamps showed which container had answered it.
 #
 # The fix for that specific confusion was TD-001, which turned the 500 into a 404.
 # This is the other half: something that says out loud whether the new build is
@@ -18,9 +18,25 @@ name: Post-deploy check
 # deployed build's identity rather than a guess. Anything richer would need the
 # API key as a secret and would be testing the application, which CI already does.
 
+# Only when the backend changes, because that is the only time Render deploys.
+#
+# The service sets Root Directory to `backend`, and Render's rule for that is
+# "code changes outside of this directory do not trigger an auto-deploy". Without
+# the paths filter below this workflow ran on every push to main and then waited
+# 20 minutes for a deploy that correctly was never going to happen. It failed that
+# way twice, on #23 and #24, before anyone read the Render dashboard rather than
+# the workflow log (issue #25).
+#
+# NOTE: `paths` here must agree with that Root Directory setting, and nothing
+# enforces it. If the service's Root Directory ever changes, update this filter in
+# the same breath. Getting it wrong is quiet rather than loud - the check simply
+# stops running when it should - which is the more dangerous direction.
 on:
   push:
     branches: ["main"]
+    paths: ["backend/**"]
+  # Kept so the check can still be run by hand: after a manual deploy, after a
+  # Render-side configuration change, or to confirm what is currently serving.
   workflow_dispatch: {}
 
 # Never run two of these at once: a newer push supersedes an older deploy, and
