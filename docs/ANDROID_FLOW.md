@@ -290,9 +290,20 @@ Information includes:
 * RPE
 * Rest durations (computed)
 
-Historical workouts are read-only during normal application usage.
+Historical workouts are read-only during normal application usage, with one
+exception: the workout correction flow ADR-0004 reserved now exists (ADR-0018).
 
-Future versions may introduce a dedicated workout correction flow.
+On a COMPLETED workout, tapping a set opens a dialog that corrects its weight,
+reps or RPE, or deletes it after a confirmation. Each exercise card offers "Add
+set" for a set that was performed but never logged. All three are statements about
+what was performed. The planning snapshot - exercise name, order, targets - stays
+locked, and a DISCARDED workout rejects every one of them.
+
+Set numbers are contiguous as displayed: deleting a set closes the gap rather than
+leaving "Set 1, Set 3". The stored number keeps its gap deliberately. During
+logging it is the slot an undone set falls back into (`WorkoutRowMerger`), and it
+is an identifier shared with the backend, so resequencing rows the user never
+edited would queue them for upload to fix something purely cosmetic.
 
 ⸻
 
