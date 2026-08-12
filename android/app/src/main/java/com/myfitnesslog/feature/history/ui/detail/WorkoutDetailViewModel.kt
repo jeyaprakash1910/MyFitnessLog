@@ -12,6 +12,7 @@ import com.myfitnesslog.feature.history.ui.formatWorkoutDate
 import com.myfitnesslog.feature.history.ui.sanitizeNotes
 import com.myfitnesslog.feature.history.ui.setCategoryLabel
 import com.myfitnesslog.feature.history.ui.workoutTypeLabel
+import com.myfitnesslog.core.data.local.SetCategory
 import com.myfitnesslog.feature.workout.data.WorkoutRepository
 import com.myfitnesslog.feature.workout.data.local.WorkoutExerciseEntity
 import com.myfitnesslog.feature.workout.data.local.WorkoutSetEntity
@@ -37,10 +38,17 @@ import javax.inject.Inject
  *
  * ## Corrections (ADR-0018)
  *
- * The screen was read-only until 2026-08-09. It now offers one write: correcting
- * the weight, reps and RPE of a performed set. That is the "dedicated workout edit
- * flow" ADR-0004 reserved and never built, and it exists because a logged set can
- * simply be wrong.
+ * The screen was read-only until 2026-08-09. It now offers the three corrections
+ * ADR-0018 permits, all of them statements about what the user actually did:
+ *
+ *  * correcting the weight, reps and RPE of a performed set,
+ *  * adding a set that was performed but never logged,
+ *  * deleting a set that was logged but not performed.
+ *
+ * That is the "dedicated workout edit flow" ADR-0004 reserved and never built, and
+ * it exists because a logged set can simply be wrong. The backend and
+ * [WorkoutRepository] have allowed all three on a COMPLETED session since
+ * 2026-08-08; until 2026-08-12 only the first was reachable from the phone.
  *
  * Two boundaries are deliberate and the UI has to make them visible rather than
  * failing after the fact:
@@ -107,12 +115,38 @@ class WorkoutDetailViewModel @Inject constructor(
         val exercise = state.exercises.firstOrNull { ex -> ex.sets.any { it.id == setId } } ?: return
         val row = exercise.sets.first { it.id == setId }
         correction.value = SetCorrection(
+            workoutExerciseId = exercise.id,
             setId = row.id,
             setNumber = row.setNumber,
             exerciseName = exercise.name,
             weight = row.weight.stripTrailingZeros().toPlainString(),
             repetitions = row.repetitions.toString(),
             rpe = row.rpeValue?.stripTrailingZeros()?.toPlainString().orEmpty(),
+        )
+    }
+
+    /**
+     * Opens the dialog to add a set that was performed but never logged.
+     *
+     * The fields start empty rather than pre-filled from the last set. A guessed
+     * value that happens to be plausible is the one a user accepts without reading,
+     * and this screen exists to make history more accurate, not less.
+     */
+    fun onAddSet(workoutExerciseId: UUID) {
+        val state = uiState.value as? WorkoutDetailUiState.Success ?: return
+        val exercise = state.exercises.firstOrNull { it.id == workoutExerciseId } ?: return
+        correction.value = SetCorrection(
+            workoutExerciseId = exercise.id,
+            setId = null,
+            // The next position as displayed, so the heading names the set the
+            // user is about to see appear. The stored number the repository
+            // assigns may be higher if a set was deleted, which is not something
+            // the dialog should surface.
+            setNumber = exercise.sets.size + 1,
+            exerciseName = exercise.name,
+            weight = "",
+            repetitions = "",
+            rpe = "",
         )
     }
 
@@ -155,14 +189,34 @@ class WorkoutDetailViewModel @Inject constructor(
             return
         }
 
+        val setId = pending.setId
+        if (setId == null) {
+            correction.value = null
+            viewModelScope.launch {
+                workoutRepository.addSet(
+                    workoutExerciseId = pending.workoutExerciseId,
+                    weight = weight!!,
+                    repetitions = reps!!,
+                    // A set added as a correction is a working set with no RIR.
+                    // The dialog does not offer either, for the same reason it
+                    // does not offer them when editing: they are rarely wrong and
+                    // a third and fourth field would bury the two that are.
+                    setCategory = SetCategory.WORKING,
+                    rpe = rpe,
+                    rir = null,
+                )
+            }
+            return
+        }
+
         val current = (uiState.value as? WorkoutDetailUiState.Success)
-            ?.exercises?.flatMap { it.sets }?.firstOrNull { it.id == pending.setId }
+            ?.exercises?.flatMap { it.sets }?.firstOrNull { it.id == setId }
             ?: return
         correction.value = null
 
         viewModelScope.launch {
             workoutRepository.updateSet(
-                setId = pending.setId,
+                setId = setId,
                 weight = weight!!,
                 repetitions = reps!!,
                 setCategory = current.setCategory,
@@ -175,24 +229,58 @@ class WorkoutDetailViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Asks for confirmation before deleting. Deleting a set is the one correction
+     * that destroys a record rather than changing it, and the row is gone from
+     * history the moment it happens, so it does not happen on a single tap.
+     */
+    fun onDeleteRequested() = editCorrection { it.copy(confirmingDelete = true, error = null) }
+
+    fun onDeleteCancelled() = editCorrection { it.copy(confirmingDelete = false) }
+
+    /**
+     * Deletes the set, and its row on the backend with it.
+     *
+     * [WorkoutRepository.deleteSet] writes an ADR-0007 tombstone in the same
+     * transaction as the delete, so this propagates rather than leaving the
+     * backend holding a set the phone no longer shows.
+     */
+    fun onDeleteConfirmed() {
+        val setId = correction.value?.setId ?: return
+        correction.value = null
+        viewModelScope.launch { workoutRepository.deleteSet(setId) }
+    }
+
     private fun editCorrection(transform: (SetCorrection) -> SetCorrection) {
         correction.value = correction.value?.let(transform)
     }
 }
 
+/**
+ * Sets are numbered for display by their position, not by the persisted
+ * `setNumber`, so a deletion cannot leave history reading "Set 1, Set 3".
+ *
+ * This is the same rule the in-progress logging screen already applies in
+ * `WorkoutRowMerger`, and applying it here is what makes the two screens agree.
+ * The stored number stays untouched on purpose: during logging it is the *slot*
+ * that lets an undone set fall back into its original position instead of jumping
+ * to the end, and rewriting it would break that. It is also a stable identifier
+ * the backend shares, so resequencing rows the user never edited would dirty them
+ * for upload and bump their timestamps for a purely cosmetic change.
+ */
 private fun WorkoutExerciseEntity.toRow(sets: List<WorkoutSetEntity>): WorkoutDetailExerciseRow =
     WorkoutDetailExerciseRow(
         id = id,
         position = exerciseOrder + 1,
         name = exerciseName,
         notes = sanitizeNotes(notes),
-        sets = sets.map { it.toRow() },
+        sets = sets.mapIndexed { index, set -> set.toRow(displayNumber = index + 1) },
     )
 
-private fun WorkoutSetEntity.toRow(): WorkoutDetailSetRow =
+private fun WorkoutSetEntity.toRow(displayNumber: Int): WorkoutDetailSetRow =
     WorkoutDetailSetRow(
         id = id,
-        setNumber = setNumber,
+        setNumber = displayNumber,
         weightReps = formatWeightReps(weight, repetitions),
         category = setCategoryLabel(setCategory),
         rpe = formatRpe(rpe),

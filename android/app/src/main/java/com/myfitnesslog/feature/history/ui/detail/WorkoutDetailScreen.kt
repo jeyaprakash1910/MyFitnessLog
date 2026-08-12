@@ -42,8 +42,11 @@ object WorkoutDetailTestTags {
     const val CORRECTION_RPE = "workout_detail_correction_rpe"
     const val CORRECTION_SAVE = "workout_detail_correction_save"
     const val CORRECTION_ERROR = "workout_detail_correction_error"
+    const val CORRECTION_DELETE = "workout_detail_correction_delete"
+    const val CORRECTION_DELETE_CONFIRM = "workout_detail_correction_delete_confirm"
     fun exercise(id: UUID) = "workout_detail_exercise_$id"
     fun set(id: UUID) = "workout_detail_set_$id"
+    fun addSet(exerciseId: UUID) = "workout_detail_add_set_$exerciseId"
 }
 
 @Composable
@@ -55,11 +58,15 @@ fun WorkoutDetailScreen(
     WorkoutDetailContent(
         uiState = uiState,
         onCorrectSet = viewModel::onCorrectSet,
+        onAddSet = viewModel::onAddSet,
         onWeightChange = viewModel::onCorrectionWeightChange,
         onRepsChange = viewModel::onCorrectionRepsChange,
         onRpeChange = viewModel::onCorrectionRpeChange,
         onDismiss = viewModel::onCorrectionDismissed,
         onSave = viewModel::onCorrectionSaved,
+        onDeleteRequested = viewModel::onDeleteRequested,
+        onDeleteCancelled = viewModel::onDeleteCancelled,
+        onDeleteConfirmed = viewModel::onDeleteConfirmed,
         modifier = modifier,
     )
 }
@@ -68,11 +75,15 @@ fun WorkoutDetailScreen(
 fun WorkoutDetailContent(
     uiState: WorkoutDetailUiState,
     onCorrectSet: (UUID) -> Unit = {},
+    onAddSet: (UUID) -> Unit = {},
     onWeightChange: (String) -> Unit = {},
     onRepsChange: (String) -> Unit = {},
     onRpeChange: (String) -> Unit = {},
     onDismiss: () -> Unit = {},
     onSave: () -> Unit = {},
+    onDeleteRequested: () -> Unit = {},
+    onDeleteCancelled: () -> Unit = {},
+    onDeleteConfirmed: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier.fillMaxSize()) {
@@ -97,7 +108,7 @@ fun WorkoutDetailContent(
             ) {
                 item { WorkoutMetadata(uiState) }
                 items(uiState.exercises, key = { it.id }) { exercise ->
-                    ExerciseCard(exercise, onCorrectSet)
+                    ExerciseCard(exercise, onCorrectSet, onAddSet)
                 }
             }
         }
@@ -111,6 +122,9 @@ fun WorkoutDetailContent(
             onRpeChange = onRpeChange,
             onDismiss = onDismiss,
             onSave = onSave,
+            onDeleteRequested = onDeleteRequested,
+            onDeleteCancelled = onDeleteCancelled,
+            onDeleteConfirmed = onDeleteConfirmed,
         )
     }
 }
@@ -146,7 +160,11 @@ private fun WorkoutMetadata(state: WorkoutDetailUiState.Success) {
 }
 
 @Composable
-private fun ExerciseCard(exercise: WorkoutDetailExerciseRow, onCorrectSet: (UUID) -> Unit) {
+private fun ExerciseCard(
+    exercise: WorkoutDetailExerciseRow,
+    onCorrectSet: (UUID) -> Unit,
+    onAddSet: (UUID) -> Unit,
+) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -181,6 +199,13 @@ private fun ExerciseCard(exercise: WorkoutDetailExerciseRow, onCorrectSet: (UUID
                     SetRow(set, onCorrectSet)
                 }
             }
+            HorizontalDivider()
+            // Sits under the sets rather than in the card header, so it reads as
+            // "and then this one", which is what adding a forgotten set is.
+            TextButton(
+                onClick = { onAddSet(exercise.id) },
+                modifier = Modifier.testTag(WorkoutDetailTestTags.addSet(exercise.id)),
+            ) { Text("Add set") }
         }
     }
 }
@@ -227,6 +252,11 @@ private fun SetRow(set: WorkoutDetailSetRow, onCorrectSet: (UUID) -> Unit) {
  *
  * RPE is explicitly optional, so clearing the field removes an effort score that
  * was entered by mistake.
+ *
+ * One dialog serves editing and adding, because they ask for the same three
+ * values under the same rules; only the heading and the confirm label differ.
+ * Deleting is reachable only when editing, and only behind a confirmation, since
+ * it is the one correction that removes a record instead of amending it.
  */
 @Composable
 private fun CorrectionDialog(
@@ -236,11 +266,45 @@ private fun CorrectionDialog(
     onRpeChange: (String) -> Unit,
     onDismiss: () -> Unit,
     onSave: () -> Unit,
+    onDeleteRequested: () -> Unit,
+    onDeleteCancelled: () -> Unit,
+    onDeleteConfirmed: () -> Unit,
 ) {
+    if (correction.confirmingDelete) {
+        AlertDialog(
+            onDismissRequest = onDeleteCancelled,
+            modifier = Modifier.testTag(WorkoutDetailTestTags.CORRECTION_DIALOG),
+            title = { Text("Delete set ${correction.setNumber}?") },
+            text = {
+                Text(
+                    "This removes the set from ${correction.exerciseName} on this " +
+                        "workout, here and on the server. It cannot be undone.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = onDeleteConfirmed,
+                    modifier = Modifier.testTag(WorkoutDetailTestTags.CORRECTION_DELETE_CONFIRM),
+                ) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDeleteCancelled) { Text("Keep") }
+            },
+        )
+        return
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         modifier = Modifier.testTag(WorkoutDetailTestTags.CORRECTION_DIALOG),
-        title = { Text("Correct set ${correction.setNumber}") },
+        title = {
+            Text(
+                if (correction.isNew) "Add set ${correction.setNumber}"
+                else "Correct set ${correction.setNumber}",
+            )
+        },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
@@ -286,10 +350,22 @@ private fun CorrectionDialog(
             TextButton(
                 onClick = onSave,
                 modifier = Modifier.testTag(WorkoutDetailTestTags.CORRECTION_SAVE),
-            ) { Text("Save") }
+            ) { Text(if (correction.isNew) "Add" else "Save") }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                // Delete sits furthest from Save, on the dismiss side, because a
+                // mis-tap here loses data that a mis-tap on Save does not.
+                if (!correction.isNew) {
+                    TextButton(
+                        onClick = onDeleteRequested,
+                        modifier = Modifier.testTag(WorkoutDetailTestTags.CORRECTION_DELETE),
+                    ) {
+                        Text("Delete", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
         },
     )
 }

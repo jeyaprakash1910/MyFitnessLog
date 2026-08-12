@@ -45,16 +45,33 @@ data class WorkoutDetailExerciseRow(
  * The text is held as typed rather than parsed on every keystroke, so a partially
  * entered number such as "8." is not thrown away mid-edit. [error] is set only
  * when a save is attempted with something unusable.
+ *
+ * The same model covers all three corrections ADR-0018 permits, because they are
+ * one act with one set of rules rather than three features. [setId] is null when
+ * the set is being added: a set that was performed but never logged has no row to
+ * point at yet. [workoutExerciseId] is always present, since every correction
+ * belongs to exactly one snapshotted exercise.
  */
 data class SetCorrection(
-    val setId: UUID,
+    val workoutExerciseId: UUID,
+    val setId: UUID?,
+    /** The number this set will carry: the existing one, or the next free one. */
     val setNumber: Int,
     val exerciseName: String,
     val weight: String,
     val repetitions: String,
     val rpe: String,
     val error: String? = null,
-)
+    /**
+     * True once delete has been asked for and not yet confirmed. Held here rather
+     * than in a second dialog so the destructive step happens on the surface the
+     * user is already looking at, with the values still in front of them.
+     */
+    val confirmingDelete: Boolean = false,
+) {
+    /** A set being added has no row yet; everything else is a correction to one. */
+    val isNew: Boolean get() = setId == null
+}
 
 /** Immutable state for the workout detail screen. */
 sealed interface WorkoutDetailUiState {

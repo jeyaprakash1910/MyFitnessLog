@@ -95,8 +95,12 @@ class WorkoutDetailContentTest {
 
     // --- The correction dialog (ADR-0018) ----------------------------------
 
-    private fun correctionState(error: String? = null) = successState().copy(
+    private fun correctionState(
+        error: String? = null,
+        confirmingDelete: Boolean = false,
+    ) = successState().copy(
         correction = SetCorrection(
+            workoutExerciseId = exerciseId,
             setId = setId,
             setNumber = 1,
             exerciseName = "Squat",
@@ -104,6 +108,20 @@ class WorkoutDetailContentTest {
             repetitions = "5",
             rpe = "8",
             error = error,
+            confirmingDelete = confirmingDelete,
+        ),
+    )
+
+    /** The dialog as it opens for a set that was performed but never logged. */
+    private fun addState() = successState().copy(
+        correction = SetCorrection(
+            workoutExerciseId = exerciseId,
+            setId = null,
+            setNumber = 2,
+            exerciseName = "Squat",
+            weight = "",
+            repetitions = "",
+            rpe = "",
         ),
     )
 
@@ -197,5 +215,98 @@ class WorkoutDetailContentTest {
         composeRule.onNodeWithTag(WorkoutDetailTestTags.CORRECTION_DIALOG).assertIsDisplayed()
         composeRule.onNodeWithTag(WorkoutDetailTestTags.CORRECTION_ERROR)
             .assertTextContains("Enter a rep count of 1 or more.")
+    }
+
+    // --- Adding a set (ADR-0018) -------------------------------------------
+
+    @Test
+    fun eachExerciseOffersToAddAForgottenSet() {
+        var addedTo: UUID? = null
+        composeRule.setContent {
+            WorkoutDetailContent(successState(), onAddSet = { addedTo = it })
+        }
+
+        composeRule.onNodeWithTag(WorkoutDetailTestTags.addSet(exerciseId)).performClick()
+
+        assertEquals(exerciseId, addedTo)
+    }
+
+    /**
+     * Adding and editing share one dialog, so the heading and confirm label are
+     * what tell the user which one they are in.
+     */
+    @Test
+    fun theAddDialogNamesTheSetBeingAddedAndOpensEmpty() {
+        composeRule.setContent { WorkoutDetailContent(addState()) }
+
+        composeRule.onNodeWithText("Add set 2").assertIsDisplayed()
+        composeRule.onNodeWithTag(WorkoutDetailTestTags.CORRECTION_SAVE)
+            .assertTextContains("Add")
+        composeRule.onNodeWithTag(WorkoutDetailTestTags.CORRECTION_WEIGHT)
+            .assertTextContains("Weight (kg)")
+    }
+
+    /** There is nothing to delete on a set that does not exist yet. */
+    @Test
+    fun theAddDialogOffersNoDelete() {
+        composeRule.setContent { WorkoutDetailContent(addState()) }
+        composeRule.onNodeWithTag(WorkoutDetailTestTags.CORRECTION_DELETE).assertDoesNotExist()
+    }
+
+    // --- Deleting a set (ADR-0018) -----------------------------------------
+
+    @Test
+    fun theEditDialogOffersDelete() {
+        var requested = false
+        composeRule.setContent {
+            WorkoutDetailContent(correctionState(), onDeleteRequested = { requested = true })
+        }
+
+        composeRule.onNodeWithTag(WorkoutDetailTestTags.CORRECTION_DELETE).performClick()
+
+        assertTrue(requested)
+    }
+
+    /**
+     * The confirmation replaces the fields rather than stacking a second dialog on
+     * top, and it says what will happen: the row goes from the server too.
+     */
+    @Test
+    fun theConfirmationSaysWhatDeletingDoes() {
+        composeRule.setContent { WorkoutDetailContent(correctionState(confirmingDelete = true)) }
+
+        composeRule.onNodeWithText("Delete set 1?").assertIsDisplayed()
+        composeRule.onNodeWithText("on the server", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithTag(WorkoutDetailTestTags.CORRECTION_WEIGHT).assertDoesNotExist()
+    }
+
+    @Test
+    fun confirmingDeleteIsReportedUpwards() {
+        var confirmed = false
+        composeRule.setContent {
+            WorkoutDetailContent(
+                correctionState(confirmingDelete = true),
+                onDeleteConfirmed = { confirmed = true },
+            )
+        }
+
+        composeRule.onNodeWithTag(WorkoutDetailTestTags.CORRECTION_DELETE_CONFIRM).performClick()
+
+        assertTrue(confirmed)
+    }
+
+    @Test
+    fun keepingTheSetIsReportedUpwards() {
+        var cancelled = false
+        composeRule.setContent {
+            WorkoutDetailContent(
+                correctionState(confirmingDelete = true),
+                onDeleteCancelled = { cancelled = true },
+            )
+        }
+
+        composeRule.onNodeWithText("Keep").performClick()
+
+        assertTrue(cancelled)
     }
 }

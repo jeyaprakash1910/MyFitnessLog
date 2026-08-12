@@ -288,6 +288,175 @@ class WorkoutDetailViewModelTest {
         assertEquals(0, BigDecimal("8").compareTo(database.workoutSetDao().getById(setId)!!.rpe!!))
     }
 
+    // --- Adding a set that was performed but never logged -------------------
+
+    /**
+     * The second correction ADR-0018 permits. The backend and the repository have
+     * allowed this on a COMPLETED session since 2026-08-08; until 2026-08-12 the
+     * detail screen offered no way to reach it.
+     */
+    @Test
+    fun addingAForgottenSetPersistsItAndQueuesItForUpload() = runBlocking {
+        val (sessionId, _) = completedWorkoutWithOneSet()
+        val vm = viewModel(sessionId)
+        val exerciseId = vm.awaitSuccess().exercises.single().id
+
+        vm.onAddSet(exerciseId)
+        vm.onCorrectionWeightChange("102.5")
+        vm.onCorrectionRepsChange("3")
+        vm.onCorrectionRpeChange("9")
+        vm.onCorrectionSaved()
+
+        val state = vm.awaitSuccess { it.exercises.single().sets.size == 2 }
+        val added = state.exercises.single().sets.last()
+        assertEquals(2, added.setNumber)
+        assertEquals(0, BigDecimal("102.5").compareTo(added.weight))
+        assertEquals(3, added.repetitions)
+        assertEquals(SyncStatus.PENDING, database.workoutSetDao().getById(added.id)!!.syncStatus)
+    }
+
+    /** The dialog names the set about to be created, matching the repository's numbering. */
+    @Test
+    fun theAddDialogOpensEmptyAndOnTheNextSetNumber() = runBlocking {
+        val (sessionId, _) = completedWorkoutWithOneSet()
+        val vm = viewModel(sessionId)
+        val exerciseId = vm.awaitSuccess().exercises.single().id
+
+        vm.onAddSet(exerciseId)
+
+        val correction = vm.awaitSuccess().correction!!
+        assertEquals(2, correction.setNumber)
+        assertEquals("Squat", correction.exerciseName)
+        assertNull("a new set has no row yet", correction.setId)
+        // Empty rather than pre-filled from the previous set: a plausible guess is
+        // the value a user accepts without reading.
+        assertEquals("", correction.weight)
+        assertEquals("", correction.repetitions)
+    }
+
+    /** Validation is the same rule for adding as for editing, and nothing is written. */
+    @Test
+    fun anAddWithUnusableInputKeepsTheDialogOpenAndWritesNothing() = runBlocking {
+        val (sessionId, _) = completedWorkoutWithOneSet()
+        val vm = viewModel(sessionId)
+        val exerciseId = vm.awaitSuccess().exercises.single().id
+
+        vm.onAddSet(exerciseId)
+        vm.onCorrectionWeightChange("80")
+        // Reps left empty.
+        vm.onCorrectionSaved()
+
+        val correction = vm.awaitSuccess().correction
+        assertNotNull("dialog must stay open", correction)
+        assertNotNull("and say why", correction!!.error)
+        assertEquals(1, database.workoutSetDao().getByExercise(exerciseId).size)
+    }
+
+    // --- Deleting a set that was logged but not performed -------------------
+
+    /**
+     * Asserts the tombstone as well as the removal. A delete that does not write
+     * one is invisible to the backend (ADR-0007), which is the exact divergence
+     * this correction exists to avoid.
+     */
+    @Test
+    fun deletingASetRemovesItAndTombstonesItForUpload() = runBlocking {
+        val (sessionId, setId) = completedWorkoutWithOneSet()
+        val vm = viewModel(sessionId)
+        vm.awaitSuccess()
+
+        vm.onCorrectSet(setId)
+        vm.onDeleteRequested()
+        vm.onDeleteConfirmed()
+
+        vm.awaitSuccess { it.exercises.single().sets.isEmpty() }
+        assertNull(database.workoutSetDao().getById(setId))
+        assertEquals(
+            listOf(setId),
+            database.workoutSetDao().getPendingTombstones().map { it.workoutSetId },
+        )
+    }
+
+    /**
+     * Deleting from the middle must not leave history reading "Set 1, Set 3".
+     *
+     * Numbering is closed at display time, matching what the in-progress screen
+     * already does in WorkoutRowMerger. The stored numbers deliberately keep their
+     * gap: during logging they are the slot an undone set falls back into, and
+     * rewriting them would dirty rows the user never edited.
+     */
+    @Test
+    fun deletingAMiddleSetLeavesNoGapInTheDisplayedNumbering() = runBlocking {
+        val sessionId = startRoutineWorkout()
+        val squat = database.workoutExerciseDao().getBySession(sessionId).single().id
+        workoutRepository.addSet(squat, BigDecimal("100.0"), 5, SetCategory.WORKING, null, null)
+        workoutRepository.addSet(squat, BigDecimal("110.0"), 4, SetCategory.WORKING, null, null)
+        workoutRepository.addSet(squat, BigDecimal("120.0"), 3, SetCategory.WORKING, null, null)
+        workoutRepository.completeWorkout(sessionId)
+        val middle = database.workoutSetDao().getByExercise(squat)[1].id
+
+        val vm = viewModel(sessionId)
+        vm.awaitSuccess { it.exercises.single().sets.size == 3 }
+        vm.onCorrectSet(middle)
+        vm.onDeleteRequested()
+        vm.onDeleteConfirmed()
+
+        val sets = vm.awaitSuccess { it.exercises.single().sets.size == 2 }.exercises.single().sets
+        assertEquals(listOf(1, 2), sets.map { it.setNumber })
+        // The surviving rows are the first and third, in order, unmodified.
+        assertEquals(0, BigDecimal("100.0").compareTo(sets[0].weight))
+        assertEquals(0, BigDecimal("120.0").compareTo(sets[1].weight))
+        // Storage keeps its gap: nothing was rewritten to achieve the display.
+        assertEquals(listOf(1, 3), database.workoutSetDao().getByExercise(squat).map { it.setNumber })
+    }
+
+    /** The add dialog names the next position, not the next stored number. */
+    @Test
+    fun addingAfterADeletionNamesTheNextDisplayedPosition() = runBlocking {
+        val sessionId = startRoutineWorkout()
+        val squat = database.workoutExerciseDao().getBySession(sessionId).single().id
+        workoutRepository.addSet(squat, BigDecimal("100.0"), 5, SetCategory.WORKING, null, null)
+        workoutRepository.addSet(squat, BigDecimal("110.0"), 4, SetCategory.WORKING, null, null)
+        workoutRepository.completeWorkout(sessionId)
+        val last = database.workoutSetDao().getByExercise(squat)[1].id
+        workoutRepository.deleteSet(last) // stored numbers are now [1], next stored is 3
+
+        val vm = viewModel(sessionId)
+        vm.awaitSuccess { it.exercises.single().sets.size == 1 }
+        vm.onAddSet(squat)
+
+        assertEquals(2, vm.awaitSuccess().correction!!.setNumber)
+    }
+
+    /** A single tap must not destroy a record: delete asks first. */
+    @Test
+    fun deleteAsksBeforeItRemovesAnything() = runBlocking {
+        val (sessionId, setId) = completedWorkoutWithOneSet()
+        val vm = viewModel(sessionId)
+        vm.awaitSuccess()
+
+        vm.onCorrectSet(setId)
+        vm.onDeleteRequested()
+
+        assertEquals(true, vm.awaitSuccess().correction!!.confirmingDelete)
+        assertNotNull("nothing is deleted until confirmed", database.workoutSetDao().getById(setId))
+    }
+
+    @Test
+    fun backingOutOfDeleteKeepsTheSetAndReturnsToTheEditFields() = runBlocking {
+        val (sessionId, setId) = completedWorkoutWithOneSet()
+        val vm = viewModel(sessionId)
+        vm.awaitSuccess()
+
+        vm.onCorrectSet(setId)
+        vm.onDeleteRequested()
+        vm.onDeleteCancelled()
+
+        val correction = vm.awaitSuccess().correction!!
+        assertEquals(false, correction.confirmingDelete)
+        assertNotNull(database.workoutSetDao().getById(setId))
+    }
+
     @Test
     fun cancellingDiscardsTheEdit() = runBlocking {
         val (sessionId, setId) = completedWorkoutWithOneSet()

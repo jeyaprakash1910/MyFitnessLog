@@ -63,10 +63,12 @@ docs/      Product, architecture, database, API, sync, coding standards, ADRs
     (metadata + every snapshotted exercise and set), read through a dedicated
     read-only repository over the snapshot tables.
   - Correcting a finished workout: tap any set on the detail screen to fix its
-    weight, reps or RPE. Deliberately narrow, so a wrong number can be fixed while
-    the record still means something: the planning snapshot (exercise name, order,
-    targets) stays locked, and a discarded workout cannot be edited at all
-    (ADR-0018).
+    weight, reps or RPE, add a set that was performed but never logged, or delete
+    one that was logged but not performed (behind a confirmation, since it is the
+    only correction that removes a record). Deliberately narrow, so a wrong number
+    can be fixed while the record still means something: the planning snapshot
+    (exercise name, order, targets) stays locked, and a discarded workout cannot be
+    edited at all (ADR-0018).
   - In-app updates: on launch the app asks the backend for the latest published
     release and, when a newer one exists, shows a dismissible banner (suppressed
     during a workout). The update screen shows the release notes and download

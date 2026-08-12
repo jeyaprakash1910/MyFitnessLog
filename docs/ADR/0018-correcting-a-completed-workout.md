@@ -1,7 +1,15 @@
 # ADR-0018 - Correcting a completed workout
 
 Date: 2026-08-08
-Status: Accepted. Backend implemented 2026-08-08; Android edit surface 2026-08-09.
+Status: Accepted. Backend implemented 2026-08-08; Android edit surface 2026-08-09,
+completed 2026-08-12.
+
+> The 2026-08-09 surface reached only one of the three corrections below: editing
+> a set. Adding and deleting one were permitted by the backend and by
+> `WorkoutRepository` from the start - `requireCorrectableForSet` has always
+> allowed `COMPLETED` - but nothing on the detail screen called them, so a user
+> could fix a wrong number and still not remove a set they never performed. Closed
+> 2026-08-12 with no data-layer change: the gap was entirely in the UI.
 Amends: ADR-0004 (snapshot-based workout history)
 Related: ADR-0003 (backend is the system source of truth), ADR-0006 (timestamp
 auditing), ADR-0007 (deletion tombstones), ADR-0011 (read-only workout
