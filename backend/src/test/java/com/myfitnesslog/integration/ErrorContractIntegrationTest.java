@@ -2,6 +2,7 @@ package com.myfitnesslog.integration;
 
 import com.myfitnesslog.dto.request.StartWorkoutSessionRequest;
 import com.myfitnesslog.dto.request.CompleteWorkoutSessionRequest;
+import com.myfitnesslog.dto.request.DiscardWorkoutSessionRequest;
 import com.myfitnesslog.service.WorkoutSessionService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -72,10 +73,14 @@ class ErrorContractIntegrationTest {
         UUID sessionId = sessionService.startWorkout(
                 new StartWorkoutSessionRequest(UUID.randomUUID(), null, Instant.parse("2026-07-20T09:00:00Z"), null))
                 .session().getId();
-        sessionService.completeWorkout(sessionId,
-                new CompleteWorkoutSessionRequest(Instant.parse("2026-07-20T10:00:00Z"), null));
+        // Discarded, then completed: still illegal, and now the example this test
+        // uses. It previously completed then discarded, which became legal on
+        // 2026-08-13 so that a workout logged by mistake can leave the record.
+        // DISCARDED stays terminal, so this is the transition that still conflicts.
+        sessionService.discardWorkout(sessionId,
+                new DiscardWorkoutSessionRequest(Instant.parse("2026-07-20T10:00:00Z"), null));
 
-        String path = "/api/v1/workout-sessions/" + sessionId + "/discard";
+        String path = "/api/v1/workout-sessions/" + sessionId + "/complete";
         ResultActions result = mockMvc.perform(put(path)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""

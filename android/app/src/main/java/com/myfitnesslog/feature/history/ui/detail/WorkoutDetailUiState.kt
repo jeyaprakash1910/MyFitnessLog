@@ -88,5 +88,14 @@ sealed interface WorkoutDetailUiState {
         val exercises: List<WorkoutDetailExerciseRow>,
         /** Non-null while a correction dialog is open (ADR-0018). */
         val correction: SetCorrection? = null,
+        /**
+         * True while the user is being asked to confirm discarding the workout.
+         *
+         * Kept separate from [SetCorrection.confirmingDelete] because the two acts
+         * are different sizes: one removes a set, the other removes the whole
+         * workout from history. Sharing a flag would let a future edit show the
+         * wrong question for the wrong action.
+         */
+        val confirmingDiscard: Boolean = false,
     ) : WorkoutDetailUiState
 }

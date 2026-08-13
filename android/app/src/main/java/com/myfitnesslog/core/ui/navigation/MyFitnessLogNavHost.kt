@@ -189,7 +189,7 @@ fun MyFitnessLogNavHost() {
                     route = WorkoutHistoryRoutes.DETAIL,
                     arguments = listOf(navArgument(WorkoutHistoryRoutes.ARG_SESSION_ID) { type = NavType.StringType }),
                 ) {
-                    WorkoutDetailScreen()
+                    WorkoutDetailScreen(onDiscarded = { navController.popBackStack() })
                 }
                 composable(TopLevelDestination.SETTINGS.route) {
                     SettingsScreen(

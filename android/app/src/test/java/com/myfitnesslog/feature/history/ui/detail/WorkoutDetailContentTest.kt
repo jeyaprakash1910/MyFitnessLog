@@ -295,6 +295,73 @@ class WorkoutDetailContentTest {
         assertTrue(confirmed)
     }
 
+    // --- Discarding the whole workout (a different size of act) --------------
+
+    @Test
+    fun theScreenOffersToDiscardTheWorkout() {
+        var requested = false
+        composeRule.setContent {
+            WorkoutDetailContent(successState(), onDiscardRequested = { requested = true })
+        }
+
+        composeRule.onNodeWithTag(WorkoutDetailTestTags.DISCARD).performClick()
+
+        assertTrue(requested)
+    }
+
+    /** No dialog until asked: the screen is a record first. */
+    @Test
+    fun noDiscardDialogByDefault() {
+        composeRule.setContent { WorkoutDetailContent(successState()) }
+        composeRule.onNodeWithTag(WorkoutDetailTestTags.DISCARD_DIALOG).assertDoesNotExist()
+    }
+
+    /**
+     * The confirmation says what it costs, including the two consequences a user
+     * cannot see from this screen: other devices, and future suggestions.
+     */
+    @Test
+    fun theDiscardConfirmationSaysWhatItCosts() {
+        composeRule.setContent {
+            WorkoutDetailContent(successState().copy(confirmingDiscard = true))
+        }
+
+        composeRule.onNodeWithText("Discard this workout?").assertIsDisplayed()
+        composeRule.onNodeWithText("any other device", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText("previous workouts suggest", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText("cannot be undone", substring = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun confirmingDiscardIsReportedUpwards() {
+        var confirmed = false
+        composeRule.setContent {
+            WorkoutDetailContent(
+                successState().copy(confirmingDiscard = true),
+                onDiscardConfirmed = { confirmed = true },
+            )
+        }
+
+        composeRule.onNodeWithTag(WorkoutDetailTestTags.DISCARD_CONFIRM).performClick()
+
+        assertTrue(confirmed)
+    }
+
+    @Test
+    fun keepingTheWorkoutIsReportedUpwards() {
+        var cancelled = false
+        composeRule.setContent {
+            WorkoutDetailContent(
+                successState().copy(confirmingDiscard = true),
+                onDiscardCancelled = { cancelled = true },
+            )
+        }
+
+        composeRule.onNodeWithText("Keep").performClick()
+
+        assertTrue(cancelled)
+    }
+
     @Test
     fun keepingTheSetIsReportedUpwards() {
         var cancelled = false

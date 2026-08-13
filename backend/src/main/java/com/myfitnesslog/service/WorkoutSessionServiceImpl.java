@@ -154,22 +154,49 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
     }
 
     /**
-     * Applies a terminal transition. From IN_PROGRESS → target (recording endedAt);
-     * an idempotent no-op when already in the target state; any other status is an
-     * illegal transition (409).
+     * Applies a status transition, and is the only place they are decided.
+     *
+     * <p>Legal transitions:
+     * <ul>
+     *   <li>{@code IN_PROGRESS -> COMPLETED}: the workout finished.</li>
+     *   <li>{@code IN_PROGRESS -> DISCARDED}: the workout was abandoned part-way.</li>
+     *   <li>{@code COMPLETED -> DISCARDED}: the workout happened but should not be
+     *       in the record, e.g. it was logged by mistake.</li>
+     * </ul>
+     *
+     * <p>Replaying the current state is an idempotent no-op, which synchronisation
+     * relies on. Everything else is a 409.
+     *
+     * <p><b>DISCARDED carries two meanings</b> since 2026-08-13, and deliberately so
+     * rather than adding a status. Both mean "not part of history": one abandoned
+     * during the session, one removed afterwards. History is COMPLETED only, so both
+     * disappear from every client by the same rule, and nothing downstream had to
+     * learn a new state. {@code DISCARDED} remains terminal either way.
+     *
+     * <p>Discarding does <b>not</b> destroy the session. The row keeps its exercises
+     * and sets, so a mistake is recoverable by completing it again, though no client
+     * offers that today.
      */
     private WorkoutSession finishWorkout(UUID id, WorkoutStatus target, Instant endedAt, String notes) {
         WorkoutSession session = getWorkout(id);
         WorkoutStatus current = session.getStatus();
         if (current == target) {
-            return session; // idempotent replay — no mutation
+            return session; // idempotent replay, no mutation
         }
-        if (current != WorkoutStatus.IN_PROGRESS) {
+        boolean legal = current == WorkoutStatus.IN_PROGRESS
+                || (current == WorkoutStatus.COMPLETED && target == WorkoutStatus.DISCARDED);
+        if (!legal) {
             throw new BusinessRuleException(
                     "Cannot " + verb(target) + " a " + current.name().toLowerCase() + " workout.");
         }
         session.setStatus(target);
-        session.setEndedAt(endedAt);
+        // endedAt records when training stopped, which discarding afterwards does not
+        // change. Overwriting it here would replace a fact about the workout with the
+        // time somebody decided to remove it, and that value is what the duration on
+        // every history screen is derived from.
+        if (current == WorkoutStatus.IN_PROGRESS) {
+            session.setEndedAt(endedAt);
+        }
         if (notes != null) {
             session.setNotes(notes);
         }

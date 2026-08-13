@@ -277,6 +277,39 @@ class PreviousPerformanceScenarioTest {
         assertEquals(7, previous[0].repetitions)
     }
 
+    /**
+     * Discarding a workout takes it out of the suggestions too, falling back to the
+     * one before it rather than showing nothing.
+     *
+     * This needed no code: PREVIOUS already reads COMPLETED sessions only, so a
+     * discarded workout drops out of the candidate set by the same rule that takes
+     * it out of history. The test exists because that is a property worth pinning
+     * rather than a coincidence worth relying on - the suggestion should follow the
+     * record, and a later change to either query must not silently separate them.
+     */
+    @Test
+    fun example_discardedWorkoutIsIgnoredAndThePriorOneIsSuggested() {
+        val bench = UUID.randomUUID()
+        val push = UUID.randomUUID()
+        seedMaster(bench, push)
+        // 80x8 a day ago, then 85x7 today.
+        addExerciseWithSets(completedSession(push, now), bench, 0, 1 to ("80" to 8))
+        val mistake = completedSession(push, now.plusSeconds(86_400))
+        addExerciseWithSets(mistake, bench, 0, 1 to ("85" to 7))
+
+        // Today's was logged by mistake and is discarded.
+        runBlocking {
+            database.workoutSessionDao().getById(mistake)!!.let {
+                database.workoutSessionDao().upsert(it.copy(status = WorkoutStatus.DISCARDED))
+            }
+        }
+
+        val previous = runBlocking { dao.getPreviousSets(bench) }
+        assertEquals(1, previous.size)
+        assertEquals(BigDecimal("80"), previous[0].weight)
+        assertEquals(8, previous[0].repetitions)
+    }
+
     @Test
     fun example_sameRoutine_ignoresMoreRecentOtherRoutine() {
         val bench = UUID.randomUUID()

@@ -20,6 +20,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,6 +45,9 @@ object WorkoutDetailTestTags {
     const val CORRECTION_ERROR = "workout_detail_correction_error"
     const val CORRECTION_DELETE = "workout_detail_correction_delete"
     const val CORRECTION_DELETE_CONFIRM = "workout_detail_correction_delete_confirm"
+    const val DISCARD = "workout_detail_discard"
+    const val DISCARD_DIALOG = "workout_detail_discard_dialog"
+    const val DISCARD_CONFIRM = "workout_detail_discard_confirm"
     fun exercise(id: UUID) = "workout_detail_exercise_$id"
     fun set(id: UUID) = "workout_detail_set_$id"
     fun addSet(exerciseId: UUID) = "workout_detail_add_set_$exerciseId"
@@ -51,10 +55,19 @@ object WorkoutDetailTestTags {
 
 @Composable
 fun WorkoutDetailScreen(
+    onDiscarded: () -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: WorkoutDetailViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+    // Leave once the workout is gone. Staying would show "This workout is no longer
+    // available" about the thing the user just deliberately removed, and make them
+    // press back to escape a screen that exists only to describe an absence.
+    val discarded by viewModel.discarded.collectAsStateWithLifecycle()
+    LaunchedEffect(discarded) {
+        if (discarded) onDiscarded()
+    }
     WorkoutDetailContent(
         uiState = uiState,
         onCorrectSet = viewModel::onCorrectSet,
@@ -67,6 +80,9 @@ fun WorkoutDetailScreen(
         onDeleteRequested = viewModel::onDeleteRequested,
         onDeleteCancelled = viewModel::onDeleteCancelled,
         onDeleteConfirmed = viewModel::onDeleteConfirmed,
+        onDiscardRequested = viewModel::onDiscardRequested,
+        onDiscardCancelled = viewModel::onDiscardCancelled,
+        onDiscardConfirmed = viewModel::onDiscardConfirmed,
         modifier = modifier,
     )
 }
@@ -84,6 +100,9 @@ fun WorkoutDetailContent(
     onDeleteRequested: () -> Unit = {},
     onDeleteCancelled: () -> Unit = {},
     onDeleteConfirmed: () -> Unit = {},
+    onDiscardRequested: () -> Unit = {},
+    onDiscardCancelled: () -> Unit = {},
+    onDiscardConfirmed: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier.fillMaxSize()) {
@@ -110,8 +129,48 @@ fun WorkoutDetailContent(
                 items(uiState.exercises, key = { it.id }) { exercise ->
                     ExerciseCard(exercise, onCorrectSet, onAddSet)
                 }
+                item {
+                    // Last on the screen, well below the sets. Removing the whole
+                    // workout is a different order of thing from correcting one set,
+                    // and it should not sit within reach of a thumb reading history.
+                    TextButton(
+                        onClick = onDiscardRequested,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 16.dp)
+                            .testTag(WorkoutDetailTestTags.DISCARD),
+                    ) {
+                        Text("Discard Workout", color = MaterialTheme.colorScheme.error)
+                    }
+                }
             }
         }
+    }
+
+    if ((uiState as? WorkoutDetailUiState.Success)?.confirmingDiscard == true) {
+        AlertDialog(
+            onDismissRequest = onDiscardCancelled,
+            modifier = Modifier.testTag(WorkoutDetailTestTags.DISCARD_DIALOG),
+            title = { Text("Discard this workout?") },
+            text = {
+                Text(
+                    "It will be removed from your history here, on the web, and on " +
+                        "any other device. Sets you logged in it stop counting towards " +
+                        "what previous workouts suggest. This cannot be undone in the app.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = onDiscardConfirmed,
+                    modifier = Modifier.testTag(WorkoutDetailTestTags.DISCARD_CONFIRM),
+                ) {
+                    Text("Discard Workout", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDiscardCancelled) { Text("Keep") }
+            },
+        )
     }
 
     (uiState as? WorkoutDetailUiState.Success)?.correction?.let { correction ->

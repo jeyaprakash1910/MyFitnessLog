@@ -3,6 +3,7 @@ package com.myfitnesslog.feature.history.ui.detail
 import androidx.lifecycle.SavedStateHandle
 import com.myfitnesslog.core.data.local.MyFitnessLogDatabase
 import com.myfitnesslog.core.data.local.SetCategory
+import com.myfitnesslog.core.data.local.WorkoutStatus
 import com.myfitnesslog.core.sync.testing.RecordingSyncTrigger
 import com.myfitnesslog.feature.history.data.WorkoutHistoryRepositoryImpl
 import com.myfitnesslog.feature.history.ui.WorkoutHistoryRoutes
@@ -480,6 +481,103 @@ class WorkoutDetailViewModelTest {
 
         val correction = vm.awaitCorrection { !it.confirmingDelete }
         assertEquals(false, correction.confirmingDelete)
+        assertNotNull(database.workoutSetDao().getById(setId))
+    }
+
+    // --- Discarding the whole workout ---------------------------------------
+
+    /** Removing a workout from history is one confirmed action away, and no more. */
+    @Test
+    fun discardingRemovesTheWorkoutFromHistory() = runBlocking {
+        val (sessionId, _) = completedWorkoutWithOneSet()
+        val vm = viewModel(sessionId)
+        vm.awaitSuccess()
+
+        vm.onDiscardRequested()
+        assertEquals(true, vm.awaitSuccess().confirmingDiscard)
+        vm.awaitWork { vm.onDiscardConfirmed() }
+
+        // The history projection stops resolving it, which is what "removed from
+        // history" means: COMPLETED only, on every client and on the backend.
+        assertEquals(WorkoutDetailUiState.NotFound, vm.uiState.awaitFirst { it is WorkoutDetailUiState.NotFound })
+        assertEquals(WorkoutStatus.DISCARDED, database.workoutSessionDao().getById(sessionId)!!.status)
+    }
+
+    /**
+     * The screen is told to leave, and only after the write.
+     *
+     * Signalling before it would navigate away from a discard that failed, leaving
+     * the workout in history and the user with no idea the action did nothing.
+     */
+    @Test
+    fun discardingSignalsTheScreenToLeaveOnlyAfterTheWriteLands() = runBlocking {
+        val (sessionId, _) = completedWorkoutWithOneSet()
+        val vm = viewModel(sessionId)
+        vm.awaitSuccess()
+
+        assertEquals(false, vm.discarded.value)
+        vm.onDiscardRequested()
+        assertEquals(false, vm.discarded.value)
+
+        vm.awaitWork { vm.onDiscardConfirmed() }
+
+        assertEquals(true, vm.discarded.value)
+        assertEquals(WorkoutStatus.DISCARDED, database.workoutSessionDao().getById(sessionId)!!.status)
+    }
+
+    /** Merely opening the workout must not send anyone anywhere. */
+    @Test
+    fun theScreenIsNotToldToLeaveWithoutADiscard() = runBlocking {
+        val (sessionId, setId) = completedWorkoutWithOneSet()
+        val vm = viewModel(sessionId)
+        vm.awaitSuccess()
+
+        vm.onCorrectSet(setId)
+        vm.onCorrectionWeightChange("105")
+        vm.awaitWork { vm.onCorrectionSaved() }
+
+        assertEquals(false, vm.discarded.value)
+    }
+
+    /** A single tap must not remove a workout: it asks first. */
+    @Test
+    fun discardAsksBeforeItRemovesAnything() = runBlocking {
+        val (sessionId, _) = completedWorkoutWithOneSet()
+        val vm = viewModel(sessionId)
+        vm.awaitSuccess()
+
+        vm.awaitWork { vm.onDiscardRequested() }
+
+        assertEquals(true, vm.awaitSuccess().confirmingDiscard)
+        assertEquals(WorkoutStatus.COMPLETED, database.workoutSessionDao().getById(sessionId)!!.status)
+    }
+
+    @Test
+    fun backingOutOfDiscardKeepsTheWorkout() = runBlocking {
+        val (sessionId, _) = completedWorkoutWithOneSet()
+        val vm = viewModel(sessionId)
+        vm.awaitSuccess()
+
+        vm.onDiscardRequested()
+        vm.awaitWork { vm.onDiscardCancelled() }
+
+        assertEquals(false, vm.awaitSuccess().confirmingDiscard)
+        assertEquals(WorkoutStatus.COMPLETED, database.workoutSessionDao().getById(sessionId)!!.status)
+    }
+
+    /**
+     * Nothing is destroyed. DISCARDED is a status, so the sets remain and the
+     * workout is recoverable through the API even though no client offers it.
+     */
+    @Test
+    fun discardingDestroysNothing() = runBlocking {
+        val (sessionId, setId) = completedWorkoutWithOneSet()
+        val vm = viewModel(sessionId)
+        vm.awaitSuccess()
+
+        vm.onDiscardRequested()
+        vm.awaitWork { vm.onDiscardConfirmed() }
+
         assertNotNull(database.workoutSetDao().getById(setId))
     }
 
