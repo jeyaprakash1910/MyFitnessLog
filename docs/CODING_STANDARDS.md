@@ -374,6 +374,54 @@ about.
 
 ⸻
 
+19b. ViewModel tests: wait for things, never sample them
+
+Every flaky test this project has had since TD-015 was the same mistake in a
+different costume, and it is cheap to avoid once named.
+
+**A ViewModel writes asynchronously.** Its actions launch into `viewModelScope`
+and return immediately, so the write lands some time later, on Room's own
+threads. A test that reads straight afterwards is racing that write. It wins on a
+fast machine and loses on a loaded CI runner, which is the worst possible split:
+green locally, red in CI, and nothing wrong with the code.
+
+Two helpers cover the two cases, and between them there is no reason to sample
+anything:
+
+| Asserting on | Use | Why |
+|---|---|---|
+| State the action exposes (`uiState`) | `awaitFirst { predicate }` | Suspends until the predicate holds |
+| A side effect: a row written, or **not** written | `awaitWork { vm.action() }` | Joins the coroutines the action launched |
+
+```kotlin
+// Wrong: samples whatever is current, which may predate the action.
+vm.onCorrectionSaved()
+assertEquals(4, database.workoutSetDao().getById(id)!!.repetitions)
+
+// Right: the join guarantees the write finished.
+vm.awaitWork { vm.onCorrectionSaved() }
+assertEquals(4, database.workoutSetDao().getById(id)!!.repetitions)
+```
+
+**Negative assertions are the dangerous ones.** "Nothing was written" can never be
+waited for, because an absence never arrives — it can only be confirmed once the
+work is known to have finished. Every unsafe site found in the 2026-08-13 sweep
+was a negative assertion, and one of them carried the comment *"give any
+(incorrect) write a chance"*, which is a race described rather than removed.
+
+This is not merely tidiness. `completedWorkoutRejectsFurtherEdits` passed for five
+days **because** of its race: ADR-0018 had made the repository accept the write it
+asserted was refused, and the test read the database before the now-succeeding
+write landed. The flake was the only thing reporting a real defect, and it was
+nearly dismissed as noise. A deterministic test would have failed the moment the
+guard was widened.
+
+Never fix a flake by retrying it or by sleeping. The CI retry exists to *count*
+flakes, not to hide them (TD-015), and a green retry buries exactly the kind of
+signal described above.
+
+⸻
+
 20. Flyway
 
 Each database change must be implemented through a Flyway migration.

@@ -13,6 +13,7 @@ import com.myfitnesslog.feature.history.ui.sanitizeNotes
 import com.myfitnesslog.feature.history.ui.setCategoryLabel
 import com.myfitnesslog.feature.history.ui.workoutTypeLabel
 import com.myfitnesslog.core.data.local.SetCategory
+import com.myfitnesslog.feature.workout.data.SetWriteIntent
 import com.myfitnesslog.feature.workout.data.WorkoutRepository
 import com.myfitnesslog.feature.workout.data.local.WorkoutExerciseEntity
 import com.myfitnesslog.feature.workout.data.local.WorkoutSetEntity
@@ -204,6 +205,7 @@ class WorkoutDetailViewModel @Inject constructor(
                     setCategory = SetCategory.WORKING,
                     rpe = rpe,
                     rir = null,
+                    intent = SetWriteIntent.CORRECTION,
                 )
             }
             return
@@ -225,6 +227,7 @@ class WorkoutDetailViewModel @Inject constructor(
                 // A corrected set stays completed. Corrections change what was
                 // performed, never whether it happened.
                 isCompleted = true,
+                intent = SetWriteIntent.CORRECTION,
             )
         }
     }
@@ -248,7 +251,9 @@ class WorkoutDetailViewModel @Inject constructor(
     fun onDeleteConfirmed() {
         val setId = correction.value?.setId ?: return
         correction.value = null
-        viewModelScope.launch { workoutRepository.deleteSet(setId) }
+        viewModelScope.launch {
+            workoutRepository.deleteSet(setId, intent = SetWriteIntent.CORRECTION)
+        }
     }
 
     private fun editCorrection(transform: (SetCorrection) -> SetCorrection) {

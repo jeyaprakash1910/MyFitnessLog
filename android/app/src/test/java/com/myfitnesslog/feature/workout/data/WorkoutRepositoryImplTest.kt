@@ -274,7 +274,12 @@ class WorkoutRepositoryImplTest {
         val setId = addWorkingSet()
         repository.completeWorkout(sessionId)
 
-        repository.updateSet(setId, BigDecimal("90.00"), 5, SetCategory.WORKING, null, null, true)
+        // CORRECTION, explicitly: a completed session accepts set writes only for
+        // this reason (ADR-0018), and the default LOGGING intent is refused below.
+        repository.updateSet(
+            setId, BigDecimal("90.00"), 5, SetCategory.WORKING, null, null, true,
+            intent = SetWriteIntent.CORRECTION,
+        )
 
         val corrected = database.workoutSetDao().getById(setId)!!
         assertEquals(BigDecimal("90.00"), corrected.weight)
@@ -283,12 +288,62 @@ class WorkoutRepositoryImplTest {
         assertEquals(SyncStatus.PENDING, corrected.syncStatus)
 
         // A set performed but never logged can be added afterwards.
-        val added = repository.addSet(workoutExerciseId, BigDecimal("60.00"), 12)
+        val added = repository.addSet(
+            workoutExerciseId, BigDecimal("60.00"), 12,
+            intent = SetWriteIntent.CORRECTION,
+        )
         assertNotNull(database.workoutSetDao().getById(added))
 
         // And one logged by mistake removed.
-        repository.deleteSet(setId)
+        repository.deleteSet(setId, intent = SetWriteIntent.CORRECTION)
         assertNull(database.workoutSetDao().getById(setId))
+    }
+
+    /**
+     * The other half of ADR-0018, and the one that was silently lost.
+     *
+     * Widening the guard to permit corrections also stopped refusing the *logging*
+     * screen's writes to a finished session, between 2026-08-08 and 2026-08-13.
+     * `WorkoutViewModel` has no read-only check of its own and its `runCatching`
+     * swallowed the rejection it used to rely on, so nothing below the UI was left
+     * enforcing ADR-0004.
+     */
+    @Test
+    fun completedWorkoutRefusesALoggingWrite() = runBlocking {
+        val setId = addWorkingSet()
+        runBlocking { repository.completeWorkout(sessionId) }
+
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking { repository.addSet(workoutExerciseId, BigDecimal("60.00"), 12) }
+        }
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking {
+                repository.updateSet(setId, BigDecimal("90.00"), 5, SetCategory.WORKING, null, null, true)
+            }
+        }
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking { repository.deleteSet(setId) }
+        }
+        // Untouched by any of the three.
+        assertEquals(1, database.workoutSetDao().getByExercise(workoutExerciseId).size)
+    }
+
+    /** A discarded workout is refused even for a correction: there is nothing to correct. */
+    @Test
+    fun discardedWorkoutRefusesEvenACorrection() = runBlocking {
+        val setId = addWorkingSet()
+        repository.discardWorkout(sessionId)
+
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking {
+                repository.updateSet(
+                    setId, BigDecimal("90.00"), 5, SetCategory.WORKING, null, null, true,
+                    intent = SetWriteIntent.CORRECTION,
+                )
+            }
+        }
+        // The set is untouched; assertThrows returns the exception, so end on Unit.
+        assertEquals(1, database.workoutSetDao().getByExercise(workoutExerciseId).size)
     }
 
     /** The session lifecycle stays sealed: only the performance is correctable. */

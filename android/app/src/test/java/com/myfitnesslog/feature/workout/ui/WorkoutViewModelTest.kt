@@ -6,6 +6,7 @@ import com.myfitnesslog.core.data.local.SetCategory
 import com.myfitnesslog.core.sync.testing.RecordingSyncTrigger
 import com.myfitnesslog.feature.routine.RoutineTestData
 import com.myfitnesslog.feature.routine.awaitFirst
+import com.myfitnesslog.feature.routine.awaitWork
 import com.myfitnesslog.feature.routine.data.RoutineRepositoryImpl
 import com.myfitnesslog.feature.routine.closeAndDrain
 import com.myfitnesslog.feature.routine.tracked
@@ -379,9 +380,12 @@ class WorkoutViewModelTest {
         val ex = vm.awaitActive { it.exercises.firstOrNull()?.rows?.any { r -> !r.isCompleted } == true }.exercises.first()
         val plannedKey = ex.rows.first { !it.isCompleted }.rowKey
 
-        vm.onToggleComplete(ex.id, plannedKey, "", "")
+        // awaitWork rather than hoping: this asserts an absence, and the comment
+        // that used to sit here said "give any (incorrect) write a chance", which
+        // is a race described rather than removed. Joining the launched work makes
+        // the emptiness below mean something.
+        vm.awaitWork { vm.onToggleComplete(ex.id, plannedKey, "", "") }
 
-        // Give any (incorrect) write a chance, then assert nothing was persisted.
         assertTrue(database.workoutSetDao().getByExercise(ex.id).isEmpty())
     }
 
@@ -416,9 +420,18 @@ class WorkoutViewModelTest {
         vm.completeWorkout()
         vm.awaitActive { it.isReadOnly }
 
-        // Attempting to complete a (now-hidden) planned row is swallowed: the repository
-        // rejects a write to a terminal session and the VM catches it.
-        vm.onToggleComplete(exerciseId, "draft:${UUID.randomUUID()}", "80", "8")
+        // Attempting to complete a (now-hidden) planned row is swallowed: the
+        // repository refuses a LOGGING write to a terminal session and the VM's
+        // runCatching absorbs it.
+        //
+        // awaitWork, not a bare call: the write happens in viewModelScope, so
+        // reading the database straight afterwards races it. This assertion is a
+        // negative one - nothing was written - and an absence can never be waited
+        // for, only confirmed once the work is known to have finished. Between
+        // 2026-08-08 and 2026-08-13 that race was the only thing making this pass:
+        // ADR-0018 had made the repository accept the write, and the test read the
+        // database before it landed.
+        vm.awaitWork { vm.onToggleComplete(exerciseId, "draft:${UUID.randomUUID()}", "80", "8") }
 
         assertTrue(database.workoutSetDao().getByExercise(exerciseId).isEmpty())
     }
