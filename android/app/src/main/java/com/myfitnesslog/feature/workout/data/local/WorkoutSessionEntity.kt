@@ -48,6 +48,16 @@ data class WorkoutSessionEntity(
     @ColumnInfo(name = "routineId")
     val routineId: UUID?,
 
+    /**
+     * The routine's name when this workout started; null for a manual workout, and
+     * for sessions recorded before Room v7.
+     *
+     * Snapshotted like `WorkoutExercise.exerciseName`, so renaming a routine does
+     * not relabel the workouts already performed from it (ADR-0004).
+     */
+    @ColumnInfo(name = "routineName")
+    val routineName: String? = null,
+
     @ColumnInfo(name = "status")
     val status: WorkoutStatus,
 

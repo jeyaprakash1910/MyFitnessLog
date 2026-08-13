@@ -43,7 +43,7 @@ class WorkoutHistoryViewModel @Inject constructor(
             id = session.id,
             date = formatWorkoutDate(session.startedAt),
             duration = formatCompletedDuration(session.startedAt, session.endedAt),
-            typeLabel = workoutTypeLabel(session.routineId),
+            title = workoutTitle(session.routineId, session.routineName),
             exercisesLabel = exerciseCountLabel(exerciseCount),
             notesPreview = sanitizeNotes(session.notes),
         )

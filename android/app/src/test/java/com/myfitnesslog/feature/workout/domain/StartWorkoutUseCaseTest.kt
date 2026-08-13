@@ -71,6 +71,41 @@ class StartWorkoutUseCaseTest {
         assertEquals(listOf(0, 1), snapshots.map { it.exerciseOrder })
     }
 
+    /**
+     * The routine's name is recorded on the session when the workout starts.
+     *
+     * Snapshotted for the same reason the exercise name is: a workout records what
+     * happened, so renaming the routine afterwards must not relabel it (ADR-0004).
+     * The next test proves the second half, which is the one that matters.
+     */
+    @Test
+    fun startRecordsTheRoutineName() = runBlocking {
+        val (routineId, _) = routineWithSquat()
+
+        val sessionId = startWorkout(routineId)
+
+        assertEquals("Legs", database.workoutSessionDao().getById(sessionId)!!.routineName)
+    }
+
+    /** Renaming the routine afterwards must not change what the workout is called. */
+    @Test
+    fun renamingTheRoutineLaterDoesNotRelabelTheWorkout() = runBlocking {
+        val (routineId, _) = routineWithSquat()
+        val sessionId = startWorkout(routineId)
+
+        routineRepository.renameRoutine(routineId, "Legs (old)")
+
+        assertEquals("Legs", database.workoutSessionDao().getById(sessionId)!!.routineName)
+    }
+
+    /** A manual workout has no routine, so there is no name to record. */
+    @Test
+    fun aManualWorkoutRecordsNoRoutineName() = runBlocking {
+        val sessionId = startWorkout(null)
+
+        assertNull(database.workoutSessionDao().getById(sessionId)!!.routineName)
+    }
+
     @Test
     fun snapshotCopiesAllTargetFields() = runBlocking {
         val (routineId, _) = routineWithSquat()

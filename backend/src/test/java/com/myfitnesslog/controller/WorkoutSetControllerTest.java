@@ -53,7 +53,7 @@ class WorkoutSetControllerTest {
     @BeforeEach
     void setUp() {
         sessionId = sessionService.startWorkout(
-                new StartWorkoutSessionRequest(UUID.randomUUID(), null, Instant.parse("2026-07-20T09:00:00Z"), null))
+                new StartWorkoutSessionRequest(UUID.randomUUID(), null, null, Instant.parse("2026-07-20T09:00:00Z"), null))
                 .session().getId();
         exerciseId = exerciseRepository.findAll().get(0).getId();
         workoutExerciseId = exerciseService.addExercise(sessionId,

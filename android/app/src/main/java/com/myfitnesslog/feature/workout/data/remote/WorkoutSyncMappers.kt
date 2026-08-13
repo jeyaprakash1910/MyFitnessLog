@@ -20,6 +20,7 @@ fun WorkoutSessionEntity.toStartRequest(): StartWorkoutSessionRequestDto =
     StartWorkoutSessionRequestDto(
         id = id.toString(),
         routineId = routineId?.toString(),
+        routineName = routineName,
         startedAt = startedAt,
         notes = notes,
     )

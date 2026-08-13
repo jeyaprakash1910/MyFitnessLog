@@ -71,7 +71,7 @@ class ErrorContractIntegrationTest {
     @Test
     void businessRuleViolationReturns409Envelope() throws Exception {
         UUID sessionId = sessionService.startWorkout(
-                new StartWorkoutSessionRequest(UUID.randomUUID(), null, Instant.parse("2026-07-20T09:00:00Z"), null))
+                new StartWorkoutSessionRequest(UUID.randomUUID(), null, null, Instant.parse("2026-07-20T09:00:00Z"), null))
                 .session().getId();
         // Discarded, then completed: still illegal, and now the example this test
         // uses. It previously completed then discarded, which became legal on

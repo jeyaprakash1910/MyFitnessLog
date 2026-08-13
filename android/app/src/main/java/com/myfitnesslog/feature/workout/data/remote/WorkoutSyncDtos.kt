@@ -25,6 +25,8 @@ import java.time.Instant
 data class StartWorkoutSessionRequestDto(
     val id: String,
     val routineId: String? = null,
+    /** The routine's name as the device saw it at start; null for a manual workout. */
+    val routineName: String? = null,
     @Serializable(with = InstantSerializer::class)
     val startedAt: Instant,
     val notes: String? = null,
@@ -48,6 +50,7 @@ data class DiscardWorkoutSessionRequestDto(
 data class WorkoutSessionResponseDto(
     val id: String,
     val routineId: String? = null,
+    val routineName: String? = null,
     val status: String,
     @Serializable(with = InstantSerializer::class)
     val startedAt: Instant,
@@ -167,6 +170,7 @@ data class WorkoutSetResponseDto(
 data class WorkoutSessionDetailResponseDto(
     val id: String,
     val routineId: String? = null,
+    val routineName: String? = null,
     val status: String,
     @Serializable(with = InstantSerializer::class)
     val startedAt: Instant,

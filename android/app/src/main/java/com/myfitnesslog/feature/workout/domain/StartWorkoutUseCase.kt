@@ -52,9 +52,14 @@ class StartWorkoutUseCase @Inject constructor(
 
         val now = clock.instant()
         val sessionId = UUID.randomUUID()
+        // Captured now, not resolved at read time: the record should keep the name
+        // the user started from, even if the routine is renamed or deleted later
+        // (ADR-0004, the same reason WorkoutExercise copies exerciseName).
+        val routineName = routineId?.let { routineRepository.getRoutine(it)?.name }
         val session = WorkoutSessionEntity(
             id = sessionId,
             routineId = routineId,
+            routineName = routineName,
             status = WorkoutStatus.IN_PROGRESS,
             startedAt = now,
             createdAt = now,

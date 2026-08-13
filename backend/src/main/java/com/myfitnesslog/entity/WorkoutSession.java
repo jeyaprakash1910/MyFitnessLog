@@ -48,6 +48,16 @@ public class WorkoutSession extends AbstractAuditableEntity {
     @Column(name = "ended_at")
     private Instant endedAt;
 
+    /**
+     * The routine's name when the workout started, or null for a manual workout.
+     *
+     * Snapshotted rather than read through {@link #routine}, for the same reason
+     * {@code WorkoutExercise} copies the exercise name: renaming a routine must not
+     * relabel the workouts already performed from it (ADR-0004).
+     */
+    @Column(name = "routine_name", length = 100)
+    private String routineName;
+
     @Column(name = "notes")
     private String notes;
 
@@ -69,6 +79,14 @@ public class WorkoutSession extends AbstractAuditableEntity {
 
     public Routine getRoutine() {
         return routine;
+    }
+
+    public String getRoutineName() {
+        return routineName;
+    }
+
+    public void setRoutineName(String routineName) {
+        this.routineName = routineName;
     }
 
     public void setRoutine(Routine routine) {

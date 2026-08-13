@@ -51,7 +51,7 @@ class WorkoutSessionDetailControllerTest {
     @Test
     void detailReturnsNestedSnapshotInOrder() throws Exception {
         UUID sessionId = sessionService.startWorkout(
-                new StartWorkoutSessionRequest(UUID.randomUUID(), null, Instant.parse("2026-07-20T09:00:00Z"), "manual"))
+                new StartWorkoutSessionRequest(UUID.randomUUID(), null, null, Instant.parse("2026-07-20T09:00:00Z"), "manual"))
                 .session().getId();
         UUID exerciseId = exerciseRepository.findAll().get(0).getId();
 

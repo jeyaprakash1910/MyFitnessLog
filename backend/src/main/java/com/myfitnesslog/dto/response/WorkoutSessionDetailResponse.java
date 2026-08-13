@@ -13,6 +13,8 @@ import java.util.UUID;
 public record WorkoutSessionDetailResponse(
         UUID id,
         UUID routineId,
+        /** Routine name captured at workout start; null for a manual workout. */
+        String routineName,
         String status,
         Instant startedAt,
         Instant endedAt,

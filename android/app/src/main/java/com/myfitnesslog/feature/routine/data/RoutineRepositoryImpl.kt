@@ -45,6 +45,9 @@ class RoutineRepositoryImpl @Inject constructor(
     override fun observeRoutineExercises(routineId: UUID): Flow<List<RoutineExerciseDetail>> =
         routineExerciseDao.observeDetailsByRoutine(routineId)
 
+    override suspend fun getRoutine(id: UUID): RoutineEntity? =
+        withContext(ioDispatcher) { routineDao.getById(id) }
+
     override suspend fun getRoutineExerciseDetails(routineId: UUID): List<RoutineExerciseDetail> =
         withContext(ioDispatcher) { routineExerciseDao.getDetailsByRoutine(routineId) }
 

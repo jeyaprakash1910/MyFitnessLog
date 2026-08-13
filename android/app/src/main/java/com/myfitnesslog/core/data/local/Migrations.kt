@@ -119,4 +119,24 @@ val MIGRATION_5_6: Migration = object : Migration(5, 6) {
  * DatabaseModule. Declared last so each migration is defined before this list
  * references it.
  */
-val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+/**
+ * Adds `workout_session.routineName`: the routine's name when the workout started.
+ *
+ * Snapshotted rather than joined to `routine` at read time, for the same reason
+ * `workout_exercise` already copies `exerciseName`. A workout records what
+ * happened, so renaming a routine afterwards must not relabel every session
+ * performed from it (ADR-0004).
+ *
+ * Nullable, and existing rows are left null rather than backfilled from the
+ * routine table. A backfill would write today's name onto workouts that predate
+ * the column, inventing a snapshot that was never taken - the precise thing this
+ * column exists to avoid. Sessions with no name fall back to a generic label.
+ */
+val MIGRATION_6_7: Migration = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `workout_session` ADD COLUMN `routineName` TEXT")
+    }
+}
+
+val MIGRATIONS: Array<Migration> =
+    arrayOf(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
