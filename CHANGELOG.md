@@ -7,6 +7,34 @@ the project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-08-13
+
+### Added
+
+- **Workouts are named by their routine in History.** The list led with a date and
+  called every entry "Routine Workout", which is the least useful thing it knows. A
+  workout is a Push or a Legs day:
+
+  ```
+  Push                          42m
+  Aug 13, 2026 · 7 exercises
+  ```
+
+  The name is recorded when the workout starts, not looked up later, so renaming a
+  routine does not retroactively relabel the workouts you already did with it. That
+  is the same rule that already applies to exercise names.
+
+  Workouts recorded before this release have no name to show and keep the old
+  label, because inventing one from today's routine would be a record that was
+  never taken. Manual workouts are unchanged.
+
+### Fixed
+
+- **Short workouts no longer show "0m".** Anything under a minute reads in seconds,
+  for example "38s". A workout finished quickly used to render as zero, which looks
+  like something went wrong rather than like a short session. Longer workouts are
+  unchanged: "42m" stays "42m" rather than gaining noisy seconds.
+
 ## [1.8.0] - 2026-08-13
 
 ### Added
@@ -404,7 +432,8 @@ backend on a private network. See the full
 - Synchronization is one-way: the backend is the durable copy but cannot repopulate a
   device, so a phone that loses its database does not get its history back.
 
-[Unreleased]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.8.0...HEAD
+[Unreleased]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.9.0...HEAD
+[1.9.0]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.6.1...v1.7.0
 [1.6.1]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.6.0...v1.6.1
