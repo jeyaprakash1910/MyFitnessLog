@@ -11,6 +11,12 @@ import java.util.UUID;
 public record WorkoutSessionResponse(
         UUID id,
         UUID routineId,
+        /**
+         * The routine's name when the workout started; null for a manual workout,
+         * and for sessions recorded before this field existed. Snapshotted, so it
+         * does not follow a later rename (ADR-0004).
+         */
+        String routineName,
         String status,
         Instant startedAt,
         Instant endedAt,

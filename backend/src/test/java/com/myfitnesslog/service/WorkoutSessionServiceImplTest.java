@@ -39,7 +39,7 @@ class WorkoutSessionServiceImplTest {
     private final Instant endedAt = Instant.parse("2026-07-20T10:00:00Z");
 
     private WorkoutSessionSaveResult startManual(UUID id) {
-        return service.startWorkout(new StartWorkoutSessionRequest(id, null, startedAt, "manual"));
+        return service.startWorkout(new StartWorkoutSessionRequest(id, null, null, startedAt, "manual"));
     }
 
     @Test
@@ -59,11 +59,11 @@ class WorkoutSessionServiceImplTest {
                 new CreateRoutineRequest(UUID.randomUUID(), "Legs", null, 0)).routine().getId();
 
         WorkoutSessionSaveResult result = service.startWorkout(
-                new StartWorkoutSessionRequest(UUID.randomUUID(), routineId, startedAt, null));
+                new StartWorkoutSessionRequest(UUID.randomUUID(), routineId, null, startedAt, null));
         assertThat(result.session().getRoutine().getId()).isEqualTo(routineId);
 
         assertThatThrownBy(() -> service.startWorkout(
-                new StartWorkoutSessionRequest(UUID.randomUUID(), UUID.randomUUID(), startedAt, null)))
+                new StartWorkoutSessionRequest(UUID.randomUUID(), UUID.randomUUID(), null, startedAt, null)))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
@@ -74,7 +74,7 @@ class WorkoutSessionServiceImplTest {
         service.completeWorkout(id, new CompleteWorkoutSessionRequest(endedAt, null));
 
         WorkoutSessionSaveResult replay = service.startWorkout(
-                new StartWorkoutSessionRequest(id, null, startedAt.plus(1, ChronoUnit.HOURS), "again"));
+                new StartWorkoutSessionRequest(id, null, null, startedAt.plus(1, ChronoUnit.HOURS), "again"));
 
         assertThat(replay.created()).isFalse();
         assertThat(replay.session().getStatus()).isEqualTo(WorkoutStatus.COMPLETED); // not reopened
@@ -135,16 +135,16 @@ class WorkoutSessionServiceImplTest {
     @Test
     void historyReturnsCompletedOnlyNewestFirst() {
         UUID older = UUID.randomUUID();
-        service.startWorkout(new StartWorkoutSessionRequest(older, null, Instant.parse("2026-07-19T09:00:00Z"), null));
+        service.startWorkout(new StartWorkoutSessionRequest(older, null, null, Instant.parse("2026-07-19T09:00:00Z"), null));
         service.completeWorkout(older, new CompleteWorkoutSessionRequest(endedAt, null));
 
         UUID newer = UUID.randomUUID();
-        service.startWorkout(new StartWorkoutSessionRequest(newer, null, Instant.parse("2026-07-21T09:00:00Z"), null));
+        service.startWorkout(new StartWorkoutSessionRequest(newer, null, null, Instant.parse("2026-07-21T09:00:00Z"), null));
         service.completeWorkout(newer, new CompleteWorkoutSessionRequest(endedAt, null));
 
         // Neither an abandoned attempt nor a workout still being logged is history.
         UUID discarded = UUID.randomUUID();
-        service.startWorkout(new StartWorkoutSessionRequest(discarded, null, Instant.parse("2026-07-20T09:00:00Z"), null));
+        service.startWorkout(new StartWorkoutSessionRequest(discarded, null, null, Instant.parse("2026-07-20T09:00:00Z"), null));
         service.discardWorkout(discarded, new DiscardWorkoutSessionRequest(endedAt, null));
 
         UUID active = UUID.randomUUID();

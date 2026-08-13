@@ -33,6 +33,9 @@ interface RoutineRepository {
      * One-shot read of a routine's exercises (with names), used by the workout
      * layer to snapshot a routine when a workout starts.
      */
+    /** One routine by id, or null if it does not exist. */
+    suspend fun getRoutine(id: UUID): RoutineEntity?
+
     suspend fun getRoutineExerciseDetails(routineId: UUID): List<RoutineExerciseDetail>
 
     /** Creates a routine and returns its new id. */

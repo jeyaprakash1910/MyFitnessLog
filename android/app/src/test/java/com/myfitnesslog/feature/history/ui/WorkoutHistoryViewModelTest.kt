@@ -102,7 +102,8 @@ class WorkoutHistoryViewModelTest {
 
         val item = state.workouts.single()
         assertEquals(sessionId, item.id)
-        assertEquals("Routine Workout", item.typeLabel)
+        // The routine's name, snapshotted at start, is what the card is called.
+        assertEquals("Legs", item.title)
         assertEquals("1 exercise", item.exercisesLabel)
         assertNull(item.notesPreview)
     }
@@ -117,7 +118,8 @@ class WorkoutHistoryViewModelTest {
         } as WorkoutHistoryUiState.Success
 
         val item = state.workouts.single()
-        assertEquals("Manual Workout", item.typeLabel)
+        // No routine, so no name was recorded: fall back rather than invent one.
+        assertEquals("Manual Workout", item.title)
         assertEquals("0 exercises", item.exercisesLabel)
     }
 

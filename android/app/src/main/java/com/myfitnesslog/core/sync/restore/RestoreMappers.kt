@@ -80,6 +80,7 @@ internal fun workoutSessionEntity(dto: WorkoutSessionDetailResponseDto, restored
     WorkoutSessionEntity(
         id = UUID.fromString(dto.id),
         routineId = dto.routineId?.let(UUID::fromString),
+        routineName = dto.routineName,
         status = dto.status.toWorkoutStatus(),
         startedAt = dto.startedAt,
         endedAt = dto.endedAt,

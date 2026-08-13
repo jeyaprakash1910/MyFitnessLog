@@ -40,21 +40,38 @@ fun formatWorkoutDate(startedAt: Instant, zone: ZoneId = ZoneId.systemDefault())
 fun formatCompletedDuration(startedAt: Instant, endedAt: Instant?): String =
     formatWorkoutDuration(WorkoutClock.elapsed(startedAt, endedAt, endedAt ?: startedAt))
 
-/** Formats a workout duration as "Hh Mmm" (or "Mmm" under an hour), e.g. "1h 05m", "45m". */
+/**
+ * Formats a workout duration as "1h 05m", "45m", or "38s" under a minute.
+ *
+ * Seconds appear only below a minute, where minutes alone would read "0m" and
+ * suggest the workout never happened rather than that it was brief. Above that,
+ * seconds are noise: nobody reads "42m 17s" as more useful than "42m".
+ */
 fun formatWorkoutDuration(duration: Duration): String {
     val totalMinutes = duration.toMinutes()
     val hours = totalMinutes / 60
     val minutes = totalMinutes % 60
-    return if (hours > 0) {
-        "${hours}h ${minutes.toString().padStart(2, '0')}m"
-    } else {
-        "${minutes}m"
+    return when {
+        hours > 0 -> "${hours}h ${minutes.toString().padStart(2, '0')}m"
+        totalMinutes > 0 -> "${minutes}m"
+        else -> "${duration.seconds.coerceAtLeast(0)}s"
     }
 }
 
 /** Human label distinguishing routine-based from manual (routineId == null) workouts. */
 fun workoutTypeLabel(routineId: UUID?): String =
     if (routineId == null) "Manual Workout" else "Routine Workout"
+
+/**
+ * What to call a workout: its routine's name if one was recorded, else a label.
+ *
+ * [routineName] is the snapshot taken at workout start, so it is the name the user
+ * actually started from rather than whatever the routine is called now. It is
+ * absent for a manual workout, and for sessions performed before the snapshot
+ * existed; both fall back to [workoutTypeLabel] rather than inventing a name.
+ */
+fun workoutTitle(routineId: UUID?, routineName: String?): String =
+    routineName?.trim()?.takeIf { it.isNotEmpty() } ?: workoutTypeLabel(routineId)
 
 /** Pluralised exercise-count label, e.g. "1 exercise", "3 exercises". */
 fun exerciseCountLabel(count: Int): String =

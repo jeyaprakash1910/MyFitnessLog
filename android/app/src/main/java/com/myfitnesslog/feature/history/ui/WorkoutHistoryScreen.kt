@@ -102,11 +102,17 @@ private fun WorkoutHistoryRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text(text = workout.date, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = workout.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
                 Text(text = workout.duration, style = MaterialTheme.typography.titleMedium)
             }
             Text(
-                text = "${workout.typeLabel} · ${workout.exercisesLabel}",
+                text = "${workout.date} · ${workout.exercisesLabel}",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

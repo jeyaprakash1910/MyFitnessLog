@@ -63,7 +63,7 @@ import com.myfitnesslog.feature.workout.data.local.WorkoutSetTombstoneEntity
         WorkoutSetTombstoneEntity::class,
         WorkoutExerciseTombstoneEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 @TypeConverters(

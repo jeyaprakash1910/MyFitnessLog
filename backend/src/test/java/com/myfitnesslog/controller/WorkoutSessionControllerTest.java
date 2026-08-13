@@ -107,6 +107,42 @@ class WorkoutSessionControllerTest {
     }
 
     /**
+     * The routine's name is recorded on the session, and does not follow a later
+     * rename.
+     *
+     * Snapshotted for the same reason workout_exercise copies the exercise name: a
+     * workout records what happened, and relabelling every past session because a
+     * routine was renamed is the failure ADR-0004 exists to prevent. The client
+     * sends the name it displayed, rather than the server resolving it, so the
+     * record matches what the user was looking at.
+     */
+    @Test
+    void startRecordsTheRoutineNameAndKeepsItAcrossAReplay() throws Exception {
+        UUID id = UUID.randomUUID();
+        mockMvc.perform(post("/api/v1/workout-sessions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"id":"%s","routineId":null,"routineName":"Push","startedAt":"%s","notes":null}
+                                """.formatted(id, STARTED_AT)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.routineName").value("Push"));
+
+        mockMvc.perform(get("/api/v1/workout-sessions/{id}", id))
+                .andExpect(jsonPath("$.routineName").value("Push"));
+    }
+
+    /** A manual workout has no routine, so it has no name to record. */
+    @Test
+    void aManualWorkoutHasNoRoutineName() throws Exception {
+        UUID id = startManual();
+
+        mockMvc.perform(get("/api/v1/workout-sessions/{id}", id))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.routineId").isEmpty())
+                .andExpect(jsonPath("$.routineName").isEmpty());
+    }
+
+    /**
      * A completed workout can be discarded, which is how one logged by mistake
      * leaves the record.
      *

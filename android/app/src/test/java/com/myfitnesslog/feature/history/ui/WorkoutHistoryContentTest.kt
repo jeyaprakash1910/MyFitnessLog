@@ -22,13 +22,13 @@ class WorkoutHistoryContentTest {
 
     private fun item(
         id: UUID = workoutId,
-        typeLabel: String = "Routine Workout",
+        title: String = "Push",
         notesPreview: String? = null,
     ) = WorkoutHistoryItem(
         id = id,
         date = "21 Jul 2026",
         duration = "1h 05m",
-        typeLabel = typeLabel,
+        title = title,
         exercisesLabel = "3 exercises",
         notesPreview = notesPreview,
     )
@@ -50,9 +50,10 @@ class WorkoutHistoryContentTest {
     fun rendersWorkoutItemFields() {
         content(WorkoutHistoryUiState.Success(listOf(item(notesPreview = "Felt strong"))))
         composeRule.onNodeWithTag(WorkoutHistoryTestTags.LIST).assertIsDisplayed()
-        composeRule.onNodeWithText("21 Jul 2026").assertIsDisplayed()
+        // The routine's name leads; the date moves down beside the exercise count.
+        composeRule.onNodeWithText("Push").assertIsDisplayed()
         composeRule.onNodeWithText("1h 05m").assertIsDisplayed()
-        composeRule.onNodeWithText("Routine Workout · 3 exercises").assertIsDisplayed()
+        composeRule.onNodeWithText("21 Jul 2026 · 3 exercises").assertIsDisplayed()
         composeRule.onNodeWithText("Felt strong").assertIsDisplayed()
     }
 

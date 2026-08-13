@@ -300,6 +300,49 @@ class MigrationTest {
         }
     }
 
+    /**
+     * v6 to v7 adds the routine-name snapshot without disturbing recorded work.
+     *
+     * The column is deliberately left null on existing rows rather than backfilled
+     * from the routine table. Backfilling would stamp today's name onto workouts
+     * that predate the snapshot, inventing a record that was never taken, which is
+     * the exact thing snapshotting exists to prevent (ADR-0004).
+     */
+    @Test
+    fun migration6To7AddsTheRoutineNameSnapshotAndKeepsExistingSessions() {
+        val sessionId = "50000000-0000-0000-0000-000000000001"
+
+        helper.createDatabase(TEST_DB, 6).use { db ->
+            db.execSQL(
+                "INSERT INTO workout_session " +
+                    "(id, routineId, status, startedAt, endedAt, notes, createdAt, updatedAt, syncStatus) " +
+                    "VALUES ('$sessionId', NULL, 'COMPLETED', 1, 2, NULL, 1, 1, 'SYNCED')",
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, 7, true, MIGRATION_6_7).use { db ->
+            db.query("SELECT id, routineName FROM workout_session").use { c ->
+                assertTrue("The existing session did not survive the migration.", c.moveToFirst())
+                assertEquals(sessionId, c.getString(0))
+                assertTrue(
+                    "A pre-v7 session must have no routine name, not an invented one.",
+                    c.isNull(1),
+                )
+            }
+
+            // And the column accepts a snapshot for workouts started after the upgrade.
+            db.execSQL(
+                "INSERT INTO workout_session " +
+                    "(id, routineId, routineName, status, startedAt, endedAt, notes, createdAt, updatedAt, syncStatus) " +
+                    "VALUES ('50000000-0000-0000-0000-000000000002', NULL, 'Push', 'COMPLETED', 3, 4, NULL, 3, 3, 'PENDING')",
+            )
+            db.query("SELECT routineName FROM workout_session WHERE routineName IS NOT NULL").use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals("Push", c.getString(0))
+            }
+        }
+    }
+
     @Test
     fun everyVersionAboveTheBaselineHasAMigration() {
         val currentVersion = currentSchemaVersion()

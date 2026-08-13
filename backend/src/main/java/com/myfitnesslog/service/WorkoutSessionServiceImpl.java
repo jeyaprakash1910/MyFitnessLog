@@ -89,6 +89,7 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
         return new WorkoutSessionDetailResponse(
                 session.getId(),
                 session.getRoutine() == null ? null : session.getRoutine().getId(),
+                session.getRoutineName(),
                 session.getStatus().name(),
                 session.getStartedAt(),
                 session.getEndedAt(),
@@ -127,6 +128,7 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
             // Idempotent replay: converge the start fields without touching the
             // lifecycle (status/endedAt), so a replay never reopens a finished workout.
             existing.setRoutine(routine);
+            existing.setRoutineName(request.routineName());
             existing.setStartedAt(request.startedAt());
             existing.setNotes(request.notes());
             return new WorkoutSessionSaveResult(sessionRepository.save(existing), false);
@@ -135,6 +137,9 @@ public class WorkoutSessionServiceImpl implements WorkoutSessionService {
         session.setId(request.id());
         session.setUser(defaultUserProvider.getReference());
         session.setRoutine(routine);
+        // Snapshotted from the request, not resolved from the routine, so the record
+        // keeps the name the user saw rather than the routine's current one.
+        session.setRoutineName(request.routineName());
         session.setStatus(WorkoutStatus.IN_PROGRESS);
         session.setStartedAt(request.startedAt());
         session.setNotes(request.notes());

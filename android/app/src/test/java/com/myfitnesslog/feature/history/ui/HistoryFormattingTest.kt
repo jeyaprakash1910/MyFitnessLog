@@ -5,6 +5,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 import java.math.BigDecimal
+import java.util.UUID
+import java.time.Duration
 import java.time.Instant
 
 /**
@@ -23,7 +25,39 @@ class HistoryFormattingTest {
 
     @Test
     fun formatCompletedDurationIsZeroWhenNotEnded() {
-        assertEquals("0m", formatCompletedDuration(start, null))
+        // Zero elapsed reads as seconds, not "0m", which looked like the workout
+        // never happened rather than that no time had passed.
+        assertEquals("0s", formatCompletedDuration(start, null))
+    }
+
+    /**
+     * Seconds appear only below a minute.
+     *
+     * Every test workout finishes in seconds and used to render "0m", which reads
+     * as a bug. Above a minute seconds are noise, so they stop.
+     */
+    @Test
+    fun durationShowsSecondsOnlyUnderAMinute() {
+        assertEquals("38s", formatWorkoutDuration(Duration.ofSeconds(38)))
+        assertEquals("59s", formatWorkoutDuration(Duration.ofSeconds(59)))
+        assertEquals("1m", formatWorkoutDuration(Duration.ofSeconds(60)))
+        assertEquals("42m", formatWorkoutDuration(Duration.ofSeconds(42 * 60 + 17)))
+        assertEquals("1h 05m", formatWorkoutDuration(Duration.ofMinutes(65)))
+    }
+
+    /**
+     * The routine's name is what a workout is called, when one was recorded.
+     *
+     * A manual workout has no routine, and a session from before the snapshot
+     * existed has no name; both fall back rather than inventing one.
+     */
+    @Test
+    fun workoutTitlePrefersTheRecordedRoutineName() {
+        val routineId = UUID.randomUUID()
+        assertEquals("Push", workoutTitle(routineId, "Push"))
+        assertEquals("Manual Workout", workoutTitle(null, null))
+        assertEquals("Routine Workout", workoutTitle(routineId, null))
+        assertEquals("Routine Workout", workoutTitle(routineId, "   "))
     }
 
     @Test
