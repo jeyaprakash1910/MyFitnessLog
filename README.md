@@ -4,9 +4,10 @@ An **offline-first** workout tracking application. The backend is the permanent
 source of truth; the Android app keeps a synchronized local copy so it works
 fully offline.
 
-> **Version 1.5.0 released, 7 August 2026.**
-> [Latest release](https://github.com/jeyaprakash1910/MyFitnessLog/releases/tag/v1.5.0) ·
-> [V1 release notes](docs/V1_RELEASE_NOTES.md)
+> **Version 1.9.0 released, 13 August 2026.**
+> [Latest release](https://github.com/jeyaprakash1910/MyFitnessLog/releases/tag/v1.9.0) ·
+> [V1 release notes](docs/V1_RELEASE_NOTES.md) ·
+> [CHANGELOG](CHANGELOG.md)
 >
 > Build routines, log workouts fully offline, and have them synchronize to the
 > backend in the background. The signed release build is verified on physical
@@ -33,9 +34,9 @@ fully offline.
 ## Repository layout
 
 ```
-backend/   Spring Boot REST API (Java 21, Maven, PostgreSQL, Flyway)   — M1–M2, M8 done
-android/   Android app (Kotlin, Compose, Room, Hilt, Retrofit, WorkManager) — M3–M7, M9, M9.5 done
-web/       React read-only history client (TypeScript, Vite, Tailwind)  — M10 done
+backend/   Spring Boot REST API (Java 21, Maven, PostgreSQL, Flyway)   - M1-M2, M8, M14-M15 done
+android/   Android app (Kotlin, Compose, Room, Hilt, Retrofit, WorkManager) - M3-M7, M9, M9.5, M13-M15 done
+web/       React read-only history client (TypeScript, Vite, Tailwind)  - M10 done
 docs/      Product, architecture, database, API, sync, coding standards, ADRs
 ```
 
@@ -46,9 +47,11 @@ docs/      Product, architecture, database, API, sync, coding standards, ADRs
   duplicate), routine exercises (add/update/remove/reorder), and workout sessions
   (history/detail/start/complete/discard) with their exercises and sets. Idempotent
   UUID-keyed upserts (201 create / 200 replay), valid status transitions (409 on
-  illegal), immutable completed/discarded workouts, and a nested workout-detail
-  snapshot. The single V1 user is attached server-side. Interactive docs at
-  `/swagger-ui/index.html`.
+  illegal), and a nested workout-detail snapshot. A completed workout accepts
+  set-level corrections but keeps its planning snapshot locked; a discarded one
+  accepts nothing (ADR-0018). Client mistakes return the right status rather than
+  500 (404/405/415/400). The single V1 user is attached server-side. Interactive
+  docs at `/swagger-ui/index.html`.
 - **Android (offline-first, Room is the source of truth):**
   - Exercise library: its own tab — download + local cache, list, local search,
     category filter. Downloaded on demand (categories then exercises, in that
@@ -57,11 +60,15 @@ docs/      Product, architecture, database, API, sync, coding standards, ADRs
     edit targets), duplicate, soft-delete.
   - Workout logging: start/resume a workout from a routine (immutable snapshot of
     the routine) **or a manual/ad-hoc workout** (no routine); log sets,
-    complete/discard, workout + rest timers. Completed workouts are immutable.
-  - Workout history: a list of completed workouts (date, derived duration,
-    routine/manual indicator, exercise count, notes preview) and a detail screen
-    (metadata + every snapshotted exercise and set), read through a dedicated
-    read-only repository over the snapshot tables.
+    complete/discard, workout + rest timers. Once completed, a workout can only
+    be changed through the narrow corrections below, never from this screen.
+  - Workout history: a list of completed workouts led by the routine's name - a
+    Push day reads "Push", not "Routine Workout" - with the date, derived duration
+    (in seconds under a minute, so a short session never reads "0m"), exercise
+    count and notes preview, plus a detail screen (metadata + every snapshotted
+    exercise and set), read through a dedicated read-only repository over the
+    snapshot tables. The name is recorded when the workout starts, so renaming a
+    routine never relabels the workouts already done with it.
   - Correcting a finished workout: tap any set on the detail screen to fix its
     weight, reps or RPE, add a set that was performed but never logged, or delete
     one that was logged but not performed (behind a confirmation, since it is the
@@ -69,6 +76,12 @@ docs/      Product, architecture, database, API, sync, coding standards, ADRs
     can be fixed while the record still means something: the planning snapshot
     (exercise name, order, targets) stays locked, and a discarded workout cannot be
     edited at all (ADR-0018).
+  - Discarding a workout that should not be in the record at all: open it from
+    History and choose "Discard Workout", behind a confirmation that says what it
+    costs. It leaves history here, on the web and on every other device, and stops
+    counting towards what previous workouts suggest. Nothing is destroyed - the
+    sets survive and are reachable through the API - but the app offers no way
+    back.
   - In-app updates: on launch the app asks the backend for the latest published
     release and, when a newer one exists, shows a dismissible banner (suppressed
     during a workout). The update screen shows the release notes and download
@@ -81,31 +94,35 @@ docs/      Product, architecture, database, API, sync, coding standards, ADRs
     (the UI never waits on the network), with idempotent replay, exponential
     backoff, failure isolation per aggregate, and recovery of work stranded by
     process death.
+  - Restore and refresh: a device with no data of its own rebuilds from the
+    backend at launch, and thereafter reconciles after every sync pass, so a
+    change made anywhere reaches it. The backend wins for any row with no pending
+    local change; anything the outbox still owns is left alone (ADR-0017).
 - **Web history viewer** (read-only): the synchronized history list and full
   workout detail — every snapshotted exercise and set with weight, reps,
   category and RPE/RIR. Formatting is a verified mirror of the Android app's,
   and decimal precision is preserved from PostgreSQL `NUMERIC` to rendered text
   rather than being lost to JavaScript floats. Responsive from mobile to
   desktop with zero axe WCAG 2.1 A/AA violations.
-- **804 automated tests**, every one of them run on every push by CI: **520
-  Android** (513 JVM/Robolectric + 7 instrumented on an emulator, verified
-  identical on physical hardware), **151 backend** (JUnit 5/MockMvc over real
+- **853 automated tests**, every one of them run on every push by CI: **559
+  Android** (551 JVM/Robolectric + 8 instrumented on an emulator, verified
+  identical on physical hardware), **161 backend** (JUnit 5/MockMvc over real
   PostgreSQL, incl. an end-to-end sync-graph idempotency proof), and **133 web**
   (Vitest + React Testing Library). Nine of them drive the real stack against a
   running backend; they skip unless one is named explicitly, and refuse to run
   against a backend that does not declare itself disposable, so a test can never
-  write to real data (TD-013). Counting them, the suite is 804 tests; by default
-  795 run and those nine skip.
+  write to real data (TD-013). Counting them, the suite is 853 tests; by default
+  844 run and those nine skip.
 
-  The seven instrumented tests only began running automatically on 2026-08-07.
-  Six of them are Room migration tests, and until then nothing executed them,
-  which is how a migration with a wrong column type reached main and had to be
-  caught by hand.
+  The instrumented tests only began running automatically on 2026-08-07. Seven of
+  the eight are Room migration tests, and until then nothing executed them, which
+  is how a migration with a wrong column type reached main and had to be caught by
+  hand.
 
-  - Restore and refresh: a device with no data of its own rebuilds from the
-    backend at launch, and thereafter reconciles after every sync pass, so a
-    change made anywhere reaches it. The backend wins for any row with no pending
-    local change; anything the outbox still owns is left alone (ADR-0017).
+  The suite is also no longer flaky. It used to fail about one run in four with
+  nothing wrong in the code under test; both families of flake were found and
+  fixed at the cause in 1.7.0 and 1.8.0 (TD-015, TD-017), the first verified over
+  100 consecutive full-suite runs.
 
 Not yet built: authentication and multi-user support (V2), and history pagination
 (TD-010). See the roadmap and technical debt register.
@@ -144,7 +161,7 @@ a `myfitnesslog_test` database for tests).
 ```bash
 cd backend
 mvn spring-boot:run          # Flyway migrates on start; API at :8080/api/v1
-mvn test                     # 151 tests (JUnit 5 + MockMvc) against the test database
+mvn test                     # 161 tests (JUnit 5 + MockMvc) against the test database
 ```
 
 If you use VS Code with the Red Hat Java extension, keep
