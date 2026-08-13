@@ -108,16 +108,27 @@ class WorkoutSessionServiceImplTest {
     }
 
     @Test
-    void discardIsIdempotentAndRejectsCompleted() {
+    void discardIsIdempotentAndAcceptsACompletedWorkout() {
         UUID id = UUID.randomUUID();
         startManual(id);
         service.discardWorkout(id, new DiscardWorkoutSessionRequest(endedAt, null));
         service.discardWorkout(id, new DiscardWorkoutSessionRequest(endedAt.plusSeconds(60), null)); // no-op
 
+        // COMPLETED -> DISCARDED became legal on 2026-08-13: a workout that happened
+        // but should not be in the record leaves it this way. endedAt is untouched,
+        // because discarding afterwards does not change when training stopped.
         UUID completedId = UUID.randomUUID();
         startManual(completedId);
         service.completeWorkout(completedId, new CompleteWorkoutSessionRequest(endedAt, null));
-        assertThatThrownBy(() -> service.discardWorkout(completedId, new DiscardWorkoutSessionRequest(endedAt, null)))
+
+        service.discardWorkout(completedId, new DiscardWorkoutSessionRequest(endedAt.plusSeconds(3600), null));
+
+        WorkoutSession discarded = service.getWorkout(completedId);
+        assertThat(discarded.getStatus()).isEqualTo(WorkoutStatus.DISCARDED);
+        assertThat(discarded.getEndedAt()).isEqualTo(endedAt);
+
+        // Terminal in both directions: a discarded workout cannot be completed.
+        assertThatThrownBy(() -> service.completeWorkout(completedId, new CompleteWorkoutSessionRequest(endedAt, null)))
                 .isInstanceOf(BusinessRuleException.class);
     }
 

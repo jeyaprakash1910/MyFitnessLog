@@ -75,6 +75,22 @@ class WorkoutDetailViewModel @Inject constructor(
         UUID.fromString(checkNotNull(savedStateHandle[WorkoutHistoryRoutes.ARG_SESSION_ID]))
 
     private val correction = MutableStateFlow<SetCorrection?>(null)
+    private val confirmingDiscard = MutableStateFlow(false)
+
+    /**
+     * Turns true once the workout has been discarded, so the screen can leave.
+     *
+     * A StateFlow rather than a one-shot event on purpose. A `SharedFlow` with no
+     * replay drops the value if the collector has not started yet, which is exactly
+     * the bug TD-015 recorded as its third cause. A latched flag cannot be missed:
+     * a collector arriving late still observes it.
+     *
+     * The screen cannot infer this from [WorkoutDetailUiState.NotFound], because
+     * that state also means "this id was never a completed workout" and navigating
+     * away on it would fire for reasons that have nothing to do with discarding.
+     */
+    private val _discarded = MutableStateFlow(false)
+    val discarded: StateFlow<Boolean> = _discarded
 
     val uiState: StateFlow<WorkoutDetailUiState> =
         combine(
@@ -82,7 +98,8 @@ class WorkoutDetailViewModel @Inject constructor(
             repository.observeExercises(sessionId),
             repository.observeSets(sessionId),
             correction,
-        ) { session, exercises, sets, openCorrection ->
+            confirmingDiscard,
+        ) { session, exercises, sets, openCorrection, discardAsked ->
             if (session == null) {
                 WorkoutDetailUiState.NotFound
             } else {
@@ -96,6 +113,7 @@ class WorkoutDetailViewModel @Inject constructor(
                         exercise.toRow(setsByExercise[exercise.id].orEmpty())
                     },
                     correction = openCorrection,
+                    confirmingDiscard = discardAsked,
                 )
             }
         }.stateIn(
@@ -253,6 +271,44 @@ class WorkoutDetailViewModel @Inject constructor(
         correction.value = null
         viewModelScope.launch {
             workoutRepository.deleteSet(setId, intent = SetWriteIntent.CORRECTION)
+        }
+    }
+
+    // --- Discarding the whole workout ---------------------------------------
+
+    /**
+     * Asks before removing the workout from history.
+     *
+     * Always confirmed, and never undoable in the app. The row keeps its exercises
+     * and sets on the backend, so the data is recoverable by completing the session
+     * again through the API, but nothing here offers that: an undo path for a rare,
+     * deliberate, already-confirmed action is a screen nobody would find twice.
+     */
+    fun onDiscardRequested() {
+        confirmingDiscard.value = true
+    }
+
+    fun onDiscardCancelled() {
+        confirmingDiscard.value = false
+    }
+
+    /**
+     * Discards the workout, which removes it from history everywhere.
+     *
+     * The session becomes DISCARDED and is queued for upload. History is COMPLETED
+     * only on both clients and on the backend, so it leaves the phone immediately,
+     * the web client on its next load, and any other device on its next refresh -
+     * where the local row is deleted outright once the backend stops listing it.
+     *
+     * Nothing is destroyed. DISCARDED is a status, not a deletion.
+     */
+    fun onDiscardConfirmed() {
+        confirmingDiscard.value = false
+        viewModelScope.launch {
+            workoutRepository.discardWorkout(sessionId)
+            // Only after the write, so the screen never leaves on an action that
+            // failed and left the workout in place.
+            _discarded.value = true
         }
     }
 

@@ -299,6 +299,12 @@ set" for a set that was performed but never logged. All three are statements abo
 what was performed. The planning snapshot - exercise name, order, targets - stays
 locked, and a DISCARDED workout rejects every one of them.
 
+A finished workout can also be discarded entirely, from the same screen, behind its
+own confirmation. That is for one logged by mistake rather than one logged wrongly:
+it leaves history here, on the web and on any other device, and its sets stop
+counting towards PREVIOUS. Nothing is destroyed - the session keeps its data with a
+DISCARDED status - but no client offers a way back (ADR-0004, amended 2026-08-13).
+
 Set numbers are contiguous as displayed: deleting a set closes the gap rather than
 leaving "Set 1, Set 3". The stored number keeps its gap deliberately. During
 logging it is the slot an undone set falls back into (`WorkoutRowMerger`), and it

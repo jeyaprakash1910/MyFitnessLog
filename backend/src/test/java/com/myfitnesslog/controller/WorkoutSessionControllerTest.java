@@ -106,13 +106,98 @@ class WorkoutSessionControllerTest {
                 .andExpect(jsonPath("$.endedAt").value(ENDED_AT));
     }
 
+    /**
+     * A completed workout can be discarded, which is how one logged by mistake
+     * leaves the record.
+     *
+     * <p>This test asserted the opposite until 2026-08-13, when the transition was
+     * illegal. It is rewritten rather than removed, because the 409 it expected was
+     * a deliberate rule and its replacement is a deliberate decision, not a
+     * loosening nobody noticed.
+     */
     @Test
-    void discardReturns200AndIllegalTransitionReturns409() throws Exception {
+    void completedWorkoutCanBeDiscarded() throws Exception {
         UUID id = startManual();
         complete(id);
 
-        // COMPLETED → DISCARDED is illegal
+        discard(id);
+
+        mockMvc.perform(get("/api/v1/workout-sessions/{id}", id))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("DISCARDED"));
+    }
+
+    /**
+     * Discarding afterwards must not rewrite when training stopped.
+     *
+     * <p>endedAt is what every history screen derives duration from. Replacing it
+     * with the moment somebody removed the workout would substitute a fact about the
+     * removal for a fact about the workout, so the later timestamp sent below is
+     * deliberately ignored.
+     */
+    @Test
+    void discardingACompletedWorkoutPreservesTheOriginalEndedAt() throws Exception {
+        UUID id = startManual();
+        complete(id);
+
         mockMvc.perform(put("/api/v1/workout-sessions/{id}/discard", id)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"endedAt":"2026-08-13T23:59:00Z","notes":null}
+                                """))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/workout-sessions/{id}", id))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.endedAt").value(ENDED_AT));
+    }
+
+    /** A discarded workout leaves history, which is what discarding is for. */
+    @Test
+    void aDiscardedWorkoutLeavesHistory() throws Exception {
+        UUID kept = startManual();
+        complete(kept);
+        UUID removed = startManual();
+        complete(removed);
+
+        mockMvc.perform(get("/api/v1/workout-sessions"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id=='" + removed + "')]").exists());
+
+        discard(removed);
+
+        mockMvc.perform(get("/api/v1/workout-sessions"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id=='" + removed + "')]").doesNotExist())
+                .andExpect(jsonPath("$[?(@.id=='" + kept + "')]").exists());
+    }
+
+    /** Discarding twice is a no-op, which synchronisation replay depends on. */
+    @Test
+    void discardReplayIsIdempotent() throws Exception {
+        UUID id = startManual();
+        complete(id);
+        discard(id);
+
+        discard(id);
+
+        mockMvc.perform(get("/api/v1/workout-sessions/{id}", id))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("DISCARDED"))
+                .andExpect(jsonPath("$.endedAt").value(ENDED_AT));
+    }
+
+    /**
+     * DISCARDED stays terminal. Un-discarding is possible in the data but is not a
+     * transition any client may perform, so the rule is enforced rather than left to
+     * callers to respect.
+     */
+    @Test
+    void aDiscardedWorkoutCannotBeCompleted() throws Exception {
+        UUID id = startManual();
+        discard(id);
+
+        mockMvc.perform(put("/api/v1/workout-sessions/{id}/complete", id)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"endedAt":"%s","notes":null}

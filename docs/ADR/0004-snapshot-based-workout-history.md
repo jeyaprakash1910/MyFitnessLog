@@ -128,6 +128,41 @@ Implementation Guidelines
 
 ⸻
 
+Amendment, 2026-08-13: a completed workout can be discarded
+
+A workout that was logged by mistake can now leave history, by transitioning
+`COMPLETED -> DISCARDED`. This is a third thing a user may do to a finished
+workout, alongside reading it and correcting it (ADR-0018), and it is worth being
+precise about why it does not contradict the decision above.
+
+**It removes a record; it does not rewrite one.** The failure this ADR exists to
+prevent is history that quietly changes to match a later opinion: a routine edited
+today altering what last month's workout says you did. Discarding does not touch a
+single performed value. The workout stops being part of history entirely, which is
+the honest outcome when the answer to "did this happen?" is no.
+
+**`DISCARDED` now carries two meanings**, and reusing it was deliberate rather than
+adding a status. Both mean "not part of history": one abandoned during the session,
+one removed after it finished. History is `COMPLETED` only on the phone, the web
+client and the backend, so both disappear everywhere by the same existing rule.
+Nothing downstream had to learn a new state, and a status nobody has to teach the
+system about is worth more than a name that distinguishes two cases nobody needs to
+distinguish.
+
+**Nothing is destroyed.** The session keeps its exercises and sets, so this is
+recoverable by completing it again through the API. No client offers that, because
+the action is already confirmed and deliberate, and an undo path for a rare mistake
+is a screen nobody would find twice.
+
+**Two consequences follow, both intended.** `endedAt` is preserved, because
+discarding afterwards does not change when training stopped and every duration is
+derived from it. And PREVIOUS, computed from `COMPLETED` sessions only, falls back
+to the workout before the discarded one, so future suggestions follow the record.
+That needed no code: the same rule that removes a workout from history removes it
+from the suggestions.
+
+⸻
+
 Related Documents
 
 * ARCHITECTURE.md

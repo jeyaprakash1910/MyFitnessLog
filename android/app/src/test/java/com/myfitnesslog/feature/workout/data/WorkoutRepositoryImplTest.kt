@@ -253,6 +253,66 @@ class WorkoutRepositoryImplTest {
         assertTrue(session.endedAt != null)
     }
 
+    /**
+     * A workout logged by mistake leaves history by being discarded.
+     *
+     * DISCARDED means two things from 2026-08-13, both of them "not history": one
+     * abandoned during the session, one removed after it finished. History is
+     * COMPLETED only everywhere, so the second needed no new state.
+     */
+    @Test
+    fun completedWorkoutCanBeDiscarded() = runBlocking {
+        repository.completeWorkout(sessionId)
+
+        repository.discardWorkout(sessionId)
+
+        val session = database.workoutSessionDao().getById(sessionId)!!
+        assertEquals(WorkoutStatus.DISCARDED, session.status)
+        // Queued, or the removal never reaches the backend and a refresh puts the
+        // workout back on the device.
+        assertEquals(SyncStatus.PENDING, session.syncStatus)
+    }
+
+    /**
+     * Discarding afterwards must not rewrite when training stopped.
+     *
+     * endedAt is what every duration on the history screens is derived from.
+     * Replacing it with the moment of removal substitutes a fact about the deletion
+     * for a fact about the workout.
+     */
+    @Test
+    fun discardingACompletedWorkoutPreservesEndedAt() = runBlocking {
+        repository.completeWorkout(sessionId)
+        val endedAt = database.workoutSessionDao().getById(sessionId)!!.endedAt
+
+        repository.discardWorkout(sessionId)
+
+        assertEquals(endedAt, database.workoutSessionDao().getById(sessionId)!!.endedAt)
+    }
+
+    /** DISCARDED is terminal in both directions: it cannot be completed back. */
+    @Test
+    fun aDiscardedWorkoutCannotBeCompleted() = runBlocking {
+        repository.discardWorkout(sessionId)
+
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking { repository.completeWorkout(sessionId) }
+        }
+        // assertThrows returns the exception, so end on a Unit-valued assertion.
+        assertEquals(WorkoutStatus.DISCARDED, database.workoutSessionDao().getById(sessionId)!!.status)
+    }
+
+    /** The sets survive: discarding is a status change, never a deletion. */
+    @Test
+    fun discardingKeepsTheSetsSoNothingIsDestroyed() = runBlocking {
+        val setId = addWorkingSet()
+        repository.completeWorkout(sessionId)
+
+        repository.discardWorkout(sessionId)
+
+        assertNotNull(database.workoutSetDao().getById(setId))
+    }
+
     @Test
     fun discardWorkoutTransitions() = runBlocking {
         repository.discardWorkout(sessionId)
@@ -348,13 +408,18 @@ class WorkoutRepositoryImplTest {
 
     /** The session lifecycle stays sealed: only the performance is correctable. */
     @Test
-    fun completedWorkoutCannotBeCompletedOrDiscardedAgain() = runBlocking {
+    fun completedWorkoutCannotBeCompletedAgainButCanBeDiscarded() = runBlocking {
         addWorkingSet()
         repository.completeWorkout(sessionId)
 
         assertThrows(IllegalStateException::class.java) { runBlocking { repository.completeWorkout(sessionId) } }
-        assertThrows(IllegalStateException::class.java) { runBlocking { repository.discardWorkout(sessionId) } }
-        Unit
+
+        // Discarding a completed workout became legal on 2026-08-13, so that one
+        // logged by mistake can leave history. This test asserted the refusal until
+        // then; it is rewritten rather than removed, because the rule it encoded was
+        // deliberate and so is its replacement.
+        repository.discardWorkout(sessionId)
+        assertEquals(WorkoutStatus.DISCARDED, database.workoutSessionDao().getById(sessionId)!!.status)
     }
 
     /**

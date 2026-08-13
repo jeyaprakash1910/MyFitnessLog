@@ -256,14 +256,38 @@ class WorkoutRepositoryImpl @Inject constructor(
     override suspend fun discardWorkout(sessionId: UUID) =
         finishWorkout(sessionId, WorkoutStatus.DISCARDED)
 
+    /**
+     * Applies a status transition, mirroring the backend's rule exactly.
+     *
+     * The two sides have to agree about what is legal. A transition the phone
+     * accepts and the backend rejects would sit in the outbox failing forever,
+     * which is why this is a copy of the rule in `WorkoutSessionServiceImpl` rather
+     * than an approximation of it.
+     *
+     *  * `IN_PROGRESS -> COMPLETED`: the workout finished.
+     *  * `IN_PROGRESS -> DISCARDED`: it was abandoned part-way.
+     *  * `COMPLETED -> DISCARDED`: it happened, but should not be in the record.
+     *
+     * The last of those is why a workout logged by mistake can be removed from
+     * history. `DISCARDED` therefore means two things, both of them "not history",
+     * and it stays terminal in either case.
+     */
     private suspend fun finishWorkout(sessionId: UUID, target: WorkoutStatus) =
         withContext(ioDispatcher) {
-            val session = requireInProgress(sessionId)
+            val session = sessionDao.getById(sessionId) ?: error("Workout session $sessionId not found")
+            val legal = session.status == WorkoutStatus.IN_PROGRESS ||
+                (session.status == WorkoutStatus.COMPLETED && target == WorkoutStatus.DISCARDED)
+            check(legal) { "Workout ${session.status} cannot become $target" }
+
             val now = clock.instant()
             sessionDao.upsert(
                 session.copy(
                     status = target,
-                    endedAt = now,
+                    // endedAt records when training stopped, so discarding a workout
+                    // afterwards leaves it alone. Overwriting it would replace a fact
+                    // about the workout with the time it was removed, and every
+                    // duration on the history screens is derived from it.
+                    endedAt = if (session.status == WorkoutStatus.IN_PROGRESS) now else session.endedAt,
                     updatedAt = now,
                     syncStatus = SyncStatus.PENDING,
                 ),
@@ -273,14 +297,6 @@ class WorkoutRepositoryImpl @Inject constructor(
             syncTrigger.requestSync()
         }
 
-    /**
-     * The guard for **set** writes, which are permitted both while a workout is
-     * being logged and afterwards as a correction (ADR-0018).
-     *
-     * Mirrors the backend rule exactly, because the phone and the server have to
-     * agree about what is writable: a correction the phone accepts and the backend
-     * rejects would sit in the outbox failing forever.
-     */
     /**
      * The guard for set writes, which depends on why the write is happening.
      *
