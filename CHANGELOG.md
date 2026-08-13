@@ -7,7 +7,41 @@ the project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-08-13
+
+### Added
+
+- **A finished workout can now be corrected in full.** Since 1.6.0 a logged set's
+  weight, reps and RPE could be fixed after the fact. Two of the three corrections
+  ADR-0018 defines were still unreachable from the phone, and they are the ones you
+  need when the record is wrong rather than merely mistyped:
+
+  - **Add a set that was performed but never logged.** Each exercise on the workout
+    detail screen offers "Add set".
+  - **Delete a set that was logged but not performed.** Behind a confirmation, since
+    it is the only correction that removes a record instead of amending it, and the
+    deletion reaches the server too.
+
+  The boundary ADR-0004 protects is unchanged: the planning snapshot — exercise
+  name, order and targets — stays locked, and a discarded workout accepts nothing.
+
 ### Fixed
+
+- **Deleting a set no longer leaves a gap in the numbering.** Removing set 2 of 3
+  used to leave history reading "Set 1, Set 3", which looks like a lost set rather
+  than a removed one. Numbering is now closed as displayed, the same rule the
+  in-progress logging screen already applied.
+
+- **A completed workout could be written to from the logging screen.** Widening the
+  set-write guard in 1.6.0 so that corrections were possible also stopped it
+  refusing writes from the active workout screen, leaving the immutability rule
+  resting on the UI alone. Writes now state whether they are logging or correcting,
+  and only a correction may touch a finished session.
+
+  This was found by a test that had been failing intermittently and passing for the
+  wrong reason: it read the database before the write it asserts is refused had
+  landed. Worth recording, because the reflex to re-run a flaky test would have
+  buried a real regression.
 
 - **The intermittently failing Android tests are fixed** (TD-015). The suite used
   to fail roughly one run in four with no fault in the code under test, and it took
@@ -28,6 +62,17 @@ the project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
   Verified over **100 consecutive full-suite runs**, against a same-day baseline
   that failed on runs 4 and 5.
+
+- **A second family of flaky tests, closed at the cause** (TD-017). Every remaining
+  flake was one mistake: a ViewModel writes asynchronously, and tests read the
+  result on the next line. Fast machines won that race and CI runners lost it.
+  Assertions now wait for the work they depend on rather than sampling, which also
+  turns a genuine failure into a deterministic one instead of an intermittent one.
+
+- **The post-deploy check no longer fails on every release that does not touch the
+  backend.** Render only deploys when `backend/` changes, but the check ran on every
+  push to `main` and then waited twenty minutes for a deploy that was correctly
+  never going to happen.
 
 ## [1.6.1] - 2026-08-10
 
@@ -318,7 +363,8 @@ backend on a private network. See the full
 - Synchronization is one-way: the backend is the durable copy but cannot repopulate a
   device, so a phone that loses its database does not get its history back.
 
-[Unreleased]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.6.1...HEAD
+[Unreleased]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.6.1...v1.7.0
 [1.6.1]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.4.0...v1.5.0

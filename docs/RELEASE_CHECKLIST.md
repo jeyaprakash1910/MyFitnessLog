@@ -1,8 +1,8 @@
 # Release Checklist
 
 Project: MyFitnessLog
-Version: 1.0
-Last Updated: July 22, 2026 (M12 Phase 5 — v1.0.0 released)
+Version: 1.1
+Last Updated: August 13, 2026 (§7/§8/§9b split by device, now that updates are delivered in-app)
 
 The authoritative procedure for cutting a MyFitnessLog release. Work through it
 in order; every step is here because skipping it has a specific consequence,
@@ -206,13 +206,36 @@ rather than needing to be remembered.
 
 ---
 
-## 7. Install
+## 7. Install — on the emulator, not the phone
+
+**Install the release build on the emulator here, and leave the phone alone.**
+
+Since v1.2.0 the phone updates itself over the air (ADR-0016): the backend resolves
+the repository's latest release and streams its APK. That changed what this step is
+for, and until 2026-08-13 this checklist had not caught up. §7 said to sideload the
+phone while §9 required verifying the in-app update **from the device still running
+the old version** — and both cannot be true of one phone. Sideloading it is exactly
+what destroys the only realistic test of the update path.
+
+So the two verifications are split by device, and each goes where it is honest:
+
+| Device | Verifies | When |
+|---|---|---|
+| **Emulator** | the release *artifact* — §8's workflow, on the signed build | before publishing |
+| **Phone** | the release *delivery* — banner, download, install over the old version | after publishing |
 
 ```bash
-adb install -r app/build/outputs/apk/release/app-release.apk
+adb -s emulator-5554 install -r app/build/outputs/apk/release/app-release.apk
 ```
 
-- [ ] Installed with `-r` (**install only**)
+- [ ] Installed on the **emulator** with `-r` (**install only**)
+- [ ] `-s emulator-5554` named explicitly, so a plugged-in phone cannot receive it
+      by accident
+
+> A release build cannot be sideloaded onto a phone that already has a debug build,
+> or vice versa: Android refuses a signature mismatch. That refusal is safe — see
+> the failure note below — but the remedy is an uninstall, which destroys local
+> data. One more reason the phone stays out of this step.
 
 > **Never run `uninstall`, `connectedAndroidTest`, or any device-lifecycle
 > Gradle task against the phone.** Uninstalling deletes the app's database, and
@@ -252,10 +275,16 @@ on the device, the same uninstall becomes genuinely destructive.
 
 ---
 
-## 8. Verify the running release build
+## 8. Verify the running release build (on the emulator)
 
 Debug builds have different network policy, no logging and different manifest
 flags. "It worked in debug" proves nothing about the artifact being shipped.
+
+This runs on the emulator, per §7. It is testing the *artifact*: that the signed
+build launches, that its generated network security config permits the host it is
+actually pointed at, and that the whole workflow still works outside a debug
+variant. None of that needs the phone, and doing it there would cost the §9
+update check.
 
 - [ ] App launches without crashing
 - [ ] Exercise library loads (proves the network path and the cleartext scope)
@@ -362,8 +391,14 @@ each one is here because its absence has already cost this project something.
 - [ ] **Release APK verified as the artifact**, not as build configuration:
       `apksigner verify` passes, `aapt2 dump badging` shows the intended version,
       and `run-as` is refused.
-- [ ] **The full workflow run on the physical device from the release build**,
-      with the resulting data confirmed in PostgreSQL.
+- [ ] **The full workflow run from the release build** (§8, emulator), with the
+      resulting data confirmed in the backend rather than inferred from the app
+      not complaining.
+- [ ] **The in-app update installed on the phone from the previous version**
+      (§9), which is the only check that proves an already-installed copy can
+      reach this release. Before ADR-0016 these were one line about sideloading a
+      phone; they are now two checks on two devices, because the delivery path is
+      a thing that can break on its own.
 - [ ] **Documentation claims sampled against behaviour.** Every M12 audit found
       stale numbers in documents that read as correct.
 
