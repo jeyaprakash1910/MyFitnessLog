@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import com.myfitnesslog.core.data.local.MyFitnessLogDatabase
 import com.myfitnesslog.feature.routine.RoutineTestData
 import com.myfitnesslog.feature.routine.awaitFirst
+import com.myfitnesslog.feature.routine.awaitWork
 import com.myfitnesslog.feature.routine.data.RoutineRepositoryImpl
 import com.myfitnesslog.feature.routine.newInMemoryDatabase
 import com.myfitnesslog.feature.routine.newRepository
@@ -76,7 +77,11 @@ class RoutineEditViewModelTest {
         val viewModel = viewModelFor(id)
         viewModel.awaitSuccess()
 
-        viewModel.onNameChange("Leg Day")
+        // awaitWork, because the second assertion reads the database rather than
+        // the state: onNameChange persists in viewModelScope, so sampling the row
+        // straight afterwards races the write. The first assertion is safe on its
+        // own - it waits - but a passing wait says nothing about the row yet.
+        viewModel.awaitWork { viewModel.onNameChange("Leg Day") }
 
         assertEquals("Leg Day", viewModel.awaitSuccess { it.name == "Leg Day" }.name)
         assertEquals("Leg Day", repository.observeRoutine(id).first()?.name)

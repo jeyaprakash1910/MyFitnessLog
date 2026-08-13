@@ -8,10 +8,12 @@ import com.myfitnesslog.feature.history.data.WorkoutHistoryRepositoryImpl
 import com.myfitnesslog.feature.history.ui.WorkoutHistoryRoutes
 import com.myfitnesslog.feature.routine.RoutineTestData
 import com.myfitnesslog.feature.routine.awaitFirst
+import com.myfitnesslog.feature.routine.awaitWork
 import com.myfitnesslog.feature.routine.data.RoutineRepositoryImpl
 import com.myfitnesslog.feature.routine.newInMemoryDatabase
 import com.myfitnesslog.feature.routine.newRepository
 import com.myfitnesslog.feature.routine.seedExercises
+import com.myfitnesslog.feature.workout.data.SetWriteIntent
 import com.myfitnesslog.feature.workout.data.WorkoutRepositoryImpl
 import com.myfitnesslog.feature.workout.domain.StartWorkoutUseCase
 import java.math.BigDecimal
@@ -285,7 +287,7 @@ class WorkoutDetailViewModelTest {
         vm.onCorrectSet(setId)
 
         vm.onCorrectionRepsChange("0")
-        vm.onCorrectionSaved()
+        vm.awaitWork { vm.onCorrectionSaved() }
 
         val correction = vm.awaitCorrection { it.error != null }
         assertNotNull("dialog must stay open", correction)
@@ -302,7 +304,9 @@ class WorkoutDetailViewModelTest {
         vm.onCorrectSet(setId)
 
         vm.onCorrectionRpeChange("11")
-        vm.onCorrectionSaved()
+        // awaitWork before a "nothing was written" assertion: an absence cannot be
+        // waited for, only confirmed once any launched work has finished.
+        vm.awaitWork { vm.onCorrectionSaved() }
 
         assertNotNull(vm.awaitCorrection { it.error != null }.error)
         assertEquals(0, BigDecimal("8").compareTo(database.workoutSetDao().getById(setId)!!.rpe!!))
@@ -364,7 +368,7 @@ class WorkoutDetailViewModelTest {
         vm.onAddSet(exerciseId)
         vm.onCorrectionWeightChange("80")
         // Reps left empty.
-        vm.onCorrectionSaved()
+        vm.awaitWork { vm.onCorrectionSaved() }
 
         val correction = vm.awaitCorrection { it.error != null }
         assertNotNull("dialog must stay open", correction)
@@ -439,7 +443,9 @@ class WorkoutDetailViewModelTest {
         workoutRepository.addSet(squat, BigDecimal("110.0"), 4, SetCategory.WORKING, null, null)
         workoutRepository.completeWorkout(sessionId)
         val last = database.workoutSetDao().getByExercise(squat)[1].id
-        workoutRepository.deleteSet(last) // stored numbers are now [1], next stored is 3
+        // CORRECTION: the session is COMPLETED, and a logging write would be refused.
+        workoutRepository.deleteSet(last, intent = SetWriteIntent.CORRECTION)
+        // stored numbers are now [1], so the next stored number would be 3
 
         val vm = viewModel(sessionId)
         vm.awaitSuccess { it.exercises.single().sets.size == 1 }

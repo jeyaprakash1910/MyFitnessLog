@@ -99,9 +99,10 @@ class WorkoutRepositoryImpl @Inject constructor(
         setCategory: SetCategory,
         rpe: BigDecimal?,
         rir: BigDecimal?,
+        intent: SetWriteIntent,
     ): UUID = withContext(ioDispatcher) {
         validate(weight, repetitions, rpe, rir)
-        requireCorrectableForSet(workoutExerciseId)
+        requireWritableForSet(workoutExerciseId, intent)
 
         val now = clock.instant()
         val nextNumber = (setDao.getByExercise(workoutExerciseId).maxOfOrNull { it.setNumber } ?: 0) + 1
@@ -133,10 +134,11 @@ class WorkoutRepositoryImpl @Inject constructor(
         rpe: BigDecimal?,
         rir: BigDecimal?,
         isCompleted: Boolean,
+        intent: SetWriteIntent,
     ) = withContext(ioDispatcher) {
         validate(weight, repetitions, rpe, rir)
         val existing = setDao.getById(setId) ?: error("Set $setId not found")
-        requireCorrectableForSet(existing.workoutExerciseId)
+        requireWritableForSet(existing.workoutExerciseId, intent)
         setDao.upsert(
             existing.copy(
                 weight = weight,
@@ -152,9 +154,9 @@ class WorkoutRepositoryImpl @Inject constructor(
         syncTrigger.requestSync()
     }
 
-    override suspend fun deleteSet(setId: UUID) = withContext(ioDispatcher) {
+    override suspend fun deleteSet(setId: UUID, intent: SetWriteIntent) = withContext(ioDispatcher) {
         val existing = setDao.getById(setId) ?: return@withContext
-        val session = requireCorrectableForSet(existing.workoutExerciseId)
+        val session = requireWritableForSet(existing.workoutExerciseId, intent)
         // A set is hard-deleted, so nothing would be left to upload. The
         // tombstone is what the backend is told about (ADR-0007); it is written
         // in the same transaction as the delete so the two cannot diverge.
@@ -279,19 +281,42 @@ class WorkoutRepositoryImpl @Inject constructor(
      * agree about what is writable: a correction the phone accepts and the backend
      * rejects would sit in the outbox failing forever.
      */
-    private suspend fun requireCorrectableForSet(workoutExerciseId: UUID): WorkoutSessionEntity {
+    /**
+     * The guard for set writes, which depends on why the write is happening.
+     *
+     * [SetWriteIntent.LOGGING] permits `IN_PROGRESS` only. [SetWriteIntent.CORRECTION]
+     * also permits `COMPLETED`, which is ADR-0018 and the only reason that status is
+     * ever writable.
+     *
+     * Both are allow-lists rather than "everything except DISCARDED": a status added
+     * later should be rejected until someone decides what it means, rather than
+     * silently inheriting permission to rewrite history.
+     *
+     * This distinction was lost between 2026-08-08 and 2026-08-13. ADR-0018 widened
+     * the single guard to allow `COMPLETED` for every caller, which also stopped the
+     * logging screen's writes being refused after a workout finished. `WorkoutViewModel`
+     * has no read-only check of its own - it relied on this rejection, and its
+     * `runCatching` swallowed it - so the only remaining protection was the screen
+     * declining to render the controls. `completedWorkoutRejectsFurtherEdits` kept
+     * passing because it read the database before the now-succeeding async write
+     * landed, and only failed once CI was slow enough to lose that race.
+     */
+    private suspend fun requireWritableForSet(
+        workoutExerciseId: UUID,
+        intent: SetWriteIntent,
+    ): WorkoutSessionEntity {
         val exercise = exerciseDao.getById(workoutExerciseId)
             ?: error("Workout exercise $workoutExerciseId not found")
         val session = sessionDao.getById(exercise.workoutSessionId)
             ?: error("Workout session ${exercise.workoutSessionId} not found")
-        // An allow-list, not "everything except DISCARDED": a status added later
-        // should be rejected until someone decides what it means, rather than
-        // silently inheriting permission to rewrite history.
-        check(
-            session.status == WorkoutStatus.IN_PROGRESS ||
-                session.status == WorkoutStatus.COMPLETED,
-        ) {
-            "Workout ${session.status} is immutable and cannot be modified"
+        val allowed = when (intent) {
+            SetWriteIntent.LOGGING -> session.status == WorkoutStatus.IN_PROGRESS
+            SetWriteIntent.CORRECTION ->
+                session.status == WorkoutStatus.IN_PROGRESS ||
+                    session.status == WorkoutStatus.COMPLETED
+        }
+        check(allowed) {
+            "Workout ${session.status} does not accept a ${intent.name.lowercase()} set write"
         }
         return session
     }

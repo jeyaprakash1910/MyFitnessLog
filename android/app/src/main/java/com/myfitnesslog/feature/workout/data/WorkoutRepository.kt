@@ -44,6 +44,7 @@ interface WorkoutRepository {
         setCategory: SetCategory = SetCategory.WORKING,
         rpe: BigDecimal? = null,
         rir: BigDecimal? = null,
+        intent: SetWriteIntent = SetWriteIntent.LOGGING,
     ): UUID
 
     suspend fun updateSet(
@@ -54,9 +55,10 @@ interface WorkoutRepository {
         rpe: BigDecimal?,
         rir: BigDecimal?,
         isCompleted: Boolean,
+        intent: SetWriteIntent = SetWriteIntent.LOGGING,
     )
 
-    suspend fun deleteSet(setId: UUID)
+    suspend fun deleteSet(setId: UUID, intent: SetWriteIntent = SetWriteIntent.LOGGING)
 
     /**
      * Sets the rest duration (seconds) applied when a set of this exercise is

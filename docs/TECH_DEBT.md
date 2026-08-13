@@ -1,8 +1,8 @@
 # Technical Debt Register
 
 Project: MyFitnessLog
-Version: 1.5
-Last Updated: August 10, 2026 (TD-015 resolved after nine failed attempts; TD-001 and TD-016 resolved; TD-014 resolved for ADR-0017 Stage 2)
+Version: 1.6
+Last Updated: August 13, 2026 (TD-017 closed the flake family and the ADR-0018 regression it was reporting; TD-015, TD-001, TD-016 and TD-014 previously resolved)
 
 This document records known, accepted technical debt: deliberate limitations that are not defects in the current milestone but must be addressed in a later milestone. Each item states the observation, why it is currently acceptable, the recommended future implementation, the documentation that must change first, and when it is scheduled.
 
@@ -35,6 +35,7 @@ This register holds debt that outlives a single task. Short-lived working items 
 | TD-014 | WorkoutExercise removal during a workout is not propagated to the backend | ✅ Resolved 2026-08-07 (ADR-0017 Stage 2) | - |
 | TD-015 | ViewModel test classes were intermittently flaky | ✅ Resolved 2026-08-10 (three causes; verified over 100 runs) | - |
 | TD-016 | Backend suite failed in the working copy, passed elsewhere | ✅ Resolved 2026-08-07 (VS Code Java autobuild overwrote Maven's output) | - |
+| TD-017 | ViewModel tests sampled async writes instead of waiting | ✅ Resolved 2026-08-13 (`awaitWork`; found a real ADR-0018 regression) | - |
 
 ---
 
@@ -131,6 +132,84 @@ now ruled out properly, against a deterministic reproducer.
 that long deliberately, because this failure was intermittent enough to mislead
 four investigations and a quick deletion would have been the same overconfidence
 that caused them.
+
+---
+
+## TD-017 - ViewModel tests sampled asynchronous writes instead of waiting for them
+
+Status: **Resolved 2026-08-13.** One cause behind every flake seen after TD-015,
+in four test classes. Fixing it also uncovered a real production regression.
+
+Milestone identified: 2026-08-12 (PR #24 and #26 CI failures)
+Resolved: 2026-08-13
+
+### The cause, which is the whole entry
+
+A ViewModel action launches into `viewModelScope` and returns immediately. The
+write lands later, on Room's threads. A test that reads the database on the next
+line is racing it: fast machine wins, loaded CI runner loses. Green locally, red
+in CI, and nothing wrong with the production code - which is exactly the profile
+that makes people re-run the build instead of reading it.
+
+Three distinct failures on 2026-08-12, all this:
+
+| Test | Symptom |
+|---|---|
+| `WorkoutDetailViewModelTest` (x4) | `NullPointerException` on `awaitSuccess().correction!!` |
+| `RoutineEditViewModelTest.onNameChangePersistsRename` | `ComparisonFailure` sampling the row after an async rename |
+| `WorkoutViewModelTest.completedWorkoutRejectsFurtherEdits` | `AssertionError`: a set existed that should not |
+
+### The fix
+
+`awaitWork { vm.action() }` joins precisely the coroutines the action started,
+excluding children captured beforehand so `stateIn`'s permanent collector is not
+joined. It is exact rather than heuristic: when those coroutines complete, their
+writes have committed, because a repository call stays suspended until Room
+returns. TD-015's dedicated per-database executors are what make this reliable;
+the machinery existed and nothing had used it for assertions.
+
+The rule is now two lines in `CODING_STANDARDS` §19b: assert on exposed state with
+`awaitFirst`, on side effects with `awaitWork`, and never sample.
+
+**Negative assertions are the dangerous class.** "Nothing was written" can never be
+waited for, only confirmed after the work finishes. Every unsafe site found in the
+sweep was a negative assertion, and one carried the comment *"give any (incorrect)
+write a chance"* - a race described rather than removed.
+
+### What the flake was actually reporting
+
+`completedWorkoutRejectsFurtherEdits` was not noise. ADR-0018 widened the set-write
+guard to permit `COMPLETED` so that corrections could be made, and that also
+stopped refusing the **logging** screen's writes to a finished session.
+`WorkoutViewModel` has no read-only check of its own and its `runCatching` swallowed
+the rejection it had been relying on, so from 2026-08-08 the only thing enforcing
+ADR-0004 below the UI was the screen declining to render controls.
+
+The test kept passing **because of its race**: it read the database before the
+now-succeeding write landed. A deterministic test would have failed the moment the
+guard was widened, which is the entire argument for this entry.
+
+Fixed by `SetWriteIntent`. `LOGGING` (the default) permits `IN_PROGRESS` only;
+`CORRECTION` also permits `COMPLETED`. The safer rule is what a caller gets by
+accident, and the wider permission has to be asked for. Pinned by
+`completedWorkoutRefusesALoggingWrite` and `discardedWorkoutRefusesEvenACorrection`,
+and mutation-checked: weakening `LOGGING` back to ADR-0018's behaviour fails the
+test deterministically, 1 run in 1, where before it failed roughly 1 in 10.
+
+### Verification
+
+27 consecutive full-suite runs with `--rerun-tasks` after the fix, plus the
+mutation check above. One failure occurred early in that sequence whose report was
+overwritten before it could be read; 27 clean runs followed and a scan for the
+pattern across every test file finds no remaining unguarded site. That single
+unexplained failure is recorded here rather than omitted, because "we could not
+reproduce it" is how TD-015 stayed open for three days.
+
+### The lesson worth keeping
+
+A flaky test is a report, not an inconvenience. This one was reporting a genuine
+loss of an invariant, and the reflex to re-run it would have buried that. The CI
+retry exists to **count** flakes, never to hide them.
 
 ---
 

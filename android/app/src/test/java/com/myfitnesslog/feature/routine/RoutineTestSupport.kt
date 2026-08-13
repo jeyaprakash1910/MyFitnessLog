@@ -17,6 +17,7 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -143,6 +144,38 @@ internal suspend fun <T> Flow<T>.awaitFirst(
     timeoutMs: Long = 5_000,
     predicate: (T) -> Boolean,
 ): T = withTimeout(timeoutMs) { first(predicate) }
+
+/**
+ * Runs a ViewModel action and waits for the work it launched to finish.
+ *
+ * **Use this before asserting on the database, or on anything else the action
+ * writes rather than exposes.** ViewModels write through `viewModelScope.launch`
+ * and return immediately, so a read taken straight afterwards is a race that a
+ * fast machine wins and a loaded CI runner loses. That single pattern caused every
+ * flake seen on 2026-08-12 and 2026-08-13, in four different test classes.
+ *
+ * [awaitFirst] already covers the other half of the problem - waiting for state
+ * the action *does* expose - and the two together remove the need to sample
+ * anything. The rule is: assert on state with [awaitFirst], assert on side effects
+ * with this.
+ *
+ * It joins precisely the children the block starts, rather than draining or
+ * sleeping. Children captured beforehand are excluded because `stateIn` keeps a
+ * long-lived collector in the same scope, and joining that would simply hang.
+ *
+ * This is exact rather than heuristic: when the joined coroutines complete, their
+ * writes have committed. A repository call that queues further work on Room's
+ * executors stays suspended until that work returns, so the join covers it too.
+ */
+internal suspend fun ViewModel.awaitWork(timeoutMs: Long = 5_000, block: () -> Unit) {
+    val job = viewModelScope.coroutineContext[Job]
+        ?: error("viewModelScope has no Job; cannot await its work")
+    val before = job.children.toSet()
+    block()
+    withTimeout(timeoutMs) {
+        job.children.filter { it !in before }.forEach { it.join() }
+    }
+}
 
 internal fun MyFitnessLogDatabase.newRepository(
     dispatcher: CoroutineDispatcher = UnconfinedTestDispatcher(),
