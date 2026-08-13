@@ -7,6 +7,47 @@ the project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-08-13
+
+### Added
+
+- **A workout logged by mistake can be discarded.** Corrections (1.7.0) fix a
+  workout that happened but was recorded wrongly. This is for one that should not
+  be in the record at all: open it from History, scroll past the sets, and choose
+  "Discard Workout".
+
+  It is confirmed first, and the confirmation says what it costs: the workout
+  leaves your history here, on the web, and on any other device, and its sets stop
+  counting towards what previous workouts suggest.
+
+  Nothing is destroyed. The workout keeps its exercises and sets and is recoverable
+  through the API, but the app offers no way back, so treat the confirmation as the
+  decision.
+
+### Fixed
+
+- **The completed-workout guard, restored.** Making corrections possible in 1.6.0
+  also stopped the app refusing writes to a finished workout from the *active
+  workout* screen, leaving that rule resting on the UI alone. Writes now say
+  whether they are logging or correcting, and only a correction may touch a
+  finished session.
+
+  Found by a test that had been failing intermittently and passing for the wrong
+  reason. Recorded because the reflex to re-run a flaky test would have buried it.
+
+- **Set numbering no longer shows a gap after a delete.** Removing set 2 of 3 used
+  to leave "Set 1, Set 3", which reads like a set went missing rather than one that
+  was removed.
+
+- **Flaky tests, closed at the cause** (TD-017). Every remaining flake was the same
+  mistake: a ViewModel writes asynchronously and the test read the result on the
+  next line. Assertions now wait for the work they depend on, which also turns a
+  genuine failure into a deterministic one instead of an intermittent one.
+
+- **The post-deploy check no longer fails on releases that do not touch the
+  backend.** It ran on every push to `main` and then waited twenty minutes for a
+  deploy that was correctly never going to happen.
+
 ## [1.7.0] - 2026-08-13
 
 ### Added
@@ -363,7 +404,8 @@ backend on a private network. See the full
 - Synchronization is one-way: the backend is the durable copy but cannot repopulate a
   device, so a phone that loses its database does not get its history back.
 
-[Unreleased]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.8.0...HEAD
+[1.8.0]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.6.1...v1.7.0
 [1.6.1]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.5.0...v1.6.0
