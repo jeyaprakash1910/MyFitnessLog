@@ -3,7 +3,7 @@ Project Roadmap
 Project: MyFitnessLog
 Version: 1.0
 Status: Approved
-Last Updated: August 13, 2026
+Last Updated: August 14, 2026
 
 ⸻
 
@@ -36,7 +36,7 @@ The implementation follows these principles:
 
 ⸻
 
-3. Current State Snapshot (as of August 13, 2026, v1.9.0)
+3. Current State Snapshot (as of August 14, 2026, v1.10.0)
 
 This section reflects what actually exists in the repository today. It is the
 authoritative status summary; a new contributor (human or AI) should be able to
@@ -190,9 +190,48 @@ M15 Editable History (ADR-0018)	✅ Completed - v1.6.0 through v1.9.0, 10-13 Aug
 Current status: **Version 1 released, self-updating, and converged in both
 directions.** `v1.0.0` is tagged, pushed and published on GitHub (commit
 `4f80e76`), with the signed release APK verified on physical hardware. Every
-milestone M1–M15 is complete, the current release is **v1.9.0** (13 Aug 2026),
+milestone M1–M15 is complete, the current release is **v1.10.0** (14 Aug 2026),
 and the next milestone is Version 2 (authentication and multi-user), not yet
 planned.
+
+⸻
+
+3a. Open work, as of 14 August 2026
+
+Everything with an owner is closed, which is why this section exists: the project
+has no agreed next objective, and that is now the thing holding it up rather than
+any piece of code.
+
+**The decision that blocks everything else.** No V3 roadmap is defined. This
+document names Version 2 as authentication and multi-user (§18), and the V2
+workout-logging index states that no new feature work is authorised until a V3
+roadmap exists. Recent work has therefore been reactive polish on a finished V1.
+Deciding the next objective is the highest-value thing available.
+
+**Carried debt, all in TECH_DEBT.md.**
+
+* **TD-018** - the debug build points at the production backend. Harmless while the
+  backend holds test data, and serious from the first real training session. Fix it
+  before that, not after, because nothing announces the transition.
+* **TD-010** - workout history is not paginated. Real debt, invisible at present
+  scale, and the M10 seams keep it a caller-side change.
+* **TD-002, TD-009, TD-012** - note only, each waiting on a trigger that has not
+  arrived.
+
+**Smaller items, recorded so they are not rediscovered.**
+
+* The launcher icon's adaptive foreground is upscaled from a 101px mark, because an
+  adaptive canvas is 108dp against the legacy 48dp. Correct at launcher size, soft
+  when magnified. A `VectorDrawable` built from the original artwork removes the
+  limitation at every density and needs the source file.
+* `RELEASE_CHECKLIST` §9 should include updating the README's version banner. It
+  goes stale on every release by construction, and did so for four consecutive
+  releases before being noticed on 13 August.
+* The backend currently holds test data by the owner's decision, and is intended to
+  be wiped once the feature set settles. Note that wiping it also clears the phone:
+  `RefreshManagerImpl` deletes local completed sessions that the backend no longer
+  lists, cascading to their exercises and sets. That is correct multi-device
+  behaviour, and surprising if unexpected.
 
 What the releases after V1 added, in order:
 

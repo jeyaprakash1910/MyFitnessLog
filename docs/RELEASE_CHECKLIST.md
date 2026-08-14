@@ -1,8 +1,8 @@
 # Release Checklist
 
 Project: MyFitnessLog
-Version: 1.1
-Last Updated: August 13, 2026 (§7/§8/§9b split by device, now that updates are delivered in-app)
+Version: 1.2
+Last Updated: August 14, 2026 (§9 now checks the README version banner)
 
 The authoritative procedure for cutting a MyFitnessLog release. Work through it
 in order; every step is here because skipping it has a specific consequence,
@@ -299,6 +299,11 @@ update check.
 
 ## 9. Tag and publish
 
+- [ ] **The README's version banner names this release.** It announces the current
+      version in prose, so it goes stale on every release by construction: it said
+      1.5.0 while four releases had shipped past it, noticed only on 2026-08-13.
+      §2 samples documentation claims generally; this one is guaranteed wrong
+      unless it is changed, so it gets its own line.
 - [ ] **`CHANGELOG.md` has a section for this version.** Move what is under
       `[Unreleased]` into a new `## [X.Y.Z] - YYYY-MM-DD` heading, and add the
       compare link at the bottom of the file. This step did not exist until
