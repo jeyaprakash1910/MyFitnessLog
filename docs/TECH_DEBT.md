@@ -2,7 +2,7 @@
 
 Project: MyFitnessLog
 Version: 1.6
-Last Updated: August 13, 2026 (TD-017 closed the flake family and the ADR-0018 regression it was reporting; TD-015, TD-001, TD-016 and TD-014 previously resolved)
+Last Updated: August 14, 2026 (TD-018 raised: the debug build points at production)
 
 This document records known, accepted technical debt: deliberate limitations that are not defects in the current milestone but must be addressed in a later milestone. Each item states the observation, why it is currently acceptable, the recommended future implementation, the documentation that must change first, and when it is scheduled.
 
@@ -36,6 +36,7 @@ This register holds debt that outlives a single task. Short-lived working items 
 | TD-015 | ViewModel test classes were intermittently flaky | ✅ Resolved 2026-08-10 (three causes; verified over 100 runs) | - |
 | TD-016 | Backend suite failed in the working copy, passed elsewhere | ✅ Resolved 2026-08-07 (VS Code Java autobuild overwrote Maven's output) | - |
 | TD-017 | ViewModel tests sampled async writes instead of waiting | ✅ Resolved 2026-08-13 (`awaitWork`; found a real ADR-0018 regression) | - |
+| TD-018 | The debug build points at the production backend | Open — fix before real training data | daily use |
 
 ---
 
@@ -132,6 +133,61 @@ now ruled out properly, against a deterministic reproducer.
 that long deliberately, because this failure was intermittent enough to mislead
 four investigations and a quick deletion would have been the same overconfidence
 that caused them.
+
+---
+
+## TD-018 - The debug build points at the production backend
+
+Status: **Open.** Low risk while the backend holds test data. Becomes serious the
+day real training is logged, which is a date nothing in the system announces.
+
+Milestone identified: 2026-08-12, during the ADR-0018 device verification
+
+### Observation
+
+`android/local.properties` sets `apiBaseUrl` to the deployed Render backend, so a
+debug build installed on an emulator downloads real routines and workout history
+(ADR-0017 Stage 2) and uploads anything written during testing. There is no
+separate development target.
+
+Two consequences follow, and both were hit on 2026-08-12:
+
+* A verification workout written on an emulator lands in the owner's history and
+  cannot be removed, because until 2026-08-13 there was no way to remove a
+  completed workout at all.
+* Driving the UI blind for testing can operate on real workouts. It happened twice
+  in one session; once an "Add set" dialog was opened on a real 3 August workout
+  and cancelled before writing.
+
+### Why it is currently acceptable
+
+The backend is a test environment by the owner's decision (2026-08-13), so the data
+it holds is disposable and a stray write costs nothing. That is a statement about
+today, not about the design.
+
+### Why it stops being acceptable without warning
+
+This is the TD-013 pattern again. A safeguard - here, "it does not matter if tests
+write to production" - encodes an assumption about the environment rather than
+checking a property. The assumption expires silently the first time a real workout
+is logged, and nothing fails when it does.
+
+### Recommended implementation
+
+Point debug builds at a disposable backend by default and make production the
+deliberate opt-in, rather than the reverse. The `livetest` profile already exists
+(port 8081, `myfitnesslog_livetest`, health reporting `disposable: true`), so the
+mechanism is built; what is missing is making it the default for the debug variant.
+
+The workaround in use meanwhile is documented in `.claude/skills/run-on-device`:
+launch online to fetch data, enable airplane mode before any write, clear app data
+while still offline, and confirm zero PUT/POST/DELETE requests afterwards. It works
+and it depends on someone remembering, which is the definition of the problem.
+
+### Trigger to act
+
+Before the first real training session is logged. After that the cost of a mistake
+changes from nothing to permanent.
 
 ---
 
