@@ -7,6 +7,29 @@ the project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-08-14
+
+### Changed
+
+- **New app icon, and it now behaves like a modern Android icon.** The launcher
+  used to mask the old badge into its own shape, which shrank the artwork inside a
+  plate and left a rounded square sitting inside whatever shape your launcher
+  prefers. The icon is now supplied as proper layers, so the launcher draws the
+  shape and the artwork fills it: a circle is a real circle, and a squircle is a
+  real squircle.
+
+  The round icon is genuinely round for the first time. It was previously the same
+  rounded square as the normal one, so launchers asking for a round icon got a
+  badge inside a badge.
+
+  Android 13 themed icons are supported too, so the icon follows your wallpaper
+  colours if you have that turned on.
+
+### Fixed
+
+- Documentation caught up: the README announced 1.5.0 while four releases had
+  shipped past it.
+
 ## [1.9.0] - 2026-08-13
 
 ### Added
@@ -432,7 +455,8 @@ backend on a private network. See the full
 - Synchronization is one-way: the backend is the durable copy but cannot repopulate a
   device, so a phone that loses its database does not get its history back.
 
-[Unreleased]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.9.0...HEAD
+[Unreleased]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.10.0...HEAD
+[1.10.0]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.9.0...v1.10.0
 [1.9.0]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/jeyaprakash1910/MyFitnessLog/compare/v1.6.1...v1.7.0
