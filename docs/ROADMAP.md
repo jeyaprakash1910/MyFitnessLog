@@ -3,7 +3,7 @@ Project Roadmap
 Project: MyFitnessLog
 Version: 1.0
 Status: Approved
-Last Updated: July 22, 2026
+Last Updated: August 13, 2026
 
 ⸻
 
@@ -36,7 +36,7 @@ The implementation follows these principles:
 
 ⸻
 
-3. Current State Snapshot (as of July 22, 2026)
+3. Current State Snapshot (as of August 13, 2026, v1.9.0)
 
 This section reflects what actually exists in the repository today. It is the
 authoritative status summary; a new contributor (human or AI) should be able to
@@ -49,7 +49,8 @@ Repository layout:
 * docs/    — architecture, database, API, sync, coding standards, ADRs
 * web/     — React + TypeScript + Vite read-only history client (M10, complete)
 
-Backend status (M1–M2 and M8 Backend Sync APIs complete):
+Backend status (M1–M2, M8 Backend Sync APIs, and the M14/M15 convergence and
+correction work complete):
 
 * Spring Boot app, PostgreSQL, Flyway, JPA auditing, OSIV disabled, global
   exception handler (400/404/409/500 envelope), SLF4J logging, SpringDoc OpenAPI,
@@ -65,26 +66,33 @@ Backend status (M1–M2 and M8 Backend Sync APIs complete):
   exercises (add/update/remove/reorder), workout sessions (history/detail/start/
   complete/discard) and their exercises and sets. Idempotent UUID-keyed upserts
   (201 create / 200 replay); valid status transitions (409 on illegal);
-  completed/discarded workouts are immutable; the detail endpoint returns the
-  full nested snapshot assembled in-transaction (OSIV disabled).
-* 92 automated backend tests (JUnit 5 + MockMvc) run against a real PostgreSQL
-  database — including an end-to-end sync-graph idempotency proof. The backend
-  test gap identified in M2 is now closed. (Local PostgreSQL is used to execute
-  the tests; the same tests are portable to Testcontainers on a Docker-capable
-  machine — see M11 / cross-cutting notes.)
+  a completed workout takes set-level corrections but keeps its planning snapshot
+  locked, and a discarded one is immutable (ADR-0018); the detail endpoint returns
+  the full nested snapshot assembled in-transaction (OSIV disabled).
+* Since v1.6.0 a client mistake returns the status it earned rather than 500:
+  404 for an unknown path, 405 with an `Allow` header, 400 for a malformed UUID
+  or a missing parameter, 415 for an unsupported media type (TD-001). A 500 now
+  means the server genuinely failed.
+* 161 automated backend tests (JUnit 5 + MockMvc) run against a real PostgreSQL
+  database - including an end-to-end sync-graph idempotency proof, and coverage
+  of the `X-API-Key` boundary and the exercise endpoints, both of which had none
+  before v1.6.0. The backend test gap identified in M2 is now closed. (Local
+  PostgreSQL is used to execute the tests; CI runs the same ones against a
+  Postgres 17 service container.)
 * Flyway V5 indexes WorkoutSession on (status, startedAt) for the history query;
-  V6/V7 expand the seeded library to 14 categories and 313 exercises.
+  V6/V7 expand the seeded library to 14 categories and 313 exercises; V8 adds
+  `workout_session.routine_name`.
 * CORS is configured for browser clients (GET only, no credentials) so the web
   client can read the API — API_SPECIFICATION §5b.
 * The default user is attached server-side; the Android client sends no userId.
 
-Android status (M3–M7, M9, M9.5 complete; hardened through M11 Track A):
+Android status (M3–M7, M9, M9.5, M13–M15 complete; hardened through M11 Track A):
 
 * Foundation: single Gradle module; Hilt DI, Jetpack Compose, Navigation Compose,
   Room, Retrofit + OkHttp + kotlinx.serialization, Material 3, version catalog,
   Gradle wrapper. Android SDK installed locally; an AVD (`mfl_test`) and a
   physical device (OnePlus CPH2717, Android 16) are both available and used.
-* Room database version 5, exportSchema on (schemas v1–v5 committed):
+* Room database version 7, exportSchema on (schemas v1–v7 committed):
   - Reference (download-only): ExerciseCategory, Exercise.
   - Routine templates (mutable): Routine, RoutineExercise.
   - Workout history (mutable, immutable once completed): WorkoutSession,
@@ -104,30 +112,42 @@ Android status (M3–M7, M9, M9.5 complete; hardened through M11 Track A):
   - Workout Logging: start-from-routine (snapshot) OR manual/ad-hoc workout
     (routineId = null), or resume the active session (single-active invariant,
     atomic Room transaction); active workout screen; add exercises (manual, via
-    the shared picker); add/edit/delete/toggle sets; complete/discard; completed
-    workouts are immutable; workout elapsed timer (derived from startedAt) +
-    transient rest countdown timer.
+    the shared picker); add/edit/delete/toggle sets; complete/discard; a completed
+    workout is closed to this screen and changeable only through the corrections
+    below; workout elapsed timer (derived from startedAt) + transient rest
+    countdown timer.
 * Navigation: Home = routine list; nested routine detail / edit / add-exercise;
   Workout tab = active workout screen (optional routineId starts a routine
   workout; the "No active workout" state offers a manual start; else resumes the
   active one); the exercise picker is shared between routine editing and manual
-  workouts; Settings is a placeholder.
-  - Workout History: read-only history list (completed workouts only; DISCARDED
-    and IN_PROGRESS excluded; newest first) showing date, derived duration,
-    routine/manual indicator, exercise count, and a notes preview; read-only
-    workout detail screen showing workout metadata + every snapshotted exercise
-    and set (weight, reps, category, RPE), grouped and ordered from the snapshot.
-    Built on WorkoutHistoryRepository over the existing snapshot tables — no
-    schema change, no writes, snapshot integrity preserved. History is now a
-    real top-level destination; Workout Detail is a full-screen drill-down.
-* 336 automated tests pass on the JVM via Robolectric (converters, DAOs,
+  workouts; Settings holds About, the installed version and an on-demand update
+  check.
+  - Workout History: a history list (completed workouts only; DISCARDED and
+    IN_PROGRESS excluded; newest first) led by the routine's name as snapshotted
+    at start, with the date, derived duration (seconds under a minute), exercise
+    count and a notes preview; a workout detail screen showing workout metadata +
+    every snapshotted exercise and set (weight, reps, category, RPE), grouped and
+    ordered from the snapshot. History is a real top-level destination; Workout
+    Detail is a full-screen drill-down.
+  - Correcting history (v1.6.0–v1.8.0, ADR-0018): from the detail screen, fix a
+    set's weight/reps/RPE, add a set performed but never logged, delete one logged
+    but never performed, or discard the whole workout. Each is queued like any
+    other local write and uploads in the background. The planning snapshot stays
+    locked and a discarded workout accepts nothing, so the detail screen is no
+    longer read-only but the record still means what it says.
+* 551 automated tests pass on the JVM via Robolectric (converters, DAOs,
   repositories, StartWorkoutUseCase, WorkoutClock, RestTimer, ViewModels, Compose
   UI, history and formatting helpers, and the full synchronization engine), plus
-  6 instrumented tests (Hilt graph + Room migrations) which pass identically on
+  8 instrumented tests (Hilt graph + Room migrations) which pass identically on
   the emulator and on physical hardware.
 * Synchronization propagates creates, updates **and deletions** — routine and
   routine-exercise deletions travel on the soft-deleted row (M11 Phase 2); set
-  deletions use a tombstone table (ADR-0007).
+  deletions use a tombstone table (ADR-0007), as do workout-exercise deletions
+  since Room v6 (TD-014).
+* The device also reads back: restore rebuilds an empty database at launch, and
+  refresh reconciles after every sync pass (ADR-0017). The Room database is
+  excluded from Android Auto Backup and device transfer, so a stale cloud copy
+  cannot land ahead of a real restore.
 * Reference data reconciles: the local catalogue converges on the backend's,
   keeping rows still referenced by history (TD-012).
 * Verified end to end on real hardware: fresh install, library download, routine
@@ -164,11 +184,39 @@ M10 Web Application	✅ Completed (prerequisites + Phases 1–4)
 M11 Hardening & Polish	✅ Track A complete (Phases 1–4); Track B continuous
 M12 Version 1 Release	✅ Completed (Phases 1–5) — v1.0.0 released 22 Jul 2026
 M13 In-App Update Delivery	✅ Completed - v1.2.0 released 6 Aug 2026
+M14 Backend Convergence (ADR-0017)	✅ Completed - v1.4.0 (restore) and v1.5.0 (refresh), 7 Aug 2026
+M15 Editable History (ADR-0018)	✅ Completed - v1.6.0 through v1.9.0, 10-13 Aug 2026
 
-Current status: **Version 1 released and self-updating.** `v1.0.0` is tagged,
-pushed and published on GitHub (commit `4f80e76`), with the signed release APK
-verified on physical hardware. Every milestone M1–M13 is complete. The next
-milestone is Version 2 (authentication and multi-user), not yet planned.
+Current status: **Version 1 released, self-updating, and converged in both
+directions.** `v1.0.0` is tagged, pushed and published on GitHub (commit
+`4f80e76`), with the signed release APK verified on physical hardware. Every
+milestone M1–M15 is complete, the current release is **v1.9.0** (13 Aug 2026),
+and the next milestone is Version 2 (authentication and multi-user), not yet
+planned.
+
+What the releases after V1 added, in order:
+
+* **v1.2.0 / v1.3.0** - in-app updates over the air (M13, ADR-0016).
+* **v1.4.0** - restore on a fresh install: a device with no data rebuilds itself
+  from the backend at first launch. ADR-0017 Stage 1.
+* **v1.5.0** - periodic refresh: a change made anywhere reaches the device within
+  about 15 minutes, without overwriting an unuploaded local change or touching a
+  workout in progress. ADR-0017 Stage 2. Synchronization is no longer one-way.
+* **v1.6.0 / v1.6.1** - a completed workout can be corrected (ADR-0018,
+  ADR-0017 Stage 3), the set-level correction reachable from the phone, plus the
+  first continuous integration this repository has had and a fix for the client
+  timeout that could not outlast a free-tier cold start.
+* **v1.7.0** - the remaining two corrections ADR-0018 defines: add a set that was
+  performed but never logged, delete one logged but never performed.
+* **v1.8.0** - discard a workout that should not be in the record at all, from
+  History.
+* **v1.9.0** - History names a workout by its routine, recorded at the moment the
+  workout starts, and a sub-minute workout reads in seconds instead of "0m".
+
+The boundary ADR-0004 protects is unchanged throughout: the planning snapshot -
+exercise name, order and targets - stays locked once a session is no longer in
+progress, and a discarded workout accepts nothing. Correcting what you performed
+is not the same act as rewriting what you intended.
 
 
 Since **v1.2.0** an installed build updates itself over the air: the backend
@@ -215,9 +263,9 @@ restore on a fresh install, which retries next launch. Spending the entire month
 allowance to remove a delay nobody experiences is not a trade worth making. Revisit
 only if something user-facing ever has to block on a network read, which the
 offline-first design exists to prevent.
-Test count: 520 automated Android tests (513 JVM/Robolectric + 7 instrumented)
-+ 151 backend tests (JUnit 5/MockMvc over real PostgreSQL) + 133 web tests
-(Vitest/RTL, 4 of them live-backend) = 804 total, of which 795 run by default.
+Test count: 559 automated Android tests (551 JVM/Robolectric + 8 instrumented)
++ 161 backend tests (JUnit 5/MockMvc over real PostgreSQL) + 133 web tests
+(Vitest/RTL, 4 of them live-backend) = 853 total, of which 844 run by default.
 All of them run on every push and pull request via GitHub Actions, the
 instrumented ones on an emulator in their own job since 2026-08-07.
 The nine live tests (five Android `LiveBackendSyncTest`, four web) drive the real
@@ -226,15 +274,22 @@ named explicitly (`MFL_LIVE_TEST_BASE_URL` / `VITE_LIVE_TEST_BASE_URL`) and
 **fail** rather than skip if that target does not report `disposable: true`, so
 no test can write to the system of record (TD-013). The instrumented tests pass identically on
 the emulator and on physical hardware (Android 16).
-Database version: Android Room v5 (v4 added `workout_set_tombstone` for
+Database version: Android Room v7 (v4 added `workout_set_tombstone` for
 set-deletion propagation, ADR-0007; v5 added `exercise_category.displayOrder` so
-the picker uses the catalogue's curated order); backend Flyway v7 (V4 seeds the
-default user, V5 indexes WorkoutSession on status + startedAt, V6/V7 expand the
-library to 14 categories and 313 exercises).
+the picker uses the catalogue's curated order; v6 added
+`workout_exercise_tombstone`; v7 added `workout_session.routineName`, nullable
+and deliberately not backfilled, since writing today's routine name onto older
+workouts would invent a snapshot that was never taken); backend Flyway v8 (V4
+seeds the default user, V5 indexes WorkoutSession on status + startedAt, V6/V7
+expand the library to 14 categories and 313 exercises, V8 adds
+`workout_session.routine_name` to match Room v7).
 Backend: full write/read APIs per API_SPECIFICATION.md.
-Sync: one-way Android → backend, complete (transport, engine, scheduling,
-triggers). Deferred within M9: deletion propagation for hard-deleted workout
-sets (design compared, decision pending), and bidirectional sync.
+Sync: **bidirectional since v1.5.0** - uploads (transport, engine, scheduling,
+triggers) plus restore on a fresh install and periodic refresh, in the three
+stages of ADR-0017. Conflicts are last-write-wins on the server's `updatedAt`;
+the download direction never overwrites a row the outbox still owns and never
+touches a workout in progress. Still deferred: deletion propagation for
+hard-deleted workout sets (design compared, decision pending).
 
 Runtime validation (completed 2026-07-21): an emulator (Pixel 6, API 35) was
 installed and the full loop executed against a running Spring Boot backend and
@@ -701,7 +756,8 @@ Version 5: Nutrition tracking, analytics dashboard, AI insights, recommendations
 19. Success Criteria
 
 Version 1 is considered complete when all of the following hold. Status as of
-2026-07-22:
+2026-08-13 (v1.9.0); each was already met at the v1.0.0 release on 2026-07-22,
+and the notes record where a later release strengthened one:
 
 * ✅ Users can create workout routines.
       Verified on an emulator: routine created, exercises added with targets.
@@ -713,10 +769,14 @@ Version 1 is considered complete when all of the following hold. Status as of
 * ✅ Workout history is permanently stored.
       Room is the on-device record (durable across restarts, and no longer at
       risk from a destructive migration after T1); the backend holds the
-      permanent copy in PostgreSQL.
+      permanent copy in PostgreSQL, and since v1.4.0 that copy can repopulate a
+      device that lost its own. Since v1.6.0 a stored workout can also be
+      corrected without the record ceasing to mean what it says (ADR-0018).
 * ✅ Android synchronizes with the backend automatically.
-      One-way (Android → backend). SyncWorker observed running in a real process
-      and rows confirmed in PostgreSQL.
+      SyncWorker observed running in a real process and rows confirmed in
+      PostgreSQL. One-way (Android → backend) at v1.0.0; bidirectional since
+      v1.5.0, so a device also rebuilds itself from the backend after a reinstall
+      (v1.4.0) and picks up changes made elsewhere (v1.5.0).
 * ✅ Workout history is viewable on the web.
       Achieved in M10. Verified against real synchronized data: 21 sessions
       rendered from PostgreSQL through the live backend, with workout detail,

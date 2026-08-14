@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The plate colour from the source artwork, now supplied as the adaptive
+         background layer instead of being painted into the bitmap. -->
+    <color name="ic_launcher_background">#181F2F</color>
+</resources>
