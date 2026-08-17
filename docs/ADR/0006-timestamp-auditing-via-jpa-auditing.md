@@ -1,12 +1,12 @@
-ADR-0006: Timestamp Auditing via Spring Data JPA Auditing
+# ADR-0006: Timestamp Auditing via Spring Data JPA Auditing
 
-Status
+## Status
 
 Accepted
 
 ⸻
 
-Context
+## Context
 
 Every persistent entity in MyFitnessLog includes two auditing timestamps (see DATABASE.md):
 
@@ -27,7 +27,7 @@ Because these two fields appear on all eight entities, the mechanism that popula
 
 ⸻
 
-Decision
+## Decision
 
 MyFitnessLog uses Spring Data JPA Auditing to manage createdAt and updatedAt.
 
@@ -49,9 +49,9 @@ Identifier generation is intentionally out of scope for this decision. UUID prim
 
 ⸻
 
-Consequences
+## Consequences
 
-Benefits
+### Benefits
 
 * Consistent createdAt and updatedAt behavior across all entities.
 * No timestamp-handling code inside individual entities, services, or repositories.
@@ -70,7 +70,7 @@ These trade-offs are acceptable because consistency and low boilerplate outweigh
 
 ⸻
 
-Alternatives Considered
+## Alternatives Considered
 
 JPA Lifecycle Callbacks (@PrePersist / @PreUpdate)
 
@@ -80,7 +80,7 @@ Rejected because:
 * It reimplements, by hand, behavior that Spring Data JPA Auditing already provides.
 * It is more error-prone and less idiomatic.
 
-Manual Assignment
+### Manual Assignment
 
 Rejected because:
 
@@ -90,7 +90,7 @@ Rejected because:
 
 ⸻
 
-Implementation Notes
+## Implementation Notes
 
 * AbstractAuditableEntity is a @MappedSuperclass; it is not a table and defines no primary key.
 * createdAt uses @CreatedDate; updatedAt uses @LastModifiedDate.
@@ -108,7 +108,7 @@ Entity contract (mandatory):
 
 ⸻
 
-Related Documents
+## Related Documents
 
 * DATABASE.md
 * ARCHITECTURE.md
@@ -116,7 +116,7 @@ Related Documents
 
 ⸻
 
-Related ADRs
+## Related ADRs
 
 * ADR-0003: Backend is the System Source of Truth
 * ADR-0005: Disable Open Session In View

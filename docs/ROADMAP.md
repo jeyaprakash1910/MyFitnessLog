@@ -3,7 +3,7 @@ Project Roadmap
 Project: MyFitnessLog
 Version: 1.0
 Status: Approved
-Last Updated: August 14, 2026
+Last Updated: August 17, 2026 (TD-018 resolved; version-numbering ambiguity removed)
 
 ⸻
 
@@ -36,7 +36,7 @@ The implementation follows these principles:
 
 ⸻
 
-3. Current State Snapshot (as of August 14, 2026, v1.10.0)
+3. Current State Snapshot (as of August 17, 2026, v1.10.0)
 
 This section reflects what actually exists in the repository today. It is the
 authoritative status summary; a new contributor (human or AI) should be able to
@@ -196,17 +196,39 @@ planned.
 
 ⸻
 
-3a. Open work, as of 14 August 2026
+3a. Open work, as of 17 August 2026
 
 Everything with an owner is closed, which is why this section exists: the project
 has no agreed next objective, and that is now the thing holding it up rather than
 any piece of code.
 
-**The decision that blocks everything else.** No V3 roadmap is defined. This
-document names Version 2 as authentication and multi-user (§18), and the V2
-workout-logging index states that no new feature work is authorised until a V3
-roadmap exists. Recent work has therefore been reactive polish on a finished V1.
-Deciding the next objective is the highest-value thing available.
+**Version numbering means exactly one thing.** V1 is released and currently at
+**1.10.0**. The next version is **Version 2 — authentication and multi-user** (§18);
+it has not started. Nothing has been skipped.
+
+> This needed stating because it was genuinely ambiguous until 2026-08-17. A second,
+> unrelated numbering scheme existed: the developer journals in `docs/internal/`
+> filed a large Android feature milestone as "V2 Workout Logging", and its closing
+> note said "no new feature work until a V3 roadmap is defined". Read together with
+> §18 that implied V1 had been superseded and V2 skipped, which was false on both
+> counts. Those documents are now `docs/internal/workout-logging-redesign/`, named
+> for what they are. That freeze applies to further workout-logging work only — PR
+> detection, supersets, analytics — and does **not** gate Version 2.
+>
+> Note also that `docs/internal/` is gitignored, so a fresh clone cannot read it.
+> Nothing in the tracked documentation should depend on a reference into it.
+
+**The decision that is actually open.** Two independent directions, neither blocking
+the other:
+
+* **Version 2 — authentication and multi-user** (§18). The structural one. It is also
+  what a real second user (or a disposable test account) requires, since V1 attaches a
+  single default user server-side.
+* **A further round of workout logging** — PR detection, supersets, analytics,
+  replace-exercise, all named as candidates by the redesign documents.
+
+Recent work has been reactive polish on a finished V1. Choosing between these is the
+highest-value thing available.
 
 **Carried debt, all in TECH_DEBT.md.**
 
@@ -226,9 +248,11 @@ Deciding the next objective is the highest-value thing available.
   adaptive canvas is 108dp against the legacy 48dp. Correct at launcher size, soft
   when magnified. A `VectorDrawable` built from the original artwork removes the
   limitation at every density and needs the source file.
-* `RELEASE_CHECKLIST` §9 should include updating the README's version banner. It
-  goes stale on every release by construction, and did so for four consecutive
-  releases before being noticed on 13 August.
+* The README's version banner goes stale on every release by construction.
+  `RELEASE_CHECKLIST` §9 now carries a dedicated line for it — and 1.10.0 shipped
+  past it anyway, leaving the banner reading 1.9.0 until 17 August. If it rots a
+  third time, derive it from `version.properties` rather than asking a person to
+  remember.
 * The backend currently holds test data by the owner's decision, and is intended to
   be wiped once the feature set settles. Note that wiping it also clears the phone:
   `RefreshManagerImpl` deletes local completed sessions that the backend no longer

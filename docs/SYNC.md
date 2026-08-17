@@ -136,16 +136,35 @@ architecture exists to remove.
 
 6. Sync Direction
 
-Version 1 supports one-way synchronization.
+**As released in 1.0.0, synchronization was one-way (Android → backend).** Since
+1.4.0 and 1.5.0 it converges in both directions (ADR-0017), so the section below
+describes the original design and the note after it describes today's.
 
+```text
 Android
       │
       ▼
 Backend
+```
 
 The Android application is the only system that creates or modifies data.
 
 The web application is read-only in Version 1.
+
+> **Updated for 1.4.0 / 1.5.0 (ADR-0017).** The backend is now read as well as
+> written:
+>
+> * **Stage 1 — Restore (1.4.0).** A device whose local database is empty rebuilds
+>   itself from the backend at launch, so a reinstall no longer loses history.
+> * **Stage 2 — Refresh (1.5.0).** The device reconciles after every sync pass, so a
+>   change made elsewhere reaches it. The backend wins for any row with no pending
+>   local change; anything the outbox still owns is left alone.
+> * **Stage 3 — Edit (1.6.0+).** Specified in ADR-0018: a completed workout accepts
+>   set-level corrections while its planning snapshot stays locked.
+>
+> Android is still the only system that *originates* user data, and the web client is
+> still read-only. What changed is that the backend is no longer write-only from the
+> device's point of view.
 
 ⸻
 
@@ -402,14 +421,19 @@ Full database uploads are not performed.
 
 19. Future Enhancements
 
-Future versions may introduce:
+Delivered since this list was written:
 
-* Bidirectional synchronization.
+* ~~Bidirectional synchronization.~~ **Done** in 1.4.0 / 1.5.0 (ADR-0017); see §6.
+* ~~Deletion propagation for WorkoutExercise, if the UI ever gains that action.~~
+  **Done** 2026-08-07 (ADR-0017 Stage 2, TD-014).
+* ~~Multiple Android devices.~~ **Supported** since Stage 2 refresh, which is what
+  makes a second device converge rather than diverge.
+
+Future versions may still introduce:
+
 * Reconciling a deletion the backend rejects. Today a 4xx drops the tombstone
-  and reports the failure, because one-way sync has nothing to reconcile
-  against (ADR-0007).
-* Deletion propagation for WorkoutExercise, if the UI ever gains that action.
-* Multiple Android devices.
+  and reports the failure (ADR-0007). Stage 2 refresh now gives this something to
+  reconcile against, so the original reason for deferring it no longer applies.
 * Web editing.
 * Conflict resolution.
 * Sync progress indicators.

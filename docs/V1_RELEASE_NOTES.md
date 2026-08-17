@@ -177,6 +177,9 @@ For future releases:
 * Updates must be signed with the same keystore. **Android refuses an update
   signed by a different key**, and the only remedy is uninstalling — which
   destroys the local database that one-way sync cannot restore.
+  *(Since 1.4.0 this is no longer terminal: ADR-0017 Stage 1 rebuilds an empty
+  device from the backend at launch. Keeping the keystore still matters — restore
+  recovers synced data, not anything the outbox had not yet uploaded.)*
 * Room migrations are additive and tested from an empty database and from real
   data. Never use destructive migration.
 * Follow `docs/RELEASE_CHECKLIST.md`, including the release gate in §9b.

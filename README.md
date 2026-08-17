@@ -4,8 +4,8 @@ An **offline-first** workout tracking application. The backend is the permanent
 source of truth; the Android app keeps a synchronized local copy so it works
 fully offline.
 
-> **Version 1.9.0 released, 13 August 2026.**
-> [Latest release](https://github.com/jeyaprakash1910/MyFitnessLog/releases/tag/v1.9.0) ·
+> **Version 1.10.0 released, 14 August 2026.**
+> [Latest release](https://github.com/jeyaprakash1910/MyFitnessLog/releases/tag/v1.10.0) ·
 > [V1 release notes](docs/V1_RELEASE_NOTES.md) ·
 > [CHANGELOG](CHANGELOG.md)
 >

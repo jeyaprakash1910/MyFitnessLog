@@ -1086,7 +1086,7 @@ ran against production by default.
 
 Status: ✅ Resolved 2026-08-07 (ADR-0017 Stage 2 prerequisite)
 
-Milestone identified: V2 workout logging, Milestone F (2026-07-27)
+Milestone identified: the workout-logging redesign, Milestone F (2026-07-27)
 Resolved by: `workout_exercise_tombstone` (Room migration 5 → 6) plus a deletion
 phase in the sync engine, mirroring the set tombstones of ADR-0007.
 
@@ -1108,7 +1108,7 @@ closed from both ends.
 
 ### Observation
 
-V2 workout logging lets a user remove an exercise from an **in-progress** session.
+The workout-logging redesign lets a user remove an exercise from an **in-progress** session.
 The removal deletes the exercise's **sets** with tombstones (ADR-0007) and those
 set deletions propagate correctly. The `WorkoutExercise` **row itself** is removed
 locally but its deletion is **not** sent to the backend: there is no
@@ -1123,7 +1123,7 @@ Milestone F was deliberately kept schema-free (no Room migration): adding a
 `WorkoutExercise` tombstone would have required a new table, a migration, and a new
 sync path. Instead the milestone reused the existing, tested **set** tombstone path
 for the exercise's sets and deferred the row-level propagation. This is recorded as
-DEC-14 in the V2 decision log.
+DEC-14 in the workout-logging redesign's decision log (`docs/internal/workout-logging-redesign/DECISION_LOG.md`, gitignored).
 
 ### User-visible impact
 

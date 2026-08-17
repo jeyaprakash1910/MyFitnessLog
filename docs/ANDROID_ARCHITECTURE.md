@@ -30,7 +30,9 @@ and CODING_STANDARDS.md.
 - The UI observes Room via Kotlin Flow and never calls Retrofit directly.
 - All identifiers are UUIDv4, generated on-device (DATABASE.md).
 - All timestamps are UTC with millisecond precision (DATABASE.md).
-- One-way synchronization (Android → backend) in Version 1 (SYNC.md).
+- Synchronization uploads Android → backend, and since 1.4.0/1.5.0 also converges
+  backend → Android (ADR-0017; SYNC.md §6). Android remains the only originator of
+  user data.
 
 ⸻
 
@@ -306,7 +308,13 @@ model is genuinely needed.
 
 13. Workout Snapshot Architecture (Milestone 6)
 
-Workout history is immutable and snapshot-based — the defining rule of the app.
+Workout history is snapshot-based, and its **planning** snapshot is immutable — the
+defining rule of the app. The *performed* values became narrowly correctable in
+stages (ADR-0018): a set's weight, reps or RPE from **1.6.0**; adding a
+performed-but-unlogged set and deleting a logged-but-unperformed one from **1.7.0**;
+discarding a whole workout from **1.8.0**. What stays locked is the plan — exercise
+name, order and targets — so a routine edited later never rewrites what was already
+done.
 When a routine workout starts, each RoutineExercise is COPIED into a
 WorkoutExercise row carrying the exercise name and all planned targets. Completed
 workouts therefore never change when the routine is later edited, renamed,
@@ -414,9 +422,12 @@ before synchronization is introduced.
 
 18. Workout History Architecture (Milestone 7)
 
-Workout history is a READ-ONLY view over the immutable snapshot tables the
-workout feature already writes (WorkoutSession/WorkoutExercise/WorkoutSet). It
-adds no tables, columns, or schema version — the database stays at v3.
+Workout history is a READ-ONLY view over the snapshot tables the workout feature
+already writes (WorkoutSession/WorkoutExercise/WorkoutSet). The *read model* is still
+read-only today; the ADR-0018 corrections added from 1.6.0 are a separate, narrow
+write path off the detail screen, not a relaxation of this projection. It
+adds no tables, columns, or schema version of its own — at Milestone 7 the database
+stayed at v3. (It is v7 today; later features moved it, not this one.)
 
 Why a separate `feature/history` package and repository (not reuse the workout
 repository or DAOs):

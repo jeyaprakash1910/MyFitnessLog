@@ -1,8 +1,21 @@
 # Database Design
 
-**Status:** As released in Version 1.0.0 (22 July 2026) — Flyway V1–V7 on
-PostgreSQL, Room v1–v5 on Android. Both migration chains are verified from an
-empty database and from real data.
+**Status:** Current as of 1.10.0 (17 August 2026) — **Flyway V1–V8** on PostgreSQL,
+**Room v1–v7** on Android. Both migration chains are verified from an empty database
+and from real data.
+
+> At the Version 1.0.0 release (22 July 2026) these were Flyway V1–V7 and Room v1–v5.
+> Since then:
+>
+> * **Room v6** added `workout_exercise_tombstone`, so removing an exercise from a
+>   session propagates to the backend (ADR-0017 Stage 2, TD-014).
+> * **Room v7** added `routineName` to `workout_session`, so history names a workout
+>   after the routine it was performed from (1.9.0).
+> * **Flyway V8** (`V8__Add_workoutsession_routine_name.sql`) is the backend half of
+>   that same column.
+>
+> ADR-0018's corrections needed no schema change on either side: they write to
+> `workout_set`, and set deletion already had its tombstone from Room v4.
 
 > **Updated for 1.1.0 (ADR-0012):** the physical PostgreSQL identifiers are now
 > unquoted `snake_case` — `workout_set`, `workout_exercise_id`, `set_number`,
@@ -494,7 +507,10 @@ These include:
 - WorkoutExercise
 - WorkoutSet
 
-Workout history is considered immutable once completed.
+Workout history is considered immutable once completed, with the narrow exceptions
+ADR-0018 defines: editing a set's values from 1.6.0, adding a performed set or
+deleting an unperformed one from 1.7.0, and discarding the workout from 1.8.0. The
+planning snapshot never changes, and a discarded workout accepts nothing at all.
 
 ### Consequence: deleting a set while a workout is in progress
 
@@ -1342,7 +1358,9 @@ This ensures completed workouts remain historically accurate even if workout tem
 
 Workout history records what actually happened during a workout.
 
-Unlike workout templates, workout history is immutable.
+Unlike workout templates, workout history is immutable with respect to the plan it
+was performed against: see "Workout History is Immutable" below for the narrow
+corrections ADR-0018 permits.
 
 Completed workouts represent historical snapshots and must never be modified by changes made to workout templates.
 
