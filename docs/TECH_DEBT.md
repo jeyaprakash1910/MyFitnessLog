@@ -2,7 +2,7 @@
 
 Project: MyFitnessLog
 Version: 1.6
-Last Updated: August 14, 2026 (TD-018 raised: the debug build points at production)
+Last Updated: August 17, 2026 (TD-018 resolved: debug and release resolve their backend separately)
 
 This document records known, accepted technical debt: deliberate limitations that are not defects in the current milestone but must be addressed in a later milestone. Each item states the observation, why it is currently acceptable, the recommended future implementation, the documentation that must change first, and when it is scheduled.
 
@@ -36,7 +36,7 @@ This register holds debt that outlives a single task. Short-lived working items 
 | TD-015 | ViewModel test classes were intermittently flaky | ✅ Resolved 2026-08-10 (three causes; verified over 100 runs) | - |
 | TD-016 | Backend suite failed in the working copy, passed elsewhere | ✅ Resolved 2026-08-07 (VS Code Java autobuild overwrote Maven's output) | - |
 | TD-017 | ViewModel tests sampled async writes instead of waiting | ✅ Resolved 2026-08-13 (`awaitWork`; found a real ADR-0018 regression) | - |
-| TD-018 | The debug build points at the production backend | Open — fix before real training data | daily use |
+| TD-018 | The debug build points at the production backend | ✅ Resolved 2026-08-17 (debug/release resolve separately; equal URLs fail the build) | - |
 
 ---
 
@@ -138,10 +138,12 @@ that caused them.
 
 ## TD-018 - The debug build points at the production backend
 
-Status: **Open.** Low risk while the backend holds test data. Becomes serious the
-day real training is logged, which is a date nothing in the system announces.
+Status: **Resolved 2026-08-17.** Debug and release resolve their backend
+separately, debug defaults to a local backend, and a build that configures them to
+the same URL now fails rather than warns.
 
 Milestone identified: 2026-08-12, during the ADR-0018 device verification
+Resolved: 2026-08-17
 
 ### Observation
 
@@ -172,22 +174,68 @@ write to production" - encodes an assumption about the environment rather than
 checking a property. The assumption expires silently the first time a real workout
 is logged, and nothing fails when it does.
 
-### Recommended implementation
+### How it was resolved
 
-Point debug builds at a disposable backend by default and make production the
-deliberate opt-in, rather than the reverse. The `livetest` profile already exists
-(port 8081, `myfitnesslog_livetest`, health reporting `disposable: true`), so the
-mechanism is built; what is missing is making it the default for the debug variant.
+The cause was inheritance, not configuration. One `resolveApiBaseUrl()` served both
+build types, and `local.properties` must name production for `assembleRelease` to
+work — so debug got production by default, along with the production API key, and
+no one had to make a mistake for it to happen.
 
-The workaround in use meanwhile is documented in `.claude/skills/run-on-device`:
-launch online to fetch data, enable airplane mode before any write, clear app data
-while still offline, and confirm zero PUT/POST/DELETE requests afterwards. It works
-and it depends on someone remembering, which is the definition of the problem.
+`android/app/build.gradle.kts` now resolves the two independently:
 
-### Trigger to act
+* `resolveReleaseApiBaseUrl()` reads `apiBaseUrl` — production, unchanged.
+* `resolveDebugApiBaseUrl()` reads `debugApiBaseUrl` and **never falls back to
+  `apiBaseUrl`**. A debug build can be pointed at production, but only by naming it.
+* `resolveDebugApiKey()` reads `debugApiKey`, empty by default, so the production
+  key no longer travels into debug builds either.
+* If the two URLs resolve equal, the build **fails** with the reason and the fix.
+  Following the device-guard precedent in the same file: the rule is structural
+  rather than a convention in a document.
 
-Before the first real training session is logged. After that the cost of a mistake
-changes from nothing to permanent.
+The debug default is `http://localhost:8080/api/v1/`, deliberately not the
+emulator's `10.0.2.2` host loopback. With `adb reverse tcp:8080 tcp:8080`,
+`localhost` means the development machine on an emulator *and* on a physical
+device, so one default covers both targets with no address to configure — and it
+can never resolve to something on the internet.
+
+Not the `livetest` profile, which this entry previously suggested. That backend is
+owned by the automated live tests, which write and clear it; sharing it with manual
+development would mean a test run destroying whatever was being looked at by hand.
+Debug points at the ordinary dev backend (default profile, port 8080, local
+`myfitnesslog` database), which is distinct from production and from livetest
+alike. Its `app.api-key` is blank, which disables authentication, so no key is
+needed locally.
+
+Verified at build level: a debug build compiles
+`API_BASE_URL = "http://localhost:8080/api/v1/"` and an empty `API_KEY`; the release
+build still compiles the Render URL; setting `debugApiBaseUrl` to the production URL
+fails the build with the message above.
+
+Verified end to end on the emulator (2026-08-17), against a local backend started on
+the default profile with a freshly migrated database:
+
+* The first screen read **"No routines yet."** Pointed at production it would have
+  listed the real ones — the single most direct evidence available.
+* A routine created in the UI went `POST http://localhost:8080/api/v1/routines` →
+  201, and Room recorded it `SYNCED`, so the whole outbox cycle ran against local.
+* The row is in the local `myfitnesslog` database and, queried directly against the
+  live production API, **is not there** — production still holds only `Push` and
+  `Push 1`.
+* `adb logcat` recorded **zero** requests to the production host and zero
+  `X-API-Key` headers for the entire session.
+
+Setup friction worth knowing, now in the README: `JAVA_HOME` is commonly pinned to
+17 for Android's Gradle toolchain, and the backend needs 21. Starting it with 17
+fails with `UnsupportedClassVersionError` (class file version 65.0 vs 61.0), which
+reads like a corrupt build rather than a version mismatch.
+
+### What this does not solve
+
+The debug build can no longer reach production by accident, which is the whole of
+TD-018. It does not give the phone a *disposable* backend when the laptop is not
+running — the default requires `adb reverse` and a backend on the development
+machine. If away-from-desk testing on real hardware becomes routine, a hosted dev
+instance is the answer, and `debugApiBaseUrl` is already the seam for it.
 
 ---
 

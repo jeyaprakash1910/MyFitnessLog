@@ -1,29 +1,87 @@
 import java.net.URI
 import java.util.Properties
 
+/** Reads `local.properties` (machine-specific, gitignored), or null if absent. */
+fun localProperties(): Properties? =
+    rootProject.file("local.properties").takeIf { it.exists() }
+        ?.let { file -> Properties().apply { file.inputStream().use(::load) } }
+
+/** Retrofit throws on a base URL without a trailing slash, so normalise here. */
+fun asBaseUrl(url: String): String = if (url.endsWith("/")) url else "$url/"
+
 /**
- * Backend base URL, resolved at configuration time.
+ * The RELEASE backend base URL — production.
  *
- * Read from `local.properties` (machine-specific and gitignored) so a developer
- * can point the app at a LAN-hosted backend without editing tracked files or
- * risking committing their own IP address. Falls back to the emulator's host
- * loopback, so the emulator workflow needs no configuration at all.
+ * Read from `apiBaseUrl` in `local.properties` so a developer can point a release
+ * build at their own deployment without editing tracked files or risking
+ * committing their own address.
  *
- * Retrofit requires a trailing slash on a base URL and throws otherwise, so the
- * value is normalised here rather than failing at runtime.
+ * There is deliberately no fallback shared with debug: see [resolveDebugApiBaseUrl]
+ * for why the two are resolved separately at all (TD-018).
  */
-fun resolveApiBaseUrl(): String {
-    val localProperties = rootProject.file("local.properties")
-    val configured = if (localProperties.exists()) {
-        Properties().apply { localProperties.inputStream().use(::load) }
-            .getProperty("apiBaseUrl")
-            ?.trim()
-            ?.takeIf { it.isNotEmpty() }
-    } else {
-        null
+fun resolveReleaseApiBaseUrl(): String =
+    asBaseUrl(
+        localProperties()?.getProperty("apiBaseUrl")?.trim()?.takeIf { it.isNotEmpty() }
+            ?: "http://10.0.2.2:8080/api/v1/",
+    )
+
+/**
+ * The DEBUG backend base URL — a development backend, never production.
+ *
+ * This exists as a separate function from [resolveReleaseApiBaseUrl] because for a
+ * long time it was not, and that was TD-018. One `apiBaseUrl` served both build
+ * types, and `local.properties` has to name production for `assembleRelease` to
+ * work — so every debug build inherited it. Every tap during development wrote
+ * into the real database, and nothing anywhere said so. Harmless while the backend
+ * held test data; unrecoverable from the first real training session, since the
+ * transition announces itself nowhere.
+ *
+ * The default is `localhost:8080` rather than the emulator's `10.0.2.2` host
+ * loopback, because `adb reverse tcp:8080 tcp:8080` makes `localhost` mean "the
+ * development machine" on an emulator AND on a physical device, while `10.0.2.2`
+ * only ever works on an emulator. One default, both targets, no address to
+ * configure — and it can never accidentally resolve to something on the internet.
+ *
+ * Override with `debugApiBaseUrl` in `local.properties` (for a LAN address, or a
+ * hosted dev backend). Note that `apiBaseUrl` deliberately does NOT feed this: a
+ * debug build must be pointed at production by naming it, never by inheriting it.
+ */
+fun resolveDebugApiBaseUrl(): String {
+    val url = asBaseUrl(
+        localProperties()?.getProperty("debugApiBaseUrl")?.trim()?.takeIf { it.isNotEmpty() }
+            ?: "http://localhost:8080/api/v1/",
+    )
+    // Compared by host, not by whole URL: a different path on the production host
+    // still reaches the production database, which is the thing being prevented.
+    //
+    // Loopback is exempt, because there the shared host is not a shared *backend*:
+    // `localhost` means the developer's own machine on both sides, and a release
+    // build being smoke-tested locally is a legitimate thing to do. The guard is
+    // about debug and release sharing a remote backend holding real training data.
+    val loopback = setOf("localhost", "127.0.0.1", "10.0.2.2", "::1")
+    val host = runCatching { URI(url).host }.getOrNull()
+    val releaseHost = runCatching { URI(resolveReleaseApiBaseUrl()).host }.getOrNull()
+    if (host != null && host == releaseHost && host !in loopback) {
+        throw GradleException(
+            """
+            |
+            |debugApiBaseUrl and apiBaseUrl are the same host:
+            |    $host
+            |
+            |That is TD-018: the debug build would write into the release backend's
+            |database. Debug builds run half-finished code and unmigrated schemas, and
+            |the backend is the permanent record of real training (ADR-0003).
+            |
+            |Point debug at a development backend instead. Leave debugApiBaseUrl unset
+            |to get the default, which works on an emulator and a physical device alike:
+            |    adb reverse tcp:8080 tcp:8080   # then http://localhost:8080
+            |
+            |See docs/TECH_DEBT.md TD-018.
+            |
+            """.trimMargin(),
+        )
     }
-    val url = configured ?: "http://10.0.2.2:8080/api/v1/"
-    return if (url.endsWith("/")) url else "$url/"
+    return url
 }
 
 /**
@@ -39,13 +97,21 @@ fun resolveApiBaseUrl(): String {
  * The key is embedded in the APK, where it is extractable. That is the accepted
  * limitation of app-level (not user-level) auth for V1; see ADR-0013.
  */
-fun resolveApiKey(): String {
-    val localProperties = rootProject.file("local.properties").takeIf { it.exists() }
-        ?.let { file -> Properties().apply { file.inputStream().use(::load) } }
-    return (localProperties?.getProperty("apiKey") ?: System.getenv("MFL_API_KEY"))
+fun resolveApiKey(): String =
+    (localProperties()?.getProperty("apiKey") ?: System.getenv("MFL_API_KEY"))
         ?.trim()?.takeIf { it.isNotEmpty() }
         ?: ""
-}
+
+/**
+ * The API key for DEBUG builds, from `debugApiKey`. Empty by default.
+ *
+ * Separate from [resolveApiKey] for the same reason the base URLs are separate: the
+ * production key must not travel into a debug build by inheritance. A local backend
+ * on the default profile leaves `app.api-key` blank, which disables authentication
+ * entirely, so the ordinary development case needs no key at all.
+ */
+fun resolveDebugApiKey(): String =
+    localProperties()?.getProperty("debugApiKey")?.trim()?.takeIf { it.isNotEmpty() } ?: ""
 
 /**
  * Application version, read from the tracked `version.properties`.
@@ -202,7 +268,7 @@ plugins {
 val generateReleaseNetworkSecurityConfig =
     tasks.register<GenerateNetworkSecurityConfig>("generateReleaseNetworkSecurityConfig") {
         description = "Writes the release network security config from apiBaseUrl."
-        baseUrl.set(resolveApiBaseUrl())
+        baseUrl.set(resolveReleaseApiBaseUrl())
         outputDirectory.set(layout.buildDirectory.dir("generated/res/networkSecurityConfig"))
     }
 
@@ -253,8 +319,11 @@ android {
         debug {
             // Debug-only network logging is gated on this flag at runtime.
             buildConfigField("boolean", "ENABLE_NETWORK_LOGGING", "true")
-            buildConfigField("String", "API_BASE_URL", "\"${resolveApiBaseUrl()}\"")
-            buildConfigField("String", "API_KEY", "\"${resolveApiKey()}\"")
+            // Never resolveApiBaseUrl()/resolveApiKey(): debug must not inherit
+            // production. That was TD-018; see resolveDebugApiBaseUrl().
+            buildConfigField("String", "API_BASE_URL", "\"${resolveDebugApiBaseUrl()}\"")
+            buildConfigField("String", "API_KEY", "\"${resolveDebugApiKey()}\"")
+            logger.lifecycle("[debug] backend: ${resolveDebugApiBaseUrl()}")
         }
         release {
             signingConfig = signingConfigs.findByName("release")
@@ -277,7 +346,7 @@ android {
             // Release has no development fallback: a real deployment must set
             // this deliberately, over HTTPS. Left as the emulator loopback it
             // would fail fast rather than silently talking to nothing.
-            buildConfigField("String", "API_BASE_URL", "\"${resolveApiBaseUrl()}\"")
+            buildConfigField("String", "API_BASE_URL", "\"${resolveReleaseApiBaseUrl()}\"")
             buildConfigField("String", "API_KEY", "\"${resolveApiKey()}\"")
             if (resolveApiKey().isEmpty()) {
                 logger.warn(

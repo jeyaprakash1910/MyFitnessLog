@@ -1,35 +1,49 @@
 ---
 name: run-on-device
-description: Launch and drive the MyFitnessLog Android app on an emulator or physical device - install it, tap through screens, take screenshots, inspect the Room database, and verify a change in the real app rather than only in tests. Use whenever asked to run the app, screenshot it, reproduce a bug end to end, or confirm UI behaviour on hardware. Read this BEFORE the first adb command, because the debug build points at the production backend and an unguarded write reaches real workout history.
+description: Launch and drive the MyFitnessLog Android app on an emulator or physical device - install it, tap through screens, take screenshots, inspect the Room database, and verify a change in the real app rather than only in tests. Use whenever asked to run the app, screenshot it, reproduce a bug end to end, or confirm UI behaviour on hardware. Read this BEFORE the first adb command, to confirm which backend the build is pointed at.
 ---
 
 # Running MyFitnessLog on a device
 
-## Read this first: the debug build writes to production
+## Read this first: confirm which backend you are pointed at
 
-`android/local.properties` sets `apiBaseUrl` to the deployed Render backend. That
-is the **system of record** (ADR-0003) and the only permanent copy of the owner's
-workout history, because sync is one-way from the phone.
+Since TD-018 was resolved (2026-08-17) the debug build defaults to a **local**
+backend and cannot inherit production: `debugApiBaseUrl` is resolved separately
+from `apiBaseUrl`, and a build configuring both to the same URL fails outright.
 
-Consequences, all of which have been observed rather than assumed:
-
-- On launch the app pulls real routines and completed workouts down (ADR-0017
-  Stage 2). Whatever you see on a freshly installed emulator is **live data**.
-- Any write in the UI is queued in Room and uploaded by `SyncWorker`.
-- **Deleting a set writes a tombstone (ADR-0007), which removes the row from the
-  backend too. There is no undo, and no other copy.**
-
-So: **read-only interaction is safe online. Anything that writes is not.** Use the
-offline protocol below.
-
-Check what you are pointed at before you start:
+Verify rather than assume, because the value is compiled in. Regenerate before
+reading it — `BuildConfig.java` is a build output, absent before the first build and
+stale after any `local.properties` edit, so grepping it blind can report the
+*previous* build's backend:
 
 ```bash
-grep apiBaseUrl android/local.properties
+cd android && ./gradlew -q :app:generateDebugBuildConfig
+grep API_BASE_URL app/build/generated/source/buildConfig/debug/com/myfitnesslog/BuildConfig.java
 ```
 
+`installDebug` also prints `[debug] backend: <url>` on every build, which is the
+same value from the same function.
+
 A `localhost`/`10.0.2.2` URL, or the livetest backend on `:8081`, is disposable and
-needs none of this care. The Render URL does.
+needs no special care. **If it shows the Render URL, someone set `debugApiBaseUrl`
+deliberately — stop and use the offline write protocol below.** That backend is the
+**system of record** (ADR-0003) and the only permanent copy of the owner's workout
+history, because sync is one-way from the phone. On launch the app pulls real data
+down (ADR-0017 Stage 2), every UI write is queued and uploaded by `SyncWorker`, and
+deleting a set writes a tombstone (ADR-0007) that removes the row from the backend
+too, with no undo and no other copy.
+
+The local backend needs to be running and reachable, or the app simply queues
+everything as `PENDING` — which is valid offline-first behaviour and looks like a
+sync bug if you were not expecting it:
+
+```bash
+cd backend && mvn spring-boot:run          # default profile, local Postgres, no API key
+adb reverse tcp:8080 tcp:8080              # makes "localhost" mean this machine
+```
+
+`adb reverse` works on an emulator and a physical device alike, and does **not**
+survive a reconnect or an emulator restart — re-run it.
 
 ## Setup
 
@@ -109,9 +123,11 @@ are x = 108, 324, 540, 756, 972 for Home, Workout, Exercises, History and
 Settings. History (756, 2224) is confirmed by use; the rest are derived from the
 spacing, so screenshot after tapping rather than trusting them blind.
 
-## Writing safely against the production build
+## Writing safely against a production-pointed build
 
-Use this whenever the run has to *change* something, not merely look at it.
+Only needed when the check at the top of this file shows the Render URL — that is
+no longer the default, so this should be rare and deliberate. Use it whenever such
+a run has to *change* something, not merely look at it.
 
 1. Launch **online** and let the app download real data, so the screen shows a
    realistic state. This is read-only: only GETs are issued.
