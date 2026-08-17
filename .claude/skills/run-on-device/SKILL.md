@@ -11,11 +11,18 @@ Since TD-018 was resolved (2026-08-17) the debug build defaults to a **local**
 backend and cannot inherit production: `debugApiBaseUrl` is resolved separately
 from `apiBaseUrl`, and a build configuring both to the same URL fails outright.
 
-Verify rather than assume, because the value is compiled in:
+Verify rather than assume, because the value is compiled in. Regenerate before
+reading it — `BuildConfig.java` is a build output, absent before the first build and
+stale after any `local.properties` edit, so grepping it blind can report the
+*previous* build's backend:
 
 ```bash
-grep API_BASE_URL android/app/build/generated/source/buildConfig/debug/com/myfitnesslog/BuildConfig.java
+cd android && ./gradlew -q :app:generateDebugBuildConfig
+grep API_BASE_URL app/build/generated/source/buildConfig/debug/com/myfitnesslog/BuildConfig.java
 ```
+
+`installDebug` also prints `[debug] backend: <url>` on every build, which is the
+same value from the same function.
 
 A `localhost`/`10.0.2.2` URL, or the livetest backend on `:8081`, is disposable and
 needs no special care. **If it shows the Render URL, someone set `debugApiBaseUrl`

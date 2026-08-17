@@ -269,10 +269,16 @@ build wrote into the real training record (TD-018).
 | Build | Property | Default |
 |---|---|---|
 | Debug | `debugApiBaseUrl` | `http://localhost:8080/api/v1/` |
-| Release | `apiBaseUrl` | none for real use — must be set |
+| Release | `apiBaseUrl` | `http://10.0.2.2:8080/api/v1/` — deliberately useless in production |
 
-If the two resolve to the same URL the **build fails**, rather than warning. A
-debug build can be pointed at production, but only by naming it deliberately.
+A release build with `apiBaseUrl` unset falls back to the emulator loopback, which
+reaches nothing from a real phone. That is intentional: it fails fast rather than
+silently talking to the wrong backend. A real deployment must set the property.
+
+If the two resolve to the same **non-loopback host** the **build fails**, rather
+than warning. A debug build can be pointed at production, but only by naming it
+deliberately. Loopback is exempt because there the shared host is your own machine
+rather than a shared backend, so smoke-testing a release build locally still works.
 Likewise `debugApiKey` is separate from `apiKey`, and empty by default, so the
 production key is not compiled into debug builds.
 
