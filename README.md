@@ -261,20 +261,51 @@ The app reads its base URL from `BuildConfig.API_BASE_URL`, populated at build
 time from `android/local.properties` (machine-specific and gitignored, so your
 address is never committed).
 
-**Emulator: no configuration needed.** The default is `http://10.0.2.2:8080/api/v1/`
-— `10.0.2.2` is the host machine's loopback as seen from the emulator.
+**Debug and release are resolved separately, and debug never inherits from
+release.** That separation is the point: `apiBaseUrl` has to name production for
+`assembleRelease` to work, and while a single property served both, every debug
+build wrote into the real training record (TD-018).
 
-**Physical device:** point it at your machine's LAN address, with both on the
-same Wi-Fi:
+| Build | Property | Default |
+|---|---|---|
+| Debug | `debugApiBaseUrl` | `http://localhost:8080/api/v1/` |
+| Release | `apiBaseUrl` | none for real use — must be set |
 
-```properties
-# android/local.properties
-apiBaseUrl=http://192.168.1.42:8080/api/v1/   # your machine's LAN address
+If the two resolve to the same URL the **build fails**, rather than warning. A
+debug build can be pointed at production, but only by naming it deliberately.
+Likewise `debugApiKey` is separate from `apiKey`, and empty by default, so the
+production key is not compiled into debug builds.
+
+**Development, on both an emulator and a physical device:**
+
+```bash
+# 0. once: a local database for the backend to migrate into
+brew services start postgresql@17
+createdb -O myfitnesslog myfitnesslog
+
+# 1. a local backend (default profile, local Postgres, no API key)
+#    JAVA_HOME is commonly pinned to 17 for Android's Gradle toolchain, and the
+#    backend needs 21 — otherwise it dies with UnsupportedClassVersionError
+#    (class file version 65.0 vs 61.0), which reads like a corrupt build.
+cd backend && JAVA_HOME=$(/usr/libexec/java_home -v 21) mvn spring-boot:run
+
+# 2. make "localhost" mean this machine, on the device or emulator
+adb reverse tcp:8080 tcp:8080
+
+# 3. build and install
+cd android && ./gradlew installDebug
 ```
 
-Then rebuild and reinstall (`./gradlew installDebug`) — the value is baked in at
-build time. A trailing slash is added automatically if you omit it, since
-Retrofit rejects a base URL without one.
+`adb reverse` is why the default is `localhost` rather than the emulator's
+`10.0.2.2` host loopback: `10.0.2.2` only ever works on an emulator, while
+`localhost` plus `adb reverse` works identically on both, with no address to
+configure and no way to reach the internet by accident. Re-run `adb reverse` after
+reconnecting a device or restarting the emulator — it does not survive either.
+
+To use a LAN address instead (device and machine on the same Wi-Fi, no USB), set
+`debugApiBaseUrl=http://192.168.1.42:8080/api/v1/`. Rebuild after any change — the
+value is baked in at build time. A trailing slash is added automatically if you
+omit it, since Retrofit rejects a base URL without one.
 
 Notes:
 - Android has blocked cleartext HTTP by default since API 28, so without an

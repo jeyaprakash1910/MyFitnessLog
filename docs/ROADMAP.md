@@ -210,9 +210,11 @@ Deciding the next objective is the highest-value thing available.
 
 **Carried debt, all in TECH_DEBT.md.**
 
-* **TD-018** - the debug build points at the production backend. Harmless while the
-  backend holds test data, and serious from the first real training session. Fix it
-  before that, not after, because nothing announces the transition.
+* **TD-018** - ✅ resolved 17 Aug 2026. The debug build pointed at production because
+  a single `apiBaseUrl` served both variants and release requires the production URL,
+  so debug inherited it. Debug and release now resolve independently, debug defaults
+  to a local backend reachable from an emulator and a phone alike (`adb reverse`), and
+  configuring both to the same URL fails the build.
 * **TD-010** - workout history is not paginated. Real debt, invisible at present
   scale, and the M10 seams keep it a caller-side change.
 * **TD-002, TD-009, TD-012** - note only, each waiting on a trigger that has not
