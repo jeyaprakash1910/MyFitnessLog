@@ -5,8 +5,17 @@
 and from real data.
 
 > At the Version 1.0.0 release (22 July 2026) these were Flyway V1–V7 and Room v1–v5.
-> Since then Flyway V8 added the workout-session routine name, and Room v6–v7 came
-> from ADR-0018's editable history and that same routine-name column.
+> Since then:
+>
+> * **Room v6** added `workout_exercise_tombstone`, so removing an exercise from a
+>   session propagates to the backend (ADR-0017 Stage 2, TD-014).
+> * **Room v7** added `routineName` to `workout_session`, so history names a workout
+>   after the routine it was performed from (1.9.0).
+> * **Flyway V8** (`V8__Add_workoutsession_routine_name.sql`) is the backend half of
+>   that same column.
+>
+> ADR-0018's corrections needed no schema change on either side: they write to
+> `workout_set`, and set deletion already had its tombstone from Room v4.
 
 > **Updated for 1.1.0 (ADR-0012):** the physical PostgreSQL identifiers are now
 > unquoted `snake_case` — `workout_set`, `workout_exercise_id`, `set_number`,
@@ -498,10 +507,10 @@ These include:
 - WorkoutExercise
 - WorkoutSet
 
-Workout history is considered immutable once completed, with the narrow exception
-ADR-0018 defines from 1.6.0: set-level corrections (edit a set's values, add a
-performed set, delete an unperformed one) and, from 1.8.0, discarding the workout.
-The planning snapshot never changes, and a discarded workout accepts nothing at all.
+Workout history is considered immutable once completed, with the narrow exceptions
+ADR-0018 defines: editing a set's values from 1.6.0, adding a performed set or
+deleting an unperformed one from 1.7.0, and discarding the workout from 1.8.0. The
+planning snapshot never changes, and a discarded workout accepts nothing at all.
 
 ### Consequence: deleting a set while a workout is in progress
 

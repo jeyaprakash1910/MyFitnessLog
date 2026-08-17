@@ -38,7 +38,7 @@ This document describes the full Version 1 flow. Status of each screen today:
 | Manual (ad-hoc) workout | ✅ Implemented (start with no routine; add exercises via the picker) |
 | Rest Timer + Workout timer | ✅ Implemented (elapsed derived; rest countdown transient) |
 | History | ✅ Implemented (read-only list of completed workouts) |
-| Workout Details | ✅ Implemented (metadata, exercises, sets; since 1.6.0 also the ADR-0018 corrections — tap a set to fix weight/reps/RPE, add a performed set, delete an unperformed one — and since 1.8.0 "Discard Workout") |
+| Workout Details | ✅ Implemented (metadata, exercises, sets; plus the ADR-0018 corrections — tap a set to fix weight/reps/RPE since 1.6.0, add a performed set or delete an unperformed one since 1.7.0, and "Discard Workout" since 1.8.0) |
 | Settings | ✅ Implemented (About: installed version + on-demand update check, ADR-0016; "Previous Workout Values": Same Routine / Any Workout) |
 
 Notable flow specifics as built:
@@ -56,10 +56,11 @@ Notable flow specifics as built:
   IN_PROGRESS are hidden), newest first, each led by the routine's name recorded
   when the workout started; selecting one opens the Workout Details drill-down
   (metadata + snapshotted exercises and sets).
-* **History is no longer strictly read-only.** Since 1.6.0 Workout Details exposes
-  the narrow ADR-0018 corrections — edit a set's weight/reps/RPE, add a set that was
-  performed but never logged, delete one that was logged but not performed (behind a
-  confirmation) — and since 1.8.0 "Discard Workout", also behind a confirmation. It
+* **History is no longer strictly read-only.** Workout Details exposes the narrow
+  ADR-0018 corrections: editing a set's weight/reps/RPE since 1.6.0; adding a set that
+  was performed but never logged, or deleting one that was logged but not performed
+  (behind a confirmation), since 1.7.0; and "Discard Workout", also behind a
+  confirmation, since 1.8.0. It
   still exposes no reordering, no exercise add/remove, and no editing of the planning
   snapshot; a discarded workout accepts nothing at all.
 * The standalone exercise-library browse screen from earlier milestones is no

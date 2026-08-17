@@ -309,11 +309,12 @@ model is genuinely needed.
 13. Workout Snapshot Architecture (Milestone 6)
 
 Workout history is snapshot-based, and its **planning** snapshot is immutable — the
-defining rule of the app. Since 1.6.0 the *performed* values are narrowly correctable
-(ADR-0018): a set's weight, reps or RPE can be fixed, a performed-but-unlogged set
-added, a logged-but-unperformed set deleted, and since 1.8.0 a whole workout
-discarded. What stays locked is the plan — exercise name, order and targets — so a
-routine edited later never rewrites what was already done.
+defining rule of the app. The *performed* values became narrowly correctable in
+stages (ADR-0018): a set's weight, reps or RPE from **1.6.0**; adding a
+performed-but-unlogged set and deleting a logged-but-unperformed one from **1.7.0**;
+discarding a whole workout from **1.8.0**. What stays locked is the plan — exercise
+name, order and targets — so a routine edited later never rewrites what was already
+done.
 When a routine workout starts, each RoutineExercise is COPIED into a
 WorkoutExercise row carrying the exercise name and all planned targets. Completed
 workouts therefore never change when the routine is later edited, renamed,
