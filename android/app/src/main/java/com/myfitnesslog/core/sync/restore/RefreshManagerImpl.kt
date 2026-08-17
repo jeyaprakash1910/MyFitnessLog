@@ -83,6 +83,42 @@ class RefreshManagerImpl @Inject constructor(
             workoutSetDao.getPendingTombstones().isNotEmpty() ||
             workoutExerciseDao.getPendingTombstones().isNotEmpty()
 
+    /**
+     * Whether a set of deletions is the backend disappearing rather than the user
+     * deleting things.
+     *
+     * Absence from the backend's list is how this class learns about a deletion made
+     * on another device, and that inference is sound for *some* rows missing. It is
+     * not sound when **none** are listed. An endpoint returning an empty array is far
+     * more likely to mean the backend lost its data — a wiped database, a restored
+     * environment, a build pointed at the wrong one — than that the user deliberately
+     * deleted their entire training history. The two are indistinguishable in the
+     * response, so the tie is broken by consequence: refusing a real mass deletion
+     * costs the user one stale row per device until they delete it again, while
+     * performing a spurious one destroys the record this application exists to keep.
+     *
+     * Deliberately narrow. It triggers only on an empty remote list, so ordinary
+     * reconciliation — some rows deleted elsewhere, most still listed — is untouched.
+     * A user who really did delete everything on another device sees their rows
+     * persist here and can delete them again locally, which propagates normally.
+     *
+     * The same reasoning as the `connectedAndroidTest` device guard and the TD-018
+     * build guard: where a mistake is unrecoverable, make it structurally impossible
+     * rather than something to be careful about.
+     */
+    private fun wouldDeleteEverything(remoteIds: Set<UUID>, deletionCount: Int): Boolean =
+        remoteIds.isEmpty() && deletionCount > 0
+
+    private fun logWithheld(kind: String, count: Int) {
+        Log.w(
+            TAG,
+            "Refresh WITHHELD $count $kind deletion(s): the backend listed none at all. " +
+                "Treating that as 'the backend lost its data', not as 'the user deleted " +
+                "everything'. Local data is unchanged. If the backend really is empty on " +
+                "purpose, clear this app's data to restore from it deliberately.",
+        )
+    }
+
     private suspend fun apply(): RefreshOutcome {
         val refreshedAt = clock.instant()
         var routinesUpdated = 0
@@ -90,6 +126,7 @@ class RefreshManagerImpl @Inject constructor(
         var sessionsUpdated = 0
         var sessionsRemoved = 0
         var skipped = 0
+        var withheld = 0
 
         // Reference data first: routine and workout rows both hold a RESTRICT
         // foreign key to exercise, so an exercise added on another device has to
@@ -118,8 +155,13 @@ class RefreshManagerImpl @Inject constructor(
 
         // A routine the backend no longer lists was deleted elsewhere. Only
         // SYNCED rows are eligible: anything dirty is the outbox's business.
-        for (local in routineDao.getAllLive()) {
-            if (local.id !in remoteRoutineIds && local.syncStatus == SyncStatus.SYNCED) {
+        val routineDeletions = routineDao.getAllLive()
+            .filter { it.id !in remoteRoutineIds && it.syncStatus == SyncStatus.SYNCED }
+        if (wouldDeleteEverything(remoteRoutineIds, routineDeletions.size)) {
+            withheld += routineDeletions.size
+            logWithheld("routine", routineDeletions.size)
+        } else {
+            for (local in routineDeletions) {
                 routineDao.deleteById(local.id)
                 routinesRemoved++
             }
@@ -152,8 +194,13 @@ class RefreshManagerImpl @Inject constructor(
         // history endpoint by design, not because it was deleted, and treating
         // that absence as a removal would delete the workout the user is
         // currently performing.
-        for (local in workoutSessionDao.getAllCompleted()) {
-            if (local.id !in remoteSessionIds && local.syncStatus == SyncStatus.SYNCED) {
+        val sessionDeletions = workoutSessionDao.getAllCompleted()
+            .filter { it.id !in remoteSessionIds && it.syncStatus == SyncStatus.SYNCED }
+        if (wouldDeleteEverything(remoteSessionIds, sessionDeletions.size)) {
+            withheld += sessionDeletions.size
+            logWithheld("completed workout", sessionDeletions.size)
+        } else {
+            for (local in sessionDeletions) {
                 workoutSessionDao.deleteById(local.id)
                 sessionsRemoved++
             }
@@ -165,6 +212,7 @@ class RefreshManagerImpl @Inject constructor(
             sessionsUpdated = sessionsUpdated,
             sessionsRemoved = sessionsRemoved,
             skippedPendingLocal = skipped,
+            deletionsWithheld = withheld,
         )
         if (outcome.changedAnything) {
             Log.i(TAG, "Refresh applied: $outcome")

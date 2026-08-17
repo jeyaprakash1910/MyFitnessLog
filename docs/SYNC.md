@@ -158,7 +158,12 @@ The web application is read-only in Version 1.
 >   itself from the backend at launch, so a reinstall no longer loses history.
 > * **Stage 2 — Refresh (1.5.0).** The device reconciles after every sync pass, so a
 >   change made elsewhere reaches it. The backend wins for any row with no pending
->   local change; anything the outbox still owns is left alone.
+>   local change; anything the outbox still owns is left alone. A row the backend no
+>   longer lists is deleted locally — **unless the backend lists none of that kind at
+>   all**, which is refused and logged (since 2026-08-17). An empty list is far more
+>   often a wiped or wrong backend than a user deleting their entire history, the two
+>   are indistinguishable in the response, and only one of the two mistakes is
+>   recoverable.
 > * **Stage 3 — Edit (1.6.0+).** Specified in ADR-0018: a completed workout accepts
 >   set-level corrections while its planning snapshot stays locked.
 >
