@@ -50,6 +50,13 @@ sealed interface RefreshOutcome {
         val sessionsUpdated: Int,
         val sessionsRemoved: Int,
         val skippedPendingLocal: Int,
+        /**
+         * Deletions the backend implied but that were refused, because it listed
+         * **nothing** of that kind and an empty list reads as data loss rather than
+         * as intent. Non-zero means local data was deliberately left alone; see
+         * `RefreshManagerImpl.wouldDeleteEverything`.
+         */
+        val deletionsWithheld: Int = 0,
     ) : RefreshOutcome {
         val changedAnything: Boolean
             get() = routinesUpdated + routinesRemoved + sessionsUpdated + sessionsRemoved > 0

@@ -299,6 +299,56 @@ class RefreshManagerImplTest {
     }
 
     @Test
+    fun `a backend listing no routines at all deletes nothing`() = runTest {
+        // An empty list is indistinguishable in the response from "the user deleted
+        // everything", and far more likely to be a wiped or wrong backend. Deleting
+        // on that evidence destroys the record the app exists to keep.
+        val mine = localRoutine(name = "Months of training")
+        routineApi.routines = emptyList()
+
+        val outcome = refreshManager.refresh() as RefreshOutcome.Applied
+
+        assertNotNull("an empty backend must never delete local routines", database.routineDao().getById(mine))
+        assertEquals(0, outcome.routinesRemoved)
+        assertEquals(1, outcome.deletionsWithheld)
+    }
+
+    @Test
+    fun `a backend listing no completed workouts at all deletes nothing`() = runTest {
+        val mine = localSession(status = WorkoutStatus.COMPLETED)
+        sessionApi.sessions = emptyList()
+
+        val outcome = refreshManager.refresh() as RefreshOutcome.Applied
+
+        assertNotNull("an empty backend must never delete local history", database.workoutSessionDao().getById(mine))
+        assertEquals(0, outcome.sessionsRemoved)
+        assertEquals(1, outcome.deletionsWithheld)
+    }
+
+    @Test
+    fun `the guard is narrow - a partial list still reconciles deletions`() = runTest {
+        // The guard must not turn into "never delete anything". As long as the
+        // backend lists something, absence from that list is still evidence.
+        val stale = localRoutine(name = "Deleted elsewhere")
+
+        val outcome = refreshManager.refresh() as RefreshOutcome.Applied
+
+        assertNull(database.routineDao().getById(stale))
+        assertEquals(1, outcome.routinesRemoved)
+        assertEquals(0, outcome.deletionsWithheld)
+    }
+
+    @Test
+    fun `an empty backend with nothing local to delete is not reported as withheld`() = runTest {
+        routineApi.routines = emptyList()
+        sessionApi.sessions = emptyList()
+
+        val outcome = refreshManager.refresh() as RefreshOutcome.Applied
+
+        assertEquals(0, outcome.deletionsWithheld)
+    }
+
+    @Test
     fun `an unreachable backend leaves local data exactly as it was`() = runTest {
         val mine = localRoutine(name = "Mine")
         routineApi.failWith = IOException("offline")

@@ -254,10 +254,15 @@ highest-value thing available.
   third time, derive it from `version.properties` rather than asking a person to
   remember.
 * The backend currently holds test data by the owner's decision, and is intended to
-  be wiped once the feature set settles. Note that wiping it also clears the phone:
-  `RefreshManagerImpl` deletes local completed sessions that the backend no longer
-  lists, cascading to their exercises and sets. That is correct multi-device
-  behaviour, and surprising if unexpected.
+  be wiped once the feature set settles. Wiping it used to clear the phone too:
+  `RefreshManagerImpl` deletes local completed sessions and routines the backend no
+  longer lists, cascading to their exercises and sets. That is correct multi-device
+  behaviour for *some* rows missing, and catastrophic for *all* of them.
+  **Guarded since 2026-08-17:** a refresh that would delete every synced row of a
+  kind because the backend listed none at all is refused and logged, on the reasoning
+  that an empty list means data loss far more often than it means intent. Deleting
+  the test data through the app remains the safe route, since those deletions
+  propagate normally and need no guard.
 
 What the releases after V1 added, in order:
 
