@@ -1,12 +1,12 @@
-ADR-0002: Room is the Android Source of Truth
+# ADR-0002: Room is the Android Source of Truth
 
-Status
+## Status
 
 Accepted
 
 ⸻
 
-Context
+## Context
 
 MyFitnessLog follows an offline-first architecture.
 
@@ -26,7 +26,7 @@ A clear data ownership model is required to ensure predictable behavior and simp
 
 ⸻
 
-Decision
+## Decision
 
 The Room database is the single source of truth on the Android device.
 
@@ -40,6 +40,7 @@ The backend updates do not modify the UI directly. Instead, successful synchroni
 
 The data flow is therefore:
 
+```text
 User Action
       │
       ▼
@@ -65,12 +66,13 @@ Spring Boot
       │
       ▼
 PostgreSQL
+```
 
 ⸻
 
-Consequences
+## Consequences
 
-Benefits
+### Benefits
 
 * Fully functional offline experience.
 * Immediate UI updates without waiting for network requests.
@@ -93,7 +95,7 @@ These trade-offs are acceptable because uninterrupted workout logging is a highe
 
 ⸻
 
-Alternatives Considered
+## Alternatives Considered
 
 Network-First Architecture
 
@@ -120,7 +122,7 @@ Rejected because:
 
 ⸻
 
-Implementation Guidelines
+## Implementation Guidelines
 
 * The UI must never call Retrofit directly.
 * ViewModels communicate only with Repositories.
@@ -132,7 +134,7 @@ Implementation Guidelines
 
 ⸻
 
-Related Documents
+## Related Documents
 
 * PRD.md
 * TECH_STACK.md
@@ -143,6 +145,6 @@ Related Documents
 
 ⸻
 
-Related ADRs
+## Related ADRs
 
 * ADR-0001: Workout History is the Source of Truth

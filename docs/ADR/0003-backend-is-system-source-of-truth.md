@@ -1,12 +1,12 @@
-ADR-0003: Backend is the System Source of Truth
+# ADR-0003: Backend is the System Source of Truth
 
-Status
+## Status
 
 Accepted
 
 ⸻
 
-Context
+## Context
 
 MyFitnessLog consists of three major components:
 
@@ -22,7 +22,7 @@ A clear ownership model is required to define which component ultimately owns sy
 
 ⸻
 
-Decision
+## Decision
 
 The backend is the system source of truth.
 
@@ -38,6 +38,7 @@ Once synchronization completes successfully:
 
 The ownership model is therefore:
 
+```text
 Android (Room)
        │
        │ Local Changes
@@ -52,12 +53,13 @@ PostgreSQL
        │
        ▼
 System Source of Truth
+```
 
 ⸻
 
-Consequences
+## Consequences
 
-Benefits
+### Benefits
 
 * Clear ownership of synchronized data.
 * Supports future web application development.
@@ -78,7 +80,7 @@ These trade-offs are acceptable because uninterrupted offline usage has higher p
 
 ⸻
 
-Alternatives Considered
+## Alternatives Considered
 
 Android as Permanent Source of Truth
 
@@ -93,7 +95,7 @@ Rejected because:
 
 ⸻
 
-Dual Source of Truth
+### Dual Source of Truth
 
 Allow both Android and backend to independently own data.
 
@@ -106,7 +108,7 @@ Rejected because:
 
 ⸻
 
-Implementation Guidelines
+## Implementation Guidelines
 
 * Android always writes to Room first.
 * Synchronization sends pending changes to the backend.
@@ -117,7 +119,7 @@ Implementation Guidelines
 
 ⸻
 
-Related Documents
+## Related Documents
 
 * PRD.md
 * TECH_STACK.md
@@ -128,7 +130,7 @@ Related Documents
 
 ⸻
 
-Related ADRs
+## Related ADRs
 
 * ADR-0001: Workout History is the Source of Truth
 * ADR-0002: Room is the Android Source of Truth

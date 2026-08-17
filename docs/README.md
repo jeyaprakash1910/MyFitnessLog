@@ -19,7 +19,7 @@ build instructions, start with the [root README](../README.md).
 | [ANDROID_ARCHITECTURE.md](ANDROID_ARCHITECTURE.md) | The Android client's architecture, conventions, and rationale. |
 | [ANDROID_FLOW.md](ANDROID_FLOW.md) | Screen-by-screen navigation flow and UI responsibilities. |
 | [architecture/WORKOUT_LOGGING.md](architecture/WORKOUT_LOGGING.md) | The workout-logging domain — session lifecycle, set state machine, projections, invariants. |
-| [SYNC.md](SYNC.md) | The offline-first, one-way synchronization strategy. |
+| [SYNC.md](SYNC.md) | The offline-first synchronization strategy — upload since 1.0.0, and convergence back from the backend since 1.4.0/1.5.0 (ADR-0017). |
 
 ## API
 
@@ -43,6 +43,15 @@ build instructions, start with the [root README](../README.md).
 | [TECH_DEBT.md](TECH_DEBT.md) | The accepted technical-debt register. |
 | [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) | The authoritative procedure for cutting a release. |
 | [../CONTRIBUTING.md](../CONTRIBUTING.md) | How to contribute — philosophy, workflow, and expectations. |
+
+## Operations
+
+| Document | Description |
+|---|---|
+| [development/DEPLOYMENT.md](development/DEPLOYMENT.md) | Deploying the backend to Render against Supabase, and verifying the deploy. |
+| [development/SECRETS.md](development/SECRETS.md) | Which secrets exist, where each one lives, and how to rotate them. |
+| [development/BACKUP.md](development/BACKUP.md) | The scheduled database backup and its weekly restore test. |
+| [development/CLOUD_CUTOVER_PLAN.md](development/CLOUD_CUTOVER_PLAN.md) | The completed plan for moving from a LAN backend to hosted infrastructure. |
 
 ## Architecture Decision Records
 
@@ -73,6 +82,8 @@ build instructions, start with the [root README](../README.md).
 |---|---|
 | [../CHANGELOG.md](../CHANGELOG.md) | Notable changes per version (Keep a Changelog). |
 | [V1_RELEASE_NOTES.md](V1_RELEASE_NOTES.md) | Version 1.0.0 release notes — capabilities and scope. |
+| [V1_6_RELEASE_NOTES.md](V1_6_RELEASE_NOTES.md) | Version 1.6.0 release notes — correcting a completed workout (ADR-0018). |
+| [V1_6_1_RELEASE_NOTES.md](V1_6_1_RELEASE_NOTES.md) | Version 1.6.1 release notes. |
 
 ## Repository root
 

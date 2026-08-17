@@ -1,12 +1,12 @@
-ADR-0004: Snapshot-Based Workout History
+# ADR-0004: Snapshot-Based Workout History
 
-Status
+## Status
 
 Accepted
 
 ⸻
 
-Context
+## Context
 
 Workout routines are planning templates.
 
@@ -27,7 +27,7 @@ Historical workout records must remain accurate regardless of future template ch
 
 ⸻
 
-Decision
+## Decision
 
 Workout history is stored using historical snapshots.
 
@@ -40,6 +40,7 @@ When a workout begins:
 
 The resulting data flow is:
 
+```text
 Routine
       │
       ▼
@@ -51,6 +52,7 @@ WorkoutExercise
       │
       ▼
 WorkoutSet
+```
 
 WorkoutExercise intentionally duplicates selected planning fields from RoutineExercise.
 
@@ -69,9 +71,9 @@ Future modifications to routines or exercises do not alter completed workouts.
 
 ⸻
 
-Consequences
+## Consequences
 
-Benefits
+### Benefits
 
 * Historical workout records remain accurate.
 * Routine templates can evolve without affecting past workouts.
@@ -91,7 +93,7 @@ The storage overhead is small compared to the benefits of preserving historical 
 
 ⸻
 
-Alternatives Considered
+## Alternatives Considered
 
 Reference RoutineExercise Directly
 
@@ -105,7 +107,7 @@ Rejected because:
 
 ⸻
 
-Version Every Routine
+### Version Every Routine
 
 Maintain versioned routine templates.
 
@@ -118,7 +120,7 @@ Rejected because:
 
 ⸻
 
-Implementation Guidelines
+## Implementation Guidelines
 
 * WorkoutExercise is created when a workout starts.
 * Snapshot fields must never be updated automatically.
@@ -163,7 +165,7 @@ from the suggestions.
 
 ⸻
 
-Related Documents
+## Related Documents
 
 * ARCHITECTURE.md
 * DATABASE.md
@@ -172,7 +174,7 @@ Related Documents
 
 ⸻
 
-Related ADRs
+## Related ADRs
 
 * ADR-0001: Workout History is the Source of Truth
 * ADR-0002: Room is the Android Source of Truth

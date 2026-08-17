@@ -1,8 +1,12 @@
 # Database Design
 
-**Status:** As released in Version 1.0.0 (22 July 2026) — Flyway V1–V7 on
-PostgreSQL, Room v1–v5 on Android. Both migration chains are verified from an
-empty database and from real data.
+**Status:** Current as of 1.10.0 (17 August 2026) — **Flyway V1–V8** on PostgreSQL,
+**Room v1–v7** on Android. Both migration chains are verified from an empty database
+and from real data.
+
+> At the Version 1.0.0 release (22 July 2026) these were Flyway V1–V7 and Room v1–v5.
+> Since then Flyway V8 added the workout-session routine name, and Room v6–v7 came
+> from ADR-0018's editable history and that same routine-name column.
 
 > **Updated for 1.1.0 (ADR-0012):** the physical PostgreSQL identifiers are now
 > unquoted `snake_case` — `workout_set`, `workout_exercise_id`, `set_number`,
@@ -494,7 +498,10 @@ These include:
 - WorkoutExercise
 - WorkoutSet
 
-Workout history is considered immutable once completed.
+Workout history is considered immutable once completed, with the narrow exception
+ADR-0018 defines from 1.6.0: set-level corrections (edit a set's values, add a
+performed set, delete an unperformed one) and, from 1.8.0, discarding the workout.
+The planning snapshot never changes, and a discarded workout accepts nothing at all.
 
 ### Consequence: deleting a set while a workout is in progress
 
@@ -1342,7 +1349,9 @@ This ensures completed workouts remain historically accurate even if workout tem
 
 Workout history records what actually happened during a workout.
 
-Unlike workout templates, workout history is immutable.
+Unlike workout templates, workout history is immutable with respect to the plan it
+was performed against: see "Workout History is Immutable" below for the narrow
+corrections ADR-0018 permits.
 
 Completed workouts represent historical snapshots and must never be modified by changes made to workout templates.
 

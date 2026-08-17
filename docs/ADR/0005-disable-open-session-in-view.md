@@ -1,12 +1,12 @@
-ADR-0005: Disable Open Session In View
+# ADR-0005: Disable Open Session In View
 
-Status
+## Status
 
 Accepted
 
 ⸻
 
-Context
+## Context
 
 Spring Boot enables the Open Session In View (OSIV) pattern by default. With OSIV enabled, the Hibernate persistence session remains open for the entire duration of an HTTP request, including view/response rendering.
 
@@ -24,7 +24,7 @@ OSIV weakens these boundaries. Because the persistence session stays open beyond
 
 ⸻
 
-Decision
+## Decision
 
 Open Session In View is disabled.
 
@@ -38,9 +38,9 @@ With OSIV disabled, the persistence session is bound to the Service-layer transa
 
 ⸻
 
-Consequences
+## Consequences
 
-Benefits
+### Benefits
 
 * Enforces the documented layered architecture.
 * Prevents accidental database access outside the Repository and Service layers.
@@ -59,7 +59,7 @@ These trade-offs are acceptable and desirable, because they reinforce the archit
 
 ⸻
 
-Alternatives Considered
+## Alternatives Considered
 
 Leave OSIV Enabled (Default)
 
@@ -71,7 +71,7 @@ Rejected because:
 
 ⸻
 
-Implementation Guidelines
+## Implementation Guidelines
 
 * Services must fully prepare the data required by the response before returning.
 * Entities must not be relied upon for lazy-loading after leaving the Service layer.
@@ -79,7 +79,7 @@ Implementation Guidelines
 
 ⸻
 
-Related Documents
+## Related Documents
 
 * ARCHITECTURE.md
 * TECH_STACK.md
@@ -87,6 +87,6 @@ Related Documents
 
 ⸻
 
-Related ADRs
+## Related ADRs
 
 * ADR-0003: Backend is the System Source of Truth

@@ -159,8 +159,9 @@ required — the release network-security config auto-drops its cleartext exempt
 *Verification performed (2026-07-30) and its scope:* the debug app was built, installed,
 and launched on an emulator against the live backend, and the sync path was exercised
 through the app's **production Retrofit/OkHttp stack** (its real API interfaces, DTOs,
-and the live URL + API key). Confirmed: the exercise catalog (313 exercises, 12
-categories) downloads, and a full create→complete workout round-trip (session → exercise
+and the live URL + API key). Confirmed: the exercise catalog (313 exercises, 14
+categories — this record said 12, which was wrong on the day: V2 seeds 8 and V6 adds
+6, and the 313 exercises confirm V7 had run) downloads, and a full create→complete workout round-trip (session → exercise
 → set → complete) persisted to Supabase as a single `COMPLETED` session with no
 duplicates (the test row was then removed). **Scope limit:** the full Compose *UI*
 workflow (tapping through the workout screens) was **not** driven end-to-end because the

@@ -120,9 +120,13 @@ VITE_LIVE_TEST_BASE_URL=http://localhost:8081/api/v1 npm run test
 > `--rerun-tasks` matters: Gradle does not treat environment variables as task
 > inputs, so changing `MFL_LIVE_TEST_BASE_URL` alone leaves the test task
 > UP-TO-DATE and it silently does not re-run.
-- [ ] Migrations verified: Room v1→v5 and Flyway V1→V7, from an **empty**
+- [ ] Migrations verified: the **full** Room and Flyway chains, from an **empty**
       database and from real data. A new install exercises the empty path, and
-      it is the one least often run.
+      it is the one least often run. Read the current ends off the code rather
+      than off this line — `ls android/app/schemas/*/` and
+      `ls backend/src/main/resources/db/migration/` — because a hardcoded range
+      here goes stale on the next schema change and did (it said Room v5 /
+      Flyway V7 through four releases that had moved past both).
 - [ ] No test weakened or skipped to make a release-build difference disappear.
       If a test breaks under the release variant, that is the release process
       doing its job.
@@ -303,7 +307,11 @@ update check.
       version in prose, so it goes stale on every release by construction: it said
       1.5.0 while four releases had shipped past it, noticed only on 2026-08-13.
       §2 samples documentation claims generally; this one is guaranteed wrong
-      unless it is changed, so it gets its own line.
+      unless it is changed, so it gets its own line. **It happened again at
+      1.10.0** — the banner still read 1.9.0 three days later, with this checklist
+      line already in place. A checklist item is not a control; if it rots a third
+      time, derive the banner from `version.properties` at build or CI time instead
+      of asking a person to remember.
 - [ ] **`CHANGELOG.md` has a section for this version.** Move what is under
       `[Unreleased]` into a new `## [X.Y.Z] - YYYY-MM-DD` heading, and add the
       compare link at the bottom of the file. This step did not exist until
