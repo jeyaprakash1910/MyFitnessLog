@@ -336,12 +336,22 @@ class WorkoutViewModelTest {
 
         // Uncheck (undo) → reverts to a planned row that keeps the RPE in memory.
         vm.onToggleComplete(ex.id, completedKey, "", "")
-        val reverted = vm.awaitActive { it.exercises.first().rows.none { r -> r.isCompleted } }
-            .exercises.first().rows.first()
+        // Wait for the settled state, not the transient one. The undo deletes the
+        // set and restores the draft in that order, and the delete alone already
+        // satisfies "nothing is completed" - at which point the RPE this test is
+        // about has not been restored yet. Waiting on the RPE itself is what makes
+        // the wait describe the assertion. TD-019.
+        val reverted = vm.awaitActive { state ->
+            val rows = state.exercises.first().rows
+            rows.none { r -> r.isCompleted } && rows.first().rpe != null
+        }.exercises.first().rows.first()
         assertEquals(BigDecimal("8.5"), reverted.rpe)
 
         // Re-check via the checkbox → the RPE must be persisted, not dropped.
-        vm.onToggleComplete(ex.id, reverted.rowKey, "80", "8")
+        // awaitWork because the last assertion reads the database, which is a side
+        // effect rather than state: the undo hard-deleted the previous set, so a
+        // read taken before this insert commits sees an empty list.
+        vm.awaitWork { vm.onToggleComplete(ex.id, reverted.rowKey, "80", "8") }
 
         val recompleted = vm.awaitActive { it.exercises.first().rows.any { r -> r.isCompleted } }
             .exercises.first().rows.first { it.isCompleted }

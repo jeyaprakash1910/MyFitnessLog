@@ -2,7 +2,7 @@
 
 Project: MyFitnessLog
 Version: 1.6
-Last Updated: August 17, 2026 (TD-019 raised: the ViewModel flake reappeared on CI)
+Last Updated: August 18, 2026 (TD-019 resolved: the waits now name what they assert)
 
 This document records known, accepted technical debt: deliberate limitations that are not defects in the current milestone but must be addressed in a later milestone. Each item states the observation, why it is currently acceptable, the recommended future implementation, the documentation that must change first, and when it is scheduled.
 
@@ -37,7 +37,7 @@ This register holds debt that outlives a single task. Short-lived working items 
 | TD-016 | Backend suite failed in the working copy, passed elsewhere | ✅ Resolved 2026-08-07 (VS Code Java autobuild overwrote Maven's output) | - |
 | TD-017 | ViewModel tests sampled async writes instead of waiting | ✅ Resolved 2026-08-13 (`awaitWork`; found a real ADR-0018 regression) | - |
 | TD-018 | The debug build points at the production backend | ✅ Resolved 2026-08-17 (debug/release resolve separately; equal URLs fail the build) | - |
-| TD-019 | ViewModel tests flaked again on CI, green on re-run | Open — evidence recorded, cause not found | - |
+| TD-019 | ViewModel tests flaked again on CI, green on re-run | ✅ Resolved 2026-08-18 (four assertions waited on a proxy predicate, not the asserted property) | - |
 
 ---
 
@@ -139,8 +139,8 @@ that caused them.
 
 ## TD-019 - The ViewModel tests flaked again on CI
 
-Status: **Open.** Evidence recorded; cause not investigated. Not a regression from
-the change that surfaced it.
+Status: **Resolved 2026-08-18.** Four assertions waited on a proxy predicate instead
+of the property they asserted on. Test-side only; no production defect.
 
 Identified: 2026-08-17, on PR #38 (the refresh guard)
 
@@ -176,12 +176,94 @@ The failing test has the familiar shape: `onCommitRow` immediately followed by
 `onRpeSelected`, then an `awaitActive` predicate. That is a write, a second write
 that depends on the first, and a suspension that assumes both landed.
 
-### Recommended next step
+> That last paragraph was the guess made when this entry was raised, and it was
+> **wrong** — kept here because it is a fair record of how the entry read before the
+> work, and because being wrong about it costs nothing once the cause is known below.
+> That pair is the one place in this ViewModel already hardened against the problem:
+> `currentInput` reads weight and reps back out of `drafts` rather than `uiState`
+> precisely so `onRpeSelected` cannot race `onCommitRow`. It was fixed under TD-015.
+> The real cause was one step further on, in the undo path, and in three assertions
+> in the other class that have nothing to do with either call.
 
-Reproduce before theorising, which is what eventually cracked TD-015. Run the two
-classes under CI-like conditions — constrained CPU, `--rerun-tasks`, the full suite
-rather than the class alone, since ordering and shared dispatchers matter — rather
-than in isolation on a fast machine, where they pass.
+### The cause
+
+One defect, in four assertions, in two classes: **each waited on a predicate that
+was not the property it went on to assert.** A predicate that a transient
+intermediate state already satisfies is not a wait at all, and the window it leaves
+open is exactly the CPU-scheduling window a loaded CI runner opens and a fast
+developer machine closes.
+
+**`WorkoutViewModelTest.recompletingAnUndoneRowViaTheCheckboxKeepsItsRpe`.** Undo is
+dispatched as delete-then-restore, in that order (`WorkoutViewModel.dispatch`,
+`SetMutation.DeleteWithTombstone`):
+
+```kotlin
+repository.deleteSet(mutation.id)          // state emits "nothing is completed" here
+if (restoreInput != null) { drafts.update { ... } }   // the RPE is restored after
+```
+
+`deleteSet` is a **hard** delete, so the set leaves `observeSets` the moment it
+commits. The test waited for `rows.none { it.isCompleted }`, which that first
+emission already satisfies — while the draft carrying the RPE does not yet exist.
+`rows.first().rpe` was then `null`. The production ordering is correct and
+deliberate; only the predicate was wrong.
+
+The same test had a second, independent race: its last assertion read the
+**database** straight after awaiting *state*. Since the undo had hard-deleted the
+previous set, a read taken before the re-completing insert committed would see an
+empty list and throw `NoSuchElementException` from `.first()`. That is the rule in
+`RoutineTestSupport.kt` — state with `awaitFirst`, side effects with `awaitWork` —
+being broken.
+
+**`WorkoutDetailViewModelTest`, three sites** (`discardingRemovesTheWorkoutFromHistory`,
+`discardAsksBeforeItRemovesAnything`, `backingOutOfDiscardKeepsTheWorkout`). All
+asserted `confirmingDiscard` through a bare `awaitSuccess()`. `awaitFirst` is
+`first(predicate)` over a `StateFlow`, so with no predicate it returns the *current*
+value — still the state from before the action. `confirmingDiscard` is a separate
+`MutableStateFlow` combined into `uiState`, so it only becomes visible when the
+combine recomputes.
+
+Worth naming, because it is the trap: `onDiscardRequested` sets the flag and
+launches nothing, so wrapping it in `awaitWork` — which one of these tests did —
+joins **zero** coroutines and returns immediately. It looks careful and waits for
+nothing. The third site passed only by luck: the stale value it raced happened to be
+the one it expected.
+
+This is the same bug the `awaitCorrection` helper in that file was already written to
+document, reappearing in the sibling flag nobody applied the lesson to.
+
+### How it was reproduced
+
+The recommended route — CI-like contention — was tried first and **did not
+reproduce**: 10 full-suite runs at load average 42 all passed, consistent with the
+eight clean runs recorded above. A statistical repro was the wrong tool.
+
+What worked was making the ordering deterministic. Inserting `delay(50)` between the
+delete and the restore is decisive because `Dispatchers.Main` is an
+`UnconfinedTestDispatcher`, whose virtual clock nothing advances — so the delay
+suspends indefinitely and pins the state at the transient step. That splits the two
+kinds of test apart cleanly:
+
+* a test that waits for the **settled** state hangs → `TimeoutCancellationException`
+* a test that accepts the **transient** state runs on and asserts against it
+
+Before the fix, `recompleting…` gave `expected:<8.5> but was:<null>` at line 341.
+After it, the same scaffold produced a timeout instead — the same response as
+`undoingAMiddleSetKeepsItInPlaceRatherThanMovingItLast`, which was already written
+correctly and served as the control. The scaffold was then removed; no production
+file changed.
+
+Keep this technique. It converts a probabilistic flake into a deterministic one in a
+single line, and it is reusable for the whole family.
+
+### The fix
+
+Every wait now names the property its assertion is about: the restored RPE rather
+than "nothing is completed", and `confirmingDiscard == expected` rather than the
+first state that happens to be at hand. The database assertion is sequenced with
+`awaitWork`. A documented `awaitConfirmingDiscard` helper sits beside
+`awaitCorrection` so the next flag added to that combine has an obvious thing to
+copy.
 
 The retry policy in `app/build.gradle.kts` reports a retried pass as **FLAKY** rather
 than green precisely so this stays countable. Check that report before concluding

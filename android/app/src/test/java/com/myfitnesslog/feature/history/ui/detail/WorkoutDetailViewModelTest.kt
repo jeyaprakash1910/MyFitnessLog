@@ -190,6 +190,23 @@ class WorkoutDetailViewModelTest {
     private suspend fun WorkoutDetailViewModel.awaitNoCorrection() =
         awaitSuccess { it.correction == null }
 
+    /**
+     * Awaits the discard confirmation reaching [expected], for the same reason as
+     * [awaitCorrection] - and it is the same bug, found again by TD-019.
+     *
+     * `confirmingDiscard` is a separate [kotlinx.coroutines.flow.MutableStateFlow]
+     * combined into `uiState`, and `onDiscardRequested` sets it and launches
+     * nothing. So neither of the two obvious guards works: a bare `awaitSuccess()`
+     * returns the *current* value, which is still the state from before the call,
+     * and wrapping the call in `awaitWork` joins zero coroutines and returns
+     * immediately, which looks careful and waits for nothing at all.
+     *
+     * Only the combine recomputing makes the flag visible, so the wait has to be
+     * for the flag.
+     */
+    private suspend fun WorkoutDetailViewModel.awaitConfirmingDiscard(expected: Boolean) =
+        awaitSuccess { it.confirmingDiscard == expected }
+
     private fun WorkoutDetailUiState.Success.set(setId: UUID) =
         exercises.flatMap { it.sets }.first { it.id == setId }
 
@@ -494,7 +511,7 @@ class WorkoutDetailViewModelTest {
         vm.awaitSuccess()
 
         vm.onDiscardRequested()
-        assertEquals(true, vm.awaitSuccess().confirmingDiscard)
+        assertEquals(true, vm.awaitConfirmingDiscard(true).confirmingDiscard)
         vm.awaitWork { vm.onDiscardConfirmed() }
 
         // The history projection stops resolving it, which is what "removed from
@@ -546,9 +563,9 @@ class WorkoutDetailViewModelTest {
         val vm = viewModel(sessionId)
         vm.awaitSuccess()
 
-        vm.awaitWork { vm.onDiscardRequested() }
+        vm.onDiscardRequested()
 
-        assertEquals(true, vm.awaitSuccess().confirmingDiscard)
+        assertEquals(true, vm.awaitConfirmingDiscard(true).confirmingDiscard)
         assertEquals(WorkoutStatus.COMPLETED, database.workoutSessionDao().getById(sessionId)!!.status)
     }
 
@@ -559,9 +576,10 @@ class WorkoutDetailViewModelTest {
         vm.awaitSuccess()
 
         vm.onDiscardRequested()
-        vm.awaitWork { vm.onDiscardCancelled() }
+        vm.awaitConfirmingDiscard(true)
+        vm.onDiscardCancelled()
 
-        assertEquals(false, vm.awaitSuccess().confirmingDiscard)
+        assertEquals(false, vm.awaitConfirmingDiscard(false).confirmingDiscard)
         assertEquals(WorkoutStatus.COMPLETED, database.workoutSessionDao().getById(sessionId)!!.status)
     }
 
