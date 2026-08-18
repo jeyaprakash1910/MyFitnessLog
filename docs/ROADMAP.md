@@ -3,7 +3,7 @@ Project Roadmap
 Project: MyFitnessLog
 Version: 1.0
 Status: Approved
-Last Updated: August 17, 2026 (TD-018 resolved; version-numbering ambiguity removed)
+Last Updated: August 18, 2026 (TD-019 raised and resolved; the open decision is unchanged)
 
 ⸻
 
@@ -196,11 +196,18 @@ planned.
 
 ⸻
 
-3a. Open work, as of 17 August 2026
+3a. Open work, as of 18 August 2026
 
 Everything with an owner is closed, which is why this section exists: the project
 has no agreed next objective, and that is now the thing holding it up rather than
 any piece of code.
+
+That sentence has been true on every date this section has carried except the two
+days TD-019 was open, and it is worth saying why it went stale then. The date stamp
+above is the only thing that tells a reader whether "everything is closed" still
+holds; a resolved item that never reaches this section leaves the claim looking
+authoritative and unverifiable at the same time. So debt is now recorded here when
+it is *raised*, not only when it is resolved, even if it closes days later.
 
 **Version numbering means exactly one thing.** V1 is released and currently at
 **1.10.0**. The next version is **Version 2 — authentication and multi-user** (§18);
@@ -232,6 +239,15 @@ highest-value thing available.
 
 **Carried debt, all in TECH_DEBT.md.**
 
+* **TD-019** - ✅ raised 17 Aug, resolved 18 Aug 2026. The ViewModel tests flaked on
+  CI for the third time. Four assertions across two classes waited on a predicate
+  that was not the property they went on to assert, so a transient intermediate
+  state satisfied the wait and the test read the state before the one it was about.
+  Test-only; no production defect. Two things there are worth keeping: the
+  recommended reproduction route - CI-like contention - **did not** reproduce it
+  across 22 full-suite runs, and what did was a one-line `delay` exploiting the fact
+  that `UnconfinedTestDispatcher`'s virtual clock never advances, which turns the
+  race into a deterministic hang.
 * **TD-018** - ✅ resolved 17 Aug 2026. The debug build pointed at production because
   a single `apiBaseUrl` served both variants and release requires the production URL,
   so debug inherited it. Debug and release now resolve independently, debug defaults
