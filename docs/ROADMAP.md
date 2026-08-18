@@ -3,7 +3,7 @@ Project Roadmap
 Project: MyFitnessLog
 Version: 1.0
 Status: Approved
-Last Updated: August 18, 2026 (TD-019 raised and resolved; production reset to seed data only)
+Last Updated: August 18, 2026 (TD-019 resolved; TD-020 raised; production reset to seed data only)
 
 ⸻
 
@@ -260,6 +260,12 @@ highest-value thing available.
   so debug inherited it. Debug and release now resolve independently, debug defaults
   to a local backend reachable from an emulator and a phone alike (`adb reverse`), and
   configuring both to the same URL fails the build.
+* **TD-020** - raised 18 Aug 2026, open. The `backups` branch grows without bound:
+  `KEEP` prunes the working tree but git history keeps every dump forever, and
+  gzipped dumps cannot be delta-compressed against each other. Measured projection is
+  ~3.8 GB by year ten against a ~5 GB ceiling - so the scheme's life is about the same
+  as the ten-year promise `BACKUP.md` opens with. Nothing to do yet at 1.1 MB; add a
+  size tripwire first, and switch to uncompressed dumps when it fires.
 * **TD-010** - workout history is not paginated. Real debt, invisible at present
   scale, and the M10 seams keep it a caller-side change.
 * **TD-002, TD-009, TD-012** - note only, each waiting on a trigger that has not

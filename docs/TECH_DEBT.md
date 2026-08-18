@@ -2,7 +2,7 @@
 
 Project: MyFitnessLog
 Version: 1.6
-Last Updated: August 18, 2026 (TD-019 resolved: the waits now name what they assert)
+Last Updated: August 18, 2026 (TD-019 resolved; TD-020 raised: the backups branch grows without bound)
 
 This document records known, accepted technical debt: deliberate limitations that are not defects in the current milestone but must be addressed in a later milestone. Each item states the observation, why it is currently acceptable, the recommended future implementation, the documentation that must change first, and when it is scheduled.
 
@@ -38,6 +38,7 @@ This register holds debt that outlives a single task. Short-lived working items 
 | TD-017 | ViewModel tests sampled async writes instead of waiting | ✅ Resolved 2026-08-13 (`awaitWork`; found a real ADR-0018 regression) | - |
 | TD-018 | The debug build points at the production backend | ✅ Resolved 2026-08-17 (debug/release resolve separately; equal URLs fail the build) | - |
 | TD-019 | ViewModel tests flaked again on CI, green on re-run | ✅ Resolved 2026-08-18 (four assertions waited on a proxy predicate, not the asserted property) | - |
+| TD-020 | The backups branch grows without bound (~3.8 GB by year 10) | Open — measured, not urgent | - |
 
 ---
 
@@ -134,6 +135,92 @@ now ruled out properly, against a deterministic reproducer.
 that long deliberately, because this failure was intermittent enough to mislead
 four investigations and a quick deletion would have been the same overconfidence
 that caused them.
+
+---
+
+## TD-020 - The backups branch grows without bound
+
+Status: **Open — measured, not urgent.** Nothing to do until the tripwire below fires.
+
+Identified: 2026-08-18, while answering "how much space do 60 daily backups take?"
+
+### Observation
+
+The premise of the question was wrong in both directions, which is why this is worth
+writing down rather than leaving as a vague worry.
+
+**It is not capped at 60.** `backup.yml` keeps the 60 newest dumps in the branch's
+working tree, but pruning a file from a tree does not reclaim anything: every blob
+ever committed stays in history. The real total is *every dump ever taken*, forever.
+
+**But a dump is 53.5 KB, so this is slow.** Measured from the 2026-08-18 dump —
+296,137 bytes uncompressed, 53,595 gzipped, a 5.53:1 ratio:
+
+| Table | Bytes/row |
+|---|---|
+| `workout_set` | 167 |
+| `workout_exercise` | 205 |
+| `workout_session` | 237 |
+| `exercise` (seeded, static) | 253 |
+
+A realistic workout — one session, five exercises, twenty sets — is ~4.6 KB, so at
+five sessions a week the database grows ~1.2 MB/year. Projected, at 365 commits a
+year:
+
+| End of year | Dump size | That year costs | Repo total |
+|---|---|---|---|
+| 1 | 0.23 MB | 44 MB | 0.04 GB |
+| 5 | 1.07 MB | 353 MB | 0.97 GB |
+| 10 | 2.13 MB | 738 MB | **3.82 GB** |
+
+Against GitHub's ~5 GB practical repository ceiling, **the scheme's useful life is
+about ten years — the same horizon this document's sibling `BACKUP.md` opens by
+promising.** Comfortable for years, tight exactly at the point it matters.
+
+The compounding factor is that dumps are committed **gzipped**. Git cannot delta
+two gzip streams, so every night costs a full copy even though ~80% of the content
+is the static 313-exercise seed library, byte-identical to yesterday.
+
+### Why it is currently acceptable
+
+The whole branch is **1.1 MB** across 20 commits. There is no problem to solve, and
+the change would modify a working backup system during the week the first real
+training history starts being recorded. Breaking backups to save megabytes not
+needed until the 2030s is the wrong trade.
+
+Note also that the exposure is smaller than it looks: the phone holds a complete
+second copy, and `RefreshManagerImpl`'s empty-backend guard actively refuses to
+discard it, so the dumps are the second line of defence rather than the only one.
+
+### Recommended future implementation
+
+In order of what to reach for:
+
+1. **A tripwire, first and cheapest.** Fail `backup.yml` when the `backups` branch
+   exceeds ~500 MB. This converts a problem nobody will remember into a red check on
+   the day it starts to matter, and cannot break the backup itself. Roughly 20
+   minutes of work. **This is the only item worth doing before the tripwire fires.**
+2. **Commit dumps uncompressed** (`.sql`, not `.sql.gz`) so git can delta-compress
+   near-identical nightly dumps. This flattens the growth curve rather than merely
+   observing it, and the 100 MB per-file limit is not a concern (a year-10 dump is
+   ~12 MB uncompressed). Touches `backup.yml`, the restore procedure in `BACKUP.md`,
+   and `backup-restore-test.yml`, which currently expects gzip. The branch would hold
+   both formats for a time; old `.gz` dumps stay restorable. Verify by triggering the
+   restore test by hand, not by reasoning about it.
+3. **Do not rewrite history to prune old dumps.** Technically easy, but it destroys
+   old restore points permanently in exchange for space that item 2 reclaims without
+   losing anything.
+
+### Documentation that must change first
+
+`docs/development/BACKUP.md` — the storage description, the restore procedure's
+`gunzip` step, and the "Future improvements" list, whose current claim that history
+"won't" grow large is the specific belief this entry corrects.
+
+### When
+
+Item 1 whenever convenient. Item 2 when the tripwire fires, or sooner if the branch
+is being touched for another reason. Neither blocks Version 2.
 
 ---
 

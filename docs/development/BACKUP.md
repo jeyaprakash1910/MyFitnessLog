@@ -205,8 +205,14 @@ was last exercised by hand on 2026-07-29 and again on 2026-08-10 while cutting
 
 ## Future improvements (not needed now)
 
-- Bump `KEEP` or add weekly/monthly tiers if history ever grows large (it won't, for a
-  personal log).
+- **The branch does grow without bound — see TD-020.** This list previously said it
+  "won't, for a personal log", and that was measured and found wrong on 2026-08-18.
+  Not because a personal log is large, but because `KEEP` prunes the working *tree*
+  while git history retains every blob forever, and because gzipped dumps cannot be
+  delta-compressed against one another — so each night costs a full copy of a diary
+  that is ~80% unchanging seed data. Projection: ~3.8 GB by year ten, against a ~5 GB
+  practical ceiling. Nothing to do yet (the branch is 1.1 MB); TD-020 carries the
+  numbers, the tripwire to add first, and the fix to reach for when it fires.
 - If you outgrow the free tier, Supabase's own PITR/backups become available; this
   workflow remains a good independent second copy.
 - Match `PG_IMAGE` in the workflow to your Supabase Postgres major version if it changes.
