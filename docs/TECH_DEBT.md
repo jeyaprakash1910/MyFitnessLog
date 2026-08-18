@@ -2,7 +2,7 @@
 
 Project: MyFitnessLog
 Version: 1.6
-Last Updated: August 17, 2026 (TD-018 resolved: debug and release resolve their backend separately)
+Last Updated: August 17, 2026 (TD-019 raised: the ViewModel flake reappeared on CI)
 
 This document records known, accepted technical debt: deliberate limitations that are not defects in the current milestone but must be addressed in a later milestone. Each item states the observation, why it is currently acceptable, the recommended future implementation, the documentation that must change first, and when it is scheduled.
 
@@ -37,6 +37,7 @@ This register holds debt that outlives a single task. Short-lived working items 
 | TD-016 | Backend suite failed in the working copy, passed elsewhere | ✅ Resolved 2026-08-07 (VS Code Java autobuild overwrote Maven's output) | - |
 | TD-017 | ViewModel tests sampled async writes instead of waiting | ✅ Resolved 2026-08-13 (`awaitWork`; found a real ADR-0018 regression) | - |
 | TD-018 | The debug build points at the production backend | ✅ Resolved 2026-08-17 (debug/release resolve separately; equal URLs fail the build) | - |
+| TD-019 | ViewModel tests flaked again on CI, green on re-run | Open — evidence recorded, cause not found | - |
 
 ---
 
@@ -133,6 +134,58 @@ now ruled out properly, against a deterministic reproducer.
 that long deliberately, because this failure was intermittent enough to mislead
 four investigations and a quick deletion would have been the same overconfidence
 that caused them.
+
+---
+
+## TD-019 - The ViewModel tests flaked again on CI
+
+Status: **Open.** Evidence recorded; cause not investigated. Not a regression from
+the change that surfaced it.
+
+Identified: 2026-08-17, on PR #38 (the refresh guard)
+
+### What happened
+
+`Android unit tests` failed on CI with three failures across two classes the PR did
+not touch:
+
+* `WorkoutViewModelTest.recompletingAnUndoneRowViaTheCheckboxKeepsItsRpe` — failed
+  **twice**, so the CI retry did not mask it.
+* `WorkoutDetailViewModelTest.discardAsksBeforeItRemovesAnything` — failed once.
+
+Re-running the identical commit turned the job green with no code change. 557 tests,
+3 failed on the first run, 0 on the second.
+
+### Why it is not the PR that surfaced it
+
+That PR touches `RefreshManager` and `RefreshManagerImpl` only. Neither ViewModel
+uses either class; the sole shared surface is a data-class field added with a default
+value. The same test code passed on PRs #36 and #37 immediately before. Locally the
+two classes ran clean eight consecutive times with `--rerun-tasks`.
+
+### Why it is worth recording rather than shrugging at
+
+This is the third appearance of the same family. TD-015 took **nine** failed attempts
+across three distinct causes; TD-017 found a real ADR-0018 regression hiding behind a
+test that sampled an async write instead of waiting for it. The lesson from both is
+that these failures have been genuine defects in the test's relationship to
+asynchrony more often than they have been noise, and that "it passed on re-run" is
+exactly how the previous ones stayed alive.
+
+The failing test has the familiar shape: `onCommitRow` immediately followed by
+`onRpeSelected`, then an `awaitActive` predicate. That is a write, a second write
+that depends on the first, and a suspension that assumes both landed.
+
+### Recommended next step
+
+Reproduce before theorising, which is what eventually cracked TD-015. Run the two
+classes under CI-like conditions — constrained CPU, `--rerun-tasks`, the full suite
+rather than the class alone, since ordering and shared dispatchers matter — rather
+than in isolation on a fast machine, where they pass.
+
+The retry policy in `app/build.gradle.kts` reports a retried pass as **FLAKY** rather
+than green precisely so this stays countable. Check that report before concluding
+anything about frequency.
 
 ---
 
