@@ -14,6 +14,12 @@ that actually matters — how to get it back.
 - **Where:** committed to an **orphan `backups` branch of this same repository**, under
   `dumps/myfitnesslog-<UTC-timestamp>.sql.gz`. The 60 most-recent dumps are kept in the
   branch's working tree (older ones are pruned from the tree but remain in history).
+- **Reading the timestamps:** the cron and the filenames are both **UTC**. Judging "did
+  today's backup run?" against a local date is how a healthy schedule gets mistaken for a
+  failed one — from IST (UTC+5:30) the local day rolls over five and a half hours early,
+  so the newest dump looks a day stale when it is current. Compare against
+  `date -u`, not the local clock. Expect drift too: GitHub runs the 02:17 schedule
+  40–60 minutes late under load, consistently, and that is normal rather than a fault.
 - **Why this storage:** durable for the life of the repo, versioned, free, no second
   service, no third-party action, and it uses only the workflow's built-in token. Dumps
   are tiny (KB–MB), so the branch stays small.
@@ -60,6 +66,74 @@ restored into a new database reproduced exact row counts and preserved Flyway hi
 
 The dump is taken with `--no-owner --no-privileges`, so it restores cleanly regardless of
 which role owns the target.
+
+## Wiping user data (performed 2026-08-18)
+
+Returning production to seed-only: routines and workout history gone, the exercise
+library and the default user kept. Done once, on 2026-08-18, to clear dogfooding data
+before the first real training history was recorded.
+
+**This is a two-sided operation, and the server half alone is not enough.** That is the
+part worth reading before starting.
+
+### The server
+
+Deletion order is child-before-parent, so foreign keys hold at every point. Run it in a
+transaction and check the counts *before* committing:
+
+```sql
+BEGIN;
+DELETE FROM workout_set;
+DELETE FROM workout_exercise;
+DELETE FROM workout_session;
+DELETE FROM routine_exercise;
+DELETE FROM routine;
+-- verify here, then:
+COMMIT;
+```
+
+Keep `app_user`, `exercise_category`, `exercise`. Those are Flyway-seeded and their
+counts double as proof you are on the right database: **1, 14, 313**. Losing the
+`app_user` row breaks every write, because the client sends no `userId` and the backend
+attaches the default user server-side.
+
+### The devices, which is the half that surprises
+
+Wiping the backend does **not** clear a phone, and the phone will not accept the
+deletion. `RefreshManagerImpl.wouldDeleteEverything` treats an empty remote list as *the
+backend lost its data*, withholds every deletion, and logs the remedy: clear the app's
+data to restore from an empty backend deliberately. That guard is correct and should not
+be worked around - it exists so a wiped or mispointed backend cannot destroy the
+irreplaceable copy.
+
+So each device holding real data must be handled directly, in this order:
+
+1. **Airplane mode on** - before the server is touched. Closing the app is not enough:
+   background sync runs through WorkManager and can upload while the app is shut. Any
+   row still `PENDING` will otherwise re-populate the database you just cleared.
+2. Wipe the server.
+3. **Clear app data while still offline** - Settings, Apps, App management, MyFitnessLog,
+   Storage usage, Clear data. Not *Clear cache*, which leaves the Room database intact.
+4. Airplane mode off, then launch.
+
+Only devices pointing at production need this. Since TD-018 a debug build resolves its
+backend separately and defaults to local, so an emulator on `localhost:8080` holds local
+dev data and must be left alone - clearing it destroys a dev fixture and protects
+nothing. Verify rather than assume, against the **installed** APK rather than the
+current source, since an APK built before TD-018 could still carry the production URL:
+
+```bash
+adb shell pm path com.myfitnesslog        # then pull and inspect the dex for the URL
+```
+
+### Afterwards: the first launch looks broken and is not
+
+Clearing local data forces a foreground download of the exercise library, and the free
+Render instance spins down when idle, so the first request pays a cold start - 22.4s
+measured, 100.8s in one deploy log. The app waits correctly (`NetworkModule` allows a
+120s read for exactly this) but the spinner is long enough to read as a hang. It is a
+one-off; the library is cached afterwards. Background sync normally hides this because
+WorkManager retries, which is why a manual clear is the situation that exposes it.
 
 ## Disaster-recovery tiers & assumptions
 

@@ -3,7 +3,7 @@ Project Roadmap
 Project: MyFitnessLog
 Version: 1.0
 Status: Approved
-Last Updated: August 18, 2026 (TD-019 raised and resolved; the open decision is unchanged)
+Last Updated: August 18, 2026 (TD-019 raised and resolved; production reset to seed data only)
 
 ⸻
 
@@ -85,6 +85,13 @@ correction work complete):
 * CORS is configured for browser clients (GET only, no credentials) so the web
   client can read the API — API_SPECIFICATION §5b.
 * The default user is attached server-side; the Android client sends no userId.
+* **Production holds seed data only, as of 2026-08-18.** The routines and workout
+  history accumulated during dogfooding were deleted deliberately, so that the first
+  real training history starts from a clean database rather than from test data that
+  would be indistinguishable from it later. The exercise library, the 14 categories and
+  the default user were kept. The procedure, including the device-side half that
+  `RefreshManagerImpl`'s empty-backend guard makes necessary, is in
+  `docs/development/BACKUP.md`.
 
 Android status (M3–M7, M9, M9.5, M13–M15 complete; hardened through M11 Track A):
 
