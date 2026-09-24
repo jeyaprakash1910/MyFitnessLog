@@ -38,7 +38,7 @@ exceptions) and by config that reads secrets only from env vars or `local.proper
 | Supabase connection strings (txn + session pooler) | Password manager | Render env; GitHub `SUPABASE_SESSION_URL` | ✅ |
 | Supabase account login | Password manager | dashboard access | ✅ |
 | Render account login | Password manager | dashboard / deploy | ✅ |
-| GitHub account + recovery codes | Password manager | repo, Actions, backups branch | ✅ |
+| GitHub account + recovery codes | Password manager | repo, Actions, backup artifacts | ✅ |
 | GitHub Actions secret `SUPABASE_SESSION_URL` | GitHub Secrets (mirror in PW manager) | backup workflow | ✅ |
 
 > Store the **values** in the password manager, and note in each entry **which service

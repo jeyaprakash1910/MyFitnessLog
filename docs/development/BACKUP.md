@@ -11,7 +11,10 @@ that actually matters — how to get it back.
 - **What:** a full logical `pg_dump` of the Supabase database, gzipped.
 - **How:** the [`Database Backup`](../../.github/workflows/backup.yml) GitHub Actions
   workflow. Daily at 02:17 UTC, plus a manual **Run workflow** button.
-- **Where:** committed to an **orphan `backups` branch of this same repository**, under
+- **Where:** stored as a **private GitHub Actions artifact** on the backup workflow run,
+  named `db-backup-<run-id>`. Deliberately NOT committed to a branch: this repository is
+  public and a dump is real database content. Historically dumps lived on an orphan
+  `backups` branch; that was removed before the repository was published. Formerly under
   `dumps/myfitnesslog-<UTC-timestamp>.sql.gz`. The 60 most-recent dumps are kept in the
   branch's working tree (older ones are pruned from the tree but remain in history).
 - **Reading the timestamps:** the cron and the filenames are both **UTC**. Judging "did
@@ -37,7 +40,7 @@ you still need it to reach the database.
 
 **Verified working in production 2026-08-03:** the `SUPABASE_SESSION_URL` secret is
 configured and a manual `workflow_dispatch` run succeeded, producing the first real dump
-(`dumps/myfitnesslog-2026-08-03T06-48-09Z.sql.gz`) on the `backups` branch. Prior to this
+(`myfitnesslog-2026-08-03T06-48-09Z.sql.gz`) in the run artifact. Prior to this
 the secret was unset, so every scheduled run failed at the first step.
 
 ## Restore procedure (verified 2026-07-29)
@@ -155,7 +158,7 @@ account**. A few times a year, download one dump to durable personal storage (ex
 drive / personal cloud):
 
 ```bash
-git clone --depth 1 --branch backups <repo-url> bk && cp bk/dumps/$(ls bk/dumps | tail -1) ~/backups/
+gh run download "$(gh run list --workflow backup.yml --status success --limit 1 --json databaseId --jq '.[0].databaseId')" --dir bk && cp bk/*/*.sql.gz ~/backups/
 ```
 
 That is the difference between "GitHub has my backups" and "I have my backups." For a
@@ -169,7 +172,7 @@ machine rather than remembered by a person.
 `.github/workflows/backup-restore-test.yml` runs every **Monday at 03:41 UTC**,
 after the nightly dump, and can be triggered by hand. It:
 
-1. takes the newest dump from the `backups` branch and **fails if it is more than
+1. takes the newest dump artifact and **fails if it is more than
    three days old**, which is how a silently stopped nightly backup gets noticed,
 2. restores it into a throwaway PostgreSQL 17 service container, the same major
    version as production,

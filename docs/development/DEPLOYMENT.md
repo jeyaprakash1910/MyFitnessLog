@@ -124,7 +124,7 @@ depends on free-tier CPU load; the injected port and migration count can differ.
   build still streaming `Downloading from central: ...` after a few minutes is normal,
   not stalled.
 - **Observation — URL pattern:** Render appended a random suffix, producing
-  `https://myfitnesslog-kp5o.onrender.com`. Expect the general form
+  `https://<your-service>.onrender.com`. Expect the general form
   `https://<service-name>-<suffix>.onrender.com`, **not** a bare
   `https://<service-name>.onrender.com`. Take the exact URL from the deploy log's
   `Available at your primary URL ...` line and use it for Android's `apiBaseUrl`.

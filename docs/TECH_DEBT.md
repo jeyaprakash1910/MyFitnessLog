@@ -38,7 +38,7 @@ This register holds debt that outlives a single task. Short-lived working items 
 | TD-017 | ViewModel tests sampled async writes instead of waiting | ✅ Resolved 2026-08-13 (`awaitWork`; found a real ADR-0018 regression) | - |
 | TD-018 | The debug build points at the production backend | ✅ Resolved 2026-08-17 (debug/release resolve separately; equal URLs fail the build) | - |
 | TD-019 | ViewModel tests flaked again on CI, green on re-run | ✅ Resolved 2026-08-18 (four assertions waited on a proxy predicate, not the asserted property) | - |
-| TD-020 | The backups branch grows without bound (~3.8 GB by year 10) | Open — measured, not urgent | - |
+| TD-020 | The backups branch grows without bound (~3.8 GB by year 10) | Resolved — dumps moved to private Actions artifacts with 60-day retention before the repo was made public | - |
 
 ---
 
@@ -883,7 +883,7 @@ API 35). The application has never run on physical hardware.
 Emulator verification did prove the parts most likely to differ from JVM tests:
 `SyncWorker` executing in a real process, Hilt worker-factory injection, the
 platform cleartext policy, and synchronization to PostgreSQL over a LAN address
-(`192.168.1.7`) rather than the emulator loopback — the same routing a phone
+(`<your-lan-ip>`) rather than the emulator loopback — the same routing a phone
 would use.
 
 ### What remains unverified

@@ -27,7 +27,8 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read              # only reads the backups branch
+  contents: read
+  actions: read               # list runs of the backup workflow and download its artifact
 
 jobs:
   restore:
@@ -53,20 +54,32 @@ jobs:
           --health-retries 10
 
     steps:
-      - name: Check out the backups branch
-        uses: actions/checkout@v5
-        with:
-          ref: backups
-          # Only the newest dump is restored, so there is no reason to fetch the
-          # history of every one that came before it.
-          fetch-depth: 1
+      - name: Download the newest dump artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # The nightly Database Backup workflow stores each dump as a private
+          # artifact rather than committing it to a branch, so the newest one is
+          # fetched from that workflow's most recent successful run.
+          run_id=$(gh run list -R "$REPO" --workflow backup.yml \
+                     --status success --limit 1 --json databaseId --jq '.[0].databaseId')
+          if [ -z "${run_id:-}" ] || [ "$run_id" = "null" ]; then
+            echo "::error::No successful Database Backup run to restore from."; exit 1
+          fi
+          gh run download "$run_id" -R "$REPO" --dir artifact
+          mkdir -p dumps
+          find artifact -name '*.sql.gz' -exec cp {} dumps/ \;
+          ls -1 dumps/*.sql.gz >/dev/null 2>&1 || {
+            echo "::error::Backup run $run_id contained no dump."; exit 1; }
 
       - name: Restore the newest dump
         run: |
           set -euo pipefail
           latest=$(ls -1 dumps/*.sql.gz | sort | tail -1)
           if [ -z "$latest" ]; then
-            echo "::error::No dumps found on the backups branch."; exit 1
+            echo "::error::No dumps found in the downloaded artifact."; exit 1
           fi
           echo "Restoring $latest"
           age_days=$(( ( $(date -u +%s) - $(date -u -d "$(basename "$latest" | sed -E 's/myfitnesslog-(.*)\.sql\.gz/\1/; s/T/ /; s/-([0-9]{2})-([0-9]{2})Z/:\1:\2/')" +%s) ) / 86400 ))

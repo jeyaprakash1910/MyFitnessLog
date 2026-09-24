@@ -59,7 +59,7 @@ jobs:
     steps:
       - name: Wait for the deploy, then prove it is this commit
         env:
-          BASE: https://myfitnesslog-kp5o.onrender.com/api/v1
+          BASE: ${{ vars.BACKEND_BASE_URL }}/api/v1
         run: |
           set -uo pipefail
           echo "Waiting for $GITHUB_SHA to be serving at $BASE"
@@ -97,7 +97,7 @@ jobs:
       - name: Confirm it still declares itself non-disposable
         if: '!cancelled()'
         env:
-          BASE: https://myfitnesslog-kp5o.onrender.com/api/v1
+          BASE: ${{ vars.BACKEND_BASE_URL }}/api/v1
         run: |
           set -euo pipefail
           # Cheap, and guards the property that matters most about this instance:

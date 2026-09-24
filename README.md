@@ -309,7 +309,7 @@ configure and no way to reach the internet by accident. Re-run `adb reverse` aft
 reconnecting a device or restarting the emulator — it does not survive either.
 
 To use a LAN address instead (device and machine on the same Wi-Fi, no USB), set
-`debugApiBaseUrl=http://192.168.1.42:8080/api/v1/`. Rebuild after any change — the
+`debugApiBaseUrl=http://<your-lan-ip>:8080/api/v1/`. Rebuild after any change — the
 value is baked in at build time. A trailing slash is added automatically if you
 omit it, since Retrofit rejects a base URL without one.
 

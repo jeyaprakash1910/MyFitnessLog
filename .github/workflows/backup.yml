@@ -1,7 +1,11 @@
 name: Database Backup
 
-# Daily logical backup of the Supabase database to an orphan `backups` branch in
-# this same repository. Rationale and restore steps: docs/development/BACKUP.md.
+# Daily logical backup of the Supabase database, stored as a private GitHub
+# Actions artifact. Rationale and restore steps: docs/development/BACKUP.md.
+#
+# Dumps are deliberately NOT committed to a branch in this repository. The repo is
+# public; artifacts are not. A dump is real database content, so publishing one
+# nightly would leak every future user's data the moment multi-user auth lands.
 #
 # One secret is required (repo -> Settings -> Secrets and variables -> Actions):
 #   SUPABASE_SESSION_URL  full connection string to the SESSION pooler (port 5432),
@@ -19,11 +23,10 @@ concurrency:
   group: db-backup
   cancel-in-progress: false
 
-# Keep, on the branch, this many most-recent dumps. Dumps are tiny (a personal
-# lifting log is KB-to-MB), so this is generous; older files are pruned from the
-# working tree but remain in branch history.
+# How long GitHub retains each dump artifact, in days (90 is the maximum on
+# current plans). Dumps are tiny (a personal lifting log is KB-to-MB).
 env:
-  KEEP: "60"
+  KEEP_DAYS: "60"
   # Match your Supabase Postgres MAJOR version. pg_dump's client major must be >=
   # the server's. Supabase reports it under Project Settings -> Infrastructure.
   PG_IMAGE: "postgres:17"
@@ -32,7 +35,7 @@ jobs:
   backup:
     runs-on: ubuntu-latest
     permissions:
-      contents: write           # push to the backups branch with the built-in token
+      contents: read            # nothing is written back to the repository
     steps:
       - name: Dump and gzip
         env:
@@ -57,30 +60,11 @@ jobs:
           fi
           echo "DUMP=out/myfitnesslog-${ts}.sql.gz" >> "$GITHUB_ENV"
 
-      - name: Publish to backups branch
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          repo_url="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          git config --global user.name  "backup-bot"
-          git config --global user.email "backup-bot@users.noreply.github.com"
-
-          # Clone the existing backups branch, or create it as an orphan the first time.
-          if git clone --depth 1 --branch backups "$repo_url" bk 2>/dev/null; then
-            cd bk
-          else
-            mkdir bk && cd bk && git init -q && git remote add origin "$repo_url"
-            git checkout -q --orphan backups
-          fi
-
-          mkdir -p dumps
-          cp "../${DUMP}" dumps/
-
-          # Retention: keep the newest $KEEP dumps in the working tree.
-          ls -1 dumps/*.sql.gz | sort | head -n -"${KEEP}" | xargs -r git rm -q --ignore-unmatch
-
-          git add dumps/
-          git commit -q -m "backup: $(basename "${DUMP}")"
-          git push -q origin backups
-          echo "Pushed $(basename "${DUMP}") to the backups branch."
+      - name: Upload the dump as a private artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-backup-${{ github.run_id }}
+          path: ${{ env.DUMP }}
+          retention-days: ${{ env.KEEP_DAYS }}
+          if-no-files-found: error
+          compression-level: 0    # already gzipped
